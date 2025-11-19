@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    /* ===== Build-Info ===== */
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+
+    /* ===== Zielplattform ===== */
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    /* ===== JSX / React ===== */
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "types": ["react", "react-dom", "node", "vite/client"],
+
+    /* ===== Module / Bundler ===== */
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force", 
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    /* ===== Performance ===== */
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* ===== Strikte Typensicherheit ===== */
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    /* ===== R3F + React freundlich ===== */
+    "allowJs": false,
+    "esModuleInterop": true
+  },
+
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
