@@ -187,6 +187,8 @@ function Transformable({
   enabled,
   mode,
   snap,
+  rotationAxes = ["y"],
+  rotationSnapDeg = 5,
   children,
   onChange,
   onDragStart,
@@ -195,8 +197,10 @@ function Transformable({
   enabled: boolean;
   mode: "translate" | "rotate" | "scale";
   snap: boolean;
+  rotationAxes?: Array<"x" | "y" | "z">;
+  rotationSnapDeg?: number;
   children: ReactNode;
-  onChange?: (pos: THREE.Vector3) => void;
+  onChange?: (pos: THREE.Vector3, rot: THREE.Euler) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
@@ -207,7 +211,7 @@ function Transformable({
     const tc = tcRef.current;
     if (!tc) return;
 
-    const handleChange = () => onChange?.(groupRef.current.position);
+    const handleChange = () => onChange?.(groupRef.current.position, groupRef.current.rotation);
     const handleMouseDown = () => onDragStart?.();
     const handleMouseUp = () => onDragEnd?.();
     const handleDraggingChanged = (e: any) => {
@@ -231,16 +235,22 @@ function Transformable({
   if (!enabled) {
     return <group ref={groupRef}>{children}</group>;
   }
+
+  const showX = mode === "rotate" ? rotationAxes.includes("x") : true;
+  const showY = mode === "rotate" ? rotationAxes.includes("y") : false;
+  const showZ = mode === "rotate" ? rotationAxes.includes("z") : true;
+  const rotationSnap = THREE.MathUtils.degToRad(rotationSnapDeg);
   return (
     <TransformControls
       ref={tcRef}
       mode={mode}
-      showX
-      showZ
-      showY={false}
+      showX={showX}
+      showZ={showZ}
+      showY={showY}
       translationSnap={snap ? 0.1 : 0}
-      rotationSnap={snap ? THREE.MathUtils.degToRad(15) : 0}
+      rotationSnap={snap ? rotationSnap : 0}
       scaleSnap={snap ? 0.1 : 0}
+      space="local"
     >
       <group ref={groupRef}>{children}</group>
     </TransformControls>
@@ -699,6 +709,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           enabled={editMode && isSelected("cabin")}
           mode={transformMode}
           snap={snapOn}
+          rotationAxes={[]}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
           onChange={(pos) => {
@@ -828,9 +839,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 enabled={editMode && selected}
                 mode={transformMode}
                 snap={snapOn}
+                rotationAxes={["y"]}
+                rotationSnapDeg={10}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
-                onChange={(pos) => {
+                onChange={(pos, rot) => {
+                  if (transformMode === "rotate") {
+                    const rotY = THREE.MathUtils.euclideanModulo(rot?.y ?? 0, Math.PI * 2);
+                    pos.set(px, pos.y, pz);
+                    const next = countersDetailed.map((c0) =>
+                      c0.id === ctr.id ? { ...c0, rotationY: rotY } : c0
+                    );
+                    setConfig({ modules: { countersDetailed: next } as any });
+                    return;
+                  }
+
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
                   const candidate = makeAabb(key, "Counter", c.x, c.z, w, d, collisionClearance);
                   const collision = ensureNoCollision(key, [candidate]);
@@ -992,6 +1015,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
             const key = `scr-d-${scr.id}`;
             const selected = isSelected(key);
+            const rotatable = mount === "floor" || mount === "truss";
 
             // Position & Rotation
             let px = scr.position?.x ?? 0;
@@ -1029,9 +1053,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 enabled={editMode && selected}
                 mode={transformMode}
                 snap={snapOn}
+                rotationAxes={rotatable ? ["y"] : []}
+                rotationSnapDeg={10}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
-                onChange={(pos) => {
+                onChange={(pos, rot) => {
+                  if (transformMode === "rotate" && rotatable) {
+                    const rotYNext = THREE.MathUtils.euclideanModulo(rot?.y ?? 0, Math.PI * 2);
+                    pos.set(px, pos.y, pz);
+                    const next = screensDetailed.map((s0) =>
+                      s0.id === scr.id ? { ...s0, rotationY: rotYNext } : s0
+                    );
+                    setConfig({ modules: { detailedScreens: next } as any });
+                    return;
+                  }
+
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
                   let candidateW = w;
                   let candidateD = t;
@@ -1244,6 +1280,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             enabled={editMode && isSelected("truss")}
             mode={transformMode}
             snap={snapOn}
+            rotationAxes={[]}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
             onChange={(pos) => {
