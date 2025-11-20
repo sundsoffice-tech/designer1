@@ -1,7 +1,9 @@
 // src/components/Configurator3D.tsx
 import {
   Suspense,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -19,6 +21,12 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import { useConfigStore } from "../store/configStore";
+import {
+  buildSceneAabbs,
+  DEFAULT_CLEARANCE,
+  findCollisionForMany,
+  makeAabb,
+} from "../lib/collision";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -287,6 +295,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const wallLightsLeft: number = mAny.wallLightsLeft ?? 0;
   const wallLightsRight: number = mAny.wallLightsRight ?? 0;
 
+  // Kollisionsabstand (konfigurierbar über modules.collisionClearance)
+  const collisionClearance: number = Math.max(
+    0,
+    typeof mAny.collisionClearance === "number" ? mAny.collisionClearance : DEFAULT_CLEARANCE
+  );
+
   // Banner / Truss
   const bannersFront: number = mAny.trussBannersFront ?? 0;
   const bannersBack: number = mAny.trussBannersBack ?? 0;
@@ -433,6 +447,86 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   // ---- Detaillierte Objekte aus Store (optional)
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
   const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
+
+  const sceneAabbs = useMemo(
+    () => buildSceneAabbs(config, collisionClearance),
+    [config, collisionClearance]
+  );
+
+  const [collidingKeys, setCollidingKeys] = useState<Set<string>>(new Set());
+  const [lastValidPositions, setLastValidPositions] = useState<
+    Record<string, { x: number; z: number }>
+  >({});
+
+  const rememberValidPosition = useCallback((key: string, pos: { x: number; z: number }) => {
+    setLastValidPositions((prev) => ({ ...prev, [key]: pos }));
+  }, []);
+
+  const getFallbackPosition = useCallback(
+    (key: string, fallback: { x: number; z: number }) => lastValidPositions[key] ?? fallback,
+    [lastValidPositions]
+  );
+
+  const setCollisionState = useCallback((key: string, collided: boolean) => {
+    setCollidingKeys((prev) => {
+      const next = new Set(prev);
+      if (collided) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const ensureNoCollision = useCallback(
+    (key: string, boxes: ReturnType<typeof makeAabb>[], ignoreIds: string[] = []) => {
+      const ignored = new Set<string>([key, ...ignoreIds]);
+      const collision = findCollisionForMany(boxes, sceneAabbs, ignored);
+      if (collision.collided) {
+        setCollisionState(key, true);
+        return collision;
+      }
+      setCollisionState(key, false);
+      return collision;
+    },
+    [sceneAabbs, setCollisionState]
+  );
+
+  // initial gültige Positionen merken (Rollback bei Kollision)
+  useEffect(() => {
+    const next: Record<string, { x: number; z: number }> = {};
+
+    countersDetailed.forEach((ctr) => {
+      next[`ctr-d-${ctr.id}`] = {
+        x: ctr.position?.x ?? 0,
+        z: ctr.position?.z ?? 0,
+      };
+    });
+
+    screensDetailed.forEach((scr) => {
+      next[`scr-d-${scr.id}`] = {
+        x: scr.position?.x ?? 0,
+        z: scr.position?.z ?? 0,
+      };
+    });
+
+    if (cabinEnabled) {
+      next.cabin = { x: cabinPosX, z: cabinPosZ };
+    }
+
+    if (trussEnabled) {
+      next.truss = { x: trussOffsetX, z: trussOffsetZ };
+    }
+
+    setLastValidPositions(next);
+  }, [
+    cabinEnabled,
+    cabinPosX,
+    cabinPosZ,
+    countersDetailed,
+    screensDetailed,
+    trussEnabled,
+    trussOffsetX,
+    trussOffsetZ,
+  ]);
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
@@ -609,6 +703,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           onDragEnd={enableOrbit}
           onChange={(pos) => {
             const c = clampXZ(pos.x, pos.z, width, depth, cabinWidth / 2, cabinDepth / 2);
+            const candidate = makeAabb("cabin", "Kabine", c.x, c.z, cabinWidth, cabinDepth, collisionClearance);
+            const collision = ensureNoCollision("cabin", [candidate]);
+
+            if (collision.collided) {
+              const fallback = getFallbackPosition("cabin", { x: cabinPosX, z: cabinPosZ });
+              pos.set(fallback.x, pos.y, fallback.z);
+              return;
+            }
+
+            rememberValidPosition("cabin", { x: c.x, z: c.z });
             pos.set(c.x, pos.y, c.z);
             setConfig({
               modules: {
@@ -674,6 +778,34 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 <meshBasicMaterial wireframe color="#22d3ee" />
               </mesh>
             )}
+            {collidingKeys.has("cabin") && (
+              <>
+                <mesh>
+                  <boxGeometry
+                    args={[
+                      cabinWidth + collisionClearance * 2,
+                      cabinHeight,
+                      cabinDepth + collisionClearance * 2,
+                    ]}
+                  />
+                  <meshBasicMaterial wireframe color="#ef4444" />
+                </mesh>
+                <Html center position={[0, cabinHeight / 2 + 0.05, 0]}>
+                  <div
+                    style={{
+                      background: "#991b1b",
+                      color: "white",
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    Belegt – bitte verschieben
+                  </div>
+                </Html>
+              </>
+            )}
           </group>
         </Transformable>
       )}
@@ -700,6 +832,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
+                  const candidate = makeAabb(key, "Counter", c.x, c.z, w, d, collisionClearance);
+                  const collision = ensureNoCollision(key, [candidate]);
+
+                  if (collision.collided) {
+                    const fallback = getFallbackPosition(key, { x: px, z: pz });
+                    pos.set(fallback.x, pos.y, fallback.z);
+                    return;
+                  }
+
+                  rememberValidPosition(key, { x: c.x, z: c.z });
                   pos.set(c.x, pos.y, c.z);
                   const next = countersDetailed.map((c0) =>
                     c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
@@ -733,6 +875,30 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       <boxGeometry args={[w, h, d]} />
                       <meshBasicMaterial wireframe color="#10b981" />
                     </mesh>
+                  )}
+                  {collidingKeys.has(key) && (
+                    <>
+                      <mesh>
+                        <boxGeometry
+                          args={[w + collisionClearance * 2, h + 0.05, d + collisionClearance * 2]}
+                        />
+                        <meshBasicMaterial wireframe color="#ef4444" />
+                      </mesh>
+                      <Html center position={[0, h + 0.1, 0]}>
+                        <div
+                          style={{
+                            background: "#991b1b",
+                            color: "white",
+                            padding: "4px 8px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                          }}
+                        >
+                          Kollision erkannt
+                        </div>
+                      </Html>
+                    </>
                   )}
                 </group>
               </Transformable>
@@ -867,6 +1033,34 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
+                  let candidateW = w;
+                  let candidateD = t;
+                  if (mount === "wall") {
+                    if (scr.wallSide === "left" || scr.wallSide === "right") {
+                      candidateW = t;
+                      candidateD = w;
+                    }
+                  } else if (mount === "floor") {
+                    candidateD = t;
+                  }
+                  const candidate = makeAabb(
+                    key,
+                    "Screen",
+                    c.x,
+                    c.z,
+                    candidateW,
+                    candidateD,
+                    collisionClearance
+                  );
+                  const collision = ensureNoCollision(key, [candidate]);
+
+                  if (collision.collided) {
+                    const fallback = getFallbackPosition(key, { x: px, z: pz });
+                    pos.set(fallback.x, pos.y, fallback.z);
+                    return;
+                  }
+
+                  rememberValidPosition(key, { x: c.x, z: c.z });
                   pos.set(c.x, pos.y, c.z);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
@@ -890,6 +1084,22 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       <boxGeometry args={[w, h, t]} />
                       <meshBasicMaterial wireframe color="#f43f5e" />
                     </mesh>
+                  )}
+                  {collidingKeys.has(key) && (
+                    <Html center position={[0, h + 0.05, 0]}>
+                      <div
+                        style={{
+                          background: "#991b1b",
+                          color: "white",
+                          padding: "4px 8px",
+                          borderRadius: 8,
+                          fontSize: 12,
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                        }}
+                      >
+                        Screen kollidiert
+                      </div>
+                    </Html>
                   )}
                 </group>
               </Transformable>
@@ -1038,6 +1248,61 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             onDragEnd={enableOrbit}
             onChange={(pos) => {
               const c = clampXZ(pos.x, pos.z, width, depth, 0.4, 0.4);
+              const columnSize = 0.12;
+              const candidates = [
+                makeAabb(
+                  "truss-col-front-left",
+                  "Truss-Stütze",
+                  -width / 2 + c.x,
+                  depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-front-right",
+                  "Truss-Stütze",
+                  width / 2 + c.x,
+                  depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-back-left",
+                  "Truss-Stütze",
+                  -width / 2 + c.x,
+                  -depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-back-right",
+                  "Truss-Stütze",
+                  width / 2 + c.x,
+                  -depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+              ];
+
+              const ignoreSelf = [
+                "truss-col-front-left",
+                "truss-col-front-right",
+                "truss-col-back-left",
+                "truss-col-back-right",
+              ];
+
+              const collision = ensureNoCollision("truss", candidates, ignoreSelf);
+              if (collision.collided) {
+                const fallback = getFallbackPosition("truss", { x: trussOffsetX, z: trussOffsetZ });
+                pos.set(fallback.x, pos.y, fallback.z);
+                return;
+              }
+
+              rememberValidPosition("truss", { x: c.x, z: c.z });
               pos.set(c.x, pos.y, c.z);
               setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } as any });
             }}
@@ -1055,6 +1320,22 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   <torusGeometry args={[0.25, 0.02, 8, 24]} />
                   <meshStandardMaterial color="#22d3ee" metalness={0.7} roughness={0.25} />
                 </mesh>
+              )}
+              {collidingKeys.has("truss") && (
+                <Html center position={[0, 0.4, 0]}>
+                  <div
+                    style={{
+                      background: "#991b1b",
+                      color: "white",
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    Truss kollidiert
+                  </div>
+                </Html>
               )}
             </group>
           </Transformable>

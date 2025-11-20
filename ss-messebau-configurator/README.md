@@ -1,73 +1,27 @@
-# React + TypeScript + Vite
+# S&S 3D Standkonfigurator
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
+- `src/components/Configurator3D.tsx` – 3D-Szene inkl. Edit-Mode & Kollisionslogik
+- `src/components/SidebarControls.tsx` – UI/Presets & Kollisionshilfe
+- `src/store/configStore.ts` – Zustand + Normalisierung
 
-Currently, two official plugins are available:
+## Kollisionsprüfung (AABB)
+- Alle bewegten Objekte (Counters, Screens, Kabine, Truss-Griff/‑Stützen) erhalten AABBs mit
+  einem Mindestabstand (Default `0.2 m`, konfigurierbar über `modules.collisionClearance`).
+- Bewegungen werden in `onChange` geblockt, sobald ein AABB andere aktive Objekte schneiden
+  würde. Die Position springt zurück auf die zuletzt gültige Koordinate.
+- Visuelles Feedback: roter Wireframe + Tooltip am betroffenen Objekt.
+- Nur kollisionsfreie Positionen werden im Store gespeichert; ungültige Moves erzeugen keine
+  Seiteneffekte im Zustand.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Collision-Playground
+- Über die Sidebar („Kollisions-Playground“) lässt sich ein Mock-Stand mit mehreren Counters,
+  Screens, Kabine und Truss laden (`src/lib/playgrounds.ts`).
+- Der Playground nutzt einen höheren Sicherheitsabstand (`0.25 m`) und eignet sich für
+  manuelle Checks von AABB-Kollisionen.
 
-## React Compiler
+## Bedienhinweise (Auszug)
+- Edit-Mode per Taste `E` aktivieren, Transform-Gizmos mit `T/R/S`, Snap via `G`.
+- Objekte per Klick auswählen, Drag sperrt Orbit automatisch. Doppelklick auf Legacy-Counter
+  konvertiert sie in frei platzierbare Varianten.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```

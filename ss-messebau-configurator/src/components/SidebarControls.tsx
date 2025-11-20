@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useConfigStore, type DeepPartial } from "../store/configStore";
 import type { StandModules } from "../lib/pricing";
+import { collisionPlayground } from "../lib/playgrounds";
 
 type WallSide = "back" | "left" | "right";
 
@@ -14,7 +15,7 @@ const wallFixedMap = {
 } as const;
 
 export default function SidebarControls() {
-  const { config, price, setConfig, applyPreset } = useConfigStore();
+  const { config, price, setConfig, applyPreset, replaceConfig } = useConfigStore();
 
   // Helper: DeepPartial-Patch für modules (typsicher)
   const patchModules = (mods: DeepPartial<StandModules>) =>
@@ -314,6 +315,31 @@ export default function SidebarControls() {
             <small>8×5 · Kopfstand Premium</small>
           </button>
         </div>
+        <div className="preset-row">
+          <button
+            type="button"
+            className="preset-btn"
+            onClick={() => replaceConfig(collisionPlayground)}
+            title="Lädt den Mock-Stand mit eng stehenden Modulen, um Kollisionen zu testen"
+          >
+            <strong>Kollisions-Playground</strong>
+            <small>Mock-Stand mit vielen Objekten</small>
+          </button>
+        </div>
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Kollisionsschutz</span>
+          <span className="section-sub">AABB + Mindestabstand</span>
+        </div>
+        <p style={{ margin: "0.25rem 0 0", lineHeight: 1.35 }}>
+          Bewegte Objekte (Tresen, Screens, Kabine, Truss-Griff) prallen an einem
+          AABB-Sicherheitsabstand ab. Bei drohender Überschneidung erscheint ein
+          roter Wireframe + Hinweis. Der Mindestabstand lässt sich über
+          <code> modules.collisionClearance</code> im Store konfigurieren
+          (Playground: 0,25 m).
+        </p>
       </div>
 
       {/* Grunddaten */}
