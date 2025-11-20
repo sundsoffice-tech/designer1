@@ -61,6 +61,29 @@ export default function SidebarControls() {
     });
   };
 
+  const totalModulesSelected = () => {
+    const mm = config.modules as any;
+    const lights =
+      (mm.trussLightsFront ?? 0) +
+      (mm.trussLightsBack ?? 0) +
+      (mm.trussLightsLeft ?? 0) +
+      (mm.trussLightsRight ?? 0);
+
+    const banners =
+      (mm.trussBannersFront ?? 0) +
+      (mm.trussBannersBack ?? 0) +
+      (mm.trussBannersLeft ?? 0) +
+      (mm.trussBannersRight ?? 0);
+
+    return (
+      (config.modules.counters ?? 0) +
+      (config.modules.screens ?? 0) +
+      (config.modules.ledFrames ?? 0) +
+      lights +
+      banners
+    );
+  };
+
   const stepModule = (
     field: "ledFrames" | "counters" | "screens",
     delta: number,
@@ -86,6 +109,31 @@ export default function SidebarControls() {
       default:
         return "Teppich";
     }
+  };
+
+  const applyGuidedDefaults = () => {
+    const mm = config.modules as any;
+
+    patchModules({
+      floor: {
+        ...(config.modules.floor ?? {}),
+        type: config.modules.floor?.type ?? "carpet",
+        raised: floorRaised,
+      },
+      counters: Math.max(config.modules.counters ?? 0, 1),
+      counterVariant: config.modules.counterVariant ?? "premium",
+      countersWall: config.modules.countersWall ?? "front",
+      countersWithPower: true,
+      screens: Math.max(config.modules.screens ?? 0, 1),
+      screensWall: config.modules.screensWall ?? "back",
+      truss: config.modules.truss ?? true,
+      trussLightsFront: mm.trussLightsFront ?? 2,
+      trussLightsLeft: mm.trussLightsLeft ?? 0,
+      trussLightsRight: mm.trussLightsRight ?? 0,
+      trussLightsBack: mm.trussLightsBack ?? 0,
+      trussBannersFront: mm.trussBannersFront ?? 1,
+      wallLightsBack: mm.wallLightsBack ?? 2,
+    } as any);
   };
 
   const copyConfigToClipboard = () => {
@@ -273,6 +321,32 @@ export default function SidebarControls() {
     window.location.href = mailto;
   };
 
+  const moduleCount = totalModulesSelected();
+  const guidedSteps = [
+    {
+      title: "Fläche & Typ wählen",
+      desc: "Breite/Tiefe setzen und Standtyp bestimmen.",
+      done: Boolean(config.width && config.depth && config.type),
+    },
+    {
+      title: "Wände & Boden veredeln",
+      desc: "Oberflächen, Lagerraum oder Raised Floor festlegen.",
+      done:
+        Boolean(config.modules.floor?.type) &&
+        config.modules.wallsClosedSides === fixedWalls,
+    },
+    {
+      title: "Module & Varianten platzieren",
+      desc: "Tresen, Screens, Truss, Bannerrahmen und Licht auswählen.",
+      done: moduleCount > 0,
+    },
+    {
+      title: "Preis prüfen & exportieren",
+      desc: "Live-Richtpreis kontrollieren, kopieren oder per Mail senden.",
+      done: price > 0 && Boolean(customerName || company || email || phone),
+    },
+  ];
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -281,6 +355,44 @@ export default function SidebarControls() {
           <span className="badge">Beta · intern</span>
         </div>
         <small>Richtkalkulation für System- & Individualstände</small>
+      </div>
+
+      <div className="sidebar-section guided-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Geführter Ablauf</span>
+          <span className="section-sub">Step-by-Step</span>
+        </div>
+        <p style={{ margin: "0 0 8px", lineHeight: 1.35 }}>
+          Beginnen Sie mit Fläche & Standtyp, veredeln Sie danach Wände/Boden und
+          platzieren Sie Module. Der Richtpreis aktualisiert sich live.
+        </p>
+        <div className="guided-steps">
+          {guidedSteps.map((step, idx) => (
+            <div
+              key={step.title}
+              className={`guided-step ${step.done ? "done" : ""}`}
+            >
+              <div className="step-index">{idx + 1}</div>
+              <div className="step-body">
+                <div className="step-title-row">
+                  <strong>{step.title}</strong>
+                  <span className={`step-status ${step.done ? "ok" : "todo"}`}>
+                    {step.done ? "fertig" : "offen"}
+                  </span>
+                </div>
+                <small>{step.desc}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={applyGuidedDefaults}
+          style={{ width: "100%", marginTop: 10 }}
+        >
+          Empfohlenes Start-Setup übernehmen
+        </button>
       </div>
 
       {/* Presets */}
