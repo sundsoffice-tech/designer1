@@ -116,6 +116,10 @@ function clampXZ(
   };
 }
 
+function clampValue(v: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, v));
+}
+
 /** Geometrien */
 function CounterBlock({
   variant,
@@ -1032,22 +1036,52 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
+                  let nextX = pos.x;
+                  let nextZ = pos.z;
+                  let nextY = floorHeight + y;
                   let candidateW = w;
                   let candidateD = t;
+
                   if (mount === "wall") {
-                    if (scr.wallSide === "left" || scr.wallSide === "right") {
+                    const side = scr.wallSide ?? "back";
+                    if (side === "back") {
+                      nextZ = backWallFrontZ;
+                      const c = clampXZ(nextX, nextZ, width, depth, w / 2, 0.001);
+                      nextX = c.x;
+                    } else if (side === "left") {
+                      nextX = leftWallInnerX;
+                      const c = clampXZ(nextX, nextZ, width, depth, 0.001, h / 2);
+                      nextZ = c.z;
+                      candidateW = t;
+                      candidateD = w;
+                    } else {
+                      nextX = rightWallInnerX;
+                      const c = clampXZ(nextX, nextZ, width, depth, 0.001, h / 2);
+                      nextZ = c.z;
                       candidateW = t;
                       candidateD = w;
                     }
                   } else if (mount === "floor") {
+                    const c = clampXZ(nextX, nextZ, width, depth, w / 2, t / 2);
+                    nextX = c.x;
+                    nextZ = c.z;
                     candidateD = t;
+                  } else if (mount === "truss") {
+                    const c = clampXZ(nextX, nextZ, width, depth, w / 2, t / 2);
+                    nextX = c.x;
+                    nextZ = c.z;
+                    nextY = clampValue(pos.y, floorHeight + h / 2, trussHeight - h / 2);
+                  } else {
+                    const c = clampXZ(nextX, nextZ, width, depth, w / 2, t / 2);
+                    nextX = c.x;
+                    nextZ = c.z;
                   }
+
                   const candidate = makeAabb(
                     key,
                     "Screen",
-                    c.x,
-                    c.z,
+                    nextX,
+                    nextZ,
                     candidateW,
                     candidateD,
                     collisionClearance
@@ -1056,15 +1090,19 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
                   if (collision.collided) {
                     const fallback = getFallbackPosition(key, { x: px, z: pz });
-                    pos.set(fallback.x, pos.y, fallback.z);
+                    pos.set(fallback.x, nextY, fallback.z);
                     return;
                   }
 
-                  rememberValidPosition(key, { x: c.x, z: c.z });
-                  pos.set(c.x, pos.y, c.z);
+                  rememberValidPosition(key, { x: nextX, z: nextZ });
+                  pos.set(nextX, nextY, nextZ);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
+                      ? {
+                          ...s0,
+                          position: { x: nextX, z: nextZ },
+                          ...(mount === "truss" ? { heightFromFloor: nextY } : {}),
+                        }
                       : s0
                   );
                   setConfig({ modules: { detailedScreens: next } as any });
