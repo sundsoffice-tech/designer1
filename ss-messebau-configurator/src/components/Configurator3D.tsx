@@ -454,44 +454,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   );
 
   const [collidingKeys, setCollidingKeys] = useState<Set<string>>(new Set());
-  const [lastValidPositions, setLastValidPositions] = useState<
-    Record<string, { x: number; z: number }>
-  >({});
-
-  const rememberValidPosition = useCallback((key: string, pos: { x: number; z: number }) => {
-    setLastValidPositions((prev) => ({ ...prev, [key]: pos }));
-  }, []);
-
-  const getFallbackPosition = useCallback(
-    (key: string, fallback: { x: number; z: number }) => lastValidPositions[key] ?? fallback,
-    [lastValidPositions]
-  );
-
-  const setCollisionState = useCallback((key: string, collided: boolean) => {
-    setCollidingKeys((prev) => {
-      const next = new Set(prev);
-      if (collided) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-  }, []);
-
-  const ensureNoCollision = useCallback(
-    (key: string, boxes: ReturnType<typeof makeAabb>[], ignoreIds: string[] = []) => {
-      const ignored = new Set<string>([key, ...ignoreIds]);
-      const collision = findCollisionForMany(boxes, sceneAabbs, ignored);
-      if (collision.collided) {
-        setCollisionState(key, true);
-        return collision;
-      }
-      setCollisionState(key, false);
-      return collision;
-    },
-    [sceneAabbs, setCollisionState]
-  );
-
-  // initial gültige Positionen merken (Rollback bei Kollision)
-  useEffect(() => {
+  const lastValidPositions = useMemo(() => {
     const next: Record<string, { x: number; z: number }> = {};
 
     countersDetailed.forEach((ctr) => {
@@ -516,7 +479,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       next.truss = { x: trussOffsetX, z: trussOffsetZ };
     }
 
-    setLastValidPositions(next);
+    return next;
   }, [
     cabinEnabled,
     cabinPosX,
@@ -527,6 +490,45 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     trussOffsetX,
     trussOffsetZ,
   ]);
+
+  const lastValidPositionsRef = useRef(lastValidPositions);
+
+  useEffect(() => {
+    lastValidPositionsRef.current = lastValidPositions;
+  }, [lastValidPositions]);
+
+  const rememberValidPosition = useCallback((key: string, pos: { x: number; z: number }) => {
+    lastValidPositionsRef.current = { ...lastValidPositionsRef.current, [key]: pos };
+  }, []);
+
+  const getFallbackPosition = useCallback(
+    (key: string, fallback: { x: number; z: number }) =>
+      lastValidPositionsRef.current[key] ?? fallback,
+    []
+  );
+
+  const setCollisionState = useCallback((key: string, collided: boolean) => {
+    setCollidingKeys((prev) => {
+      const next = new Set(prev);
+      if (collided) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const ensureNoCollision = useCallback(
+    (key: string, boxes: ReturnType<typeof makeAabb>[], ignoreIds: string[] = []) => {
+      const ignored = new Set<string>([key, ...ignoreIds]);
+      const collision = findCollisionForMany(boxes, sceneAabbs, ignored);
+      if (collision.collided) {
+        setCollisionState(key, true);
+        return collision;
+      }
+      setCollisionState(key, false);
+      return collision;
+    },
+    [sceneAabbs, setCollisionState]
+  );
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {

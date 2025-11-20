@@ -39,7 +39,7 @@ type ConfigState = {
   config: StandConfig;
   price: number;
 
-  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
+  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
   history: StandConfig[];
   future: StandConfig[];
   historyLimit: number;
