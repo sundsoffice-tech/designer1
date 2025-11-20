@@ -1,10 +1,18 @@
 // src/components/SidebarControls.tsx
 import { useState } from "react";
-import { useConfigStore, type DeepPartial } from "../store/configStore";
+import {
+  createModulePatch,
+  useConfigStore,
+  type DeepPartial,
+} from "../store/configStore";
 import type { StandModules } from "../lib/pricing";
 import { collisionPlayground } from "../lib/playgrounds";
 
 type WallSide = "back" | "left" | "right";
+
+type NumericModuleKey = {
+  [K in keyof StandModules]: StandModules[K] extends number | undefined ? K : never;
+}[keyof StandModules] & keyof StandModules;
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -29,6 +37,11 @@ export default function SidebarControls() {
 
   const fixedWalls =
     wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
+
+  const clampValue = (value: number, min = 0, max?: number) => {
+    const lowerBounded = Math.max(min, value);
+    return typeof max === "number" ? Math.min(max, lowerBounded) : lowerBounded;
+  };
 
   // Boden-Konfiguration (advanced + Fallback auf legacy raisedFloor)
   const floor = config.modules.floor;
@@ -61,17 +74,17 @@ export default function SidebarControls() {
     });
   };
 
-  const stepModule = (
-    field: "ledFrames" | "counters" | "screens",
+  const stepModule = <K extends NumericModuleKey>(
+    field: K,
     delta: number,
     min = 0,
     max?: number
   ) => {
-    const current = (config.modules[field] as number) ?? 0;
-    let next = current + delta;
-    if (typeof min === "number") next = Math.max(min, next);
-    if (typeof max === "number") next = Math.min(max, next);
-    patchModules({ [field]: next } as DeepPartial<StandModules>);
+    const current = Number(config.modules[field] ?? 0);
+    const next = clampValue(current + delta, min, max);
+    patchModules(
+      createModulePatch<K>(field, next as unknown as DeepPartial<StandModules[K]>)
+    );
   };
 
   const floorTypeLabel = (type: string | undefined) => {

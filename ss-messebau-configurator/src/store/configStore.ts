@@ -21,6 +21,16 @@ export type DeepPartial<T> = {
     : T[K];
 };
 
+/** Utility: Einzelausschnitt aus StandModules als DeepPartial */
+export type ModulePatch<K extends keyof StandModules> = Pick<DeepPartial<StandModules>, K>;
+
+export const createModulePatch = <K extends keyof StandModules>(
+  key: K,
+  value: DeepPartial<StandModules[K]>
+) => ({
+  [key]: value,
+} as ModulePatch<K>);
+
 /** setConfig-Input: erlaubt DeepPartial bei modules */
 export type ConfigPatch = Omit<Partial<StandConfig>, "modules"> & {
   modules?: DeepPartial<StandModules>;
@@ -246,6 +256,11 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
     ...cfg.modules,
     wallsClosedSides: fixedWalls,
   };
+
+  // Kernmodule (Zähler) immer initialisieren, falls das Preset sie auslässt
+  modules.ledFrames ??= 0;
+  modules.counters ??= 0;
+  modules.screens ??= 0;
 
   // existierende Wände
   const hasBack = fixedWalls >= 1;
@@ -486,7 +501,7 @@ export const useConfigStore = create<ConfigState>((set, get) => {
     },
 
     setModule: (key, value) => {
-      const partial = { [key]: value } as unknown as DeepPartial<StandModules>;
+      const partial = createModulePatch(key, value);
       get().setConfig({ modules: partial });
     },
 
