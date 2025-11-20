@@ -12,6 +12,12 @@ import type {
 
 type PresetName = "small" | "medium" | "premium";
 
+// Globale Obergrenzen für generierbare Module (UI, Legacy-Konverter, Store)
+export const MODULE_LIMITS = {
+  counters: 12,
+  screens: 12,
+} as const;
+
 /** Rekursives Partial für verschachtelte Patches (auch Arrays) */
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (infer U)[]
@@ -236,14 +242,27 @@ function mergeModules(
   return out;
 }
 
+const clampCount = (value: number | undefined, max: number) =>
+  Math.max(0, Math.min(value ?? 0, max));
+
+function clampGenerativeModules(modules: StandModules): StandModules {
+  return {
+    ...modules,
+    counters: clampCount(modules.counters, MODULE_LIMITS.counters),
+    screens: clampCount(modules.screens, MODULE_LIMITS.screens),
+  };
+}
+
 function normalizeConfig(cfg: StandConfig): StandConfig {
   const baseHeight = cfg.height || 2.5;
 
   // feste Anzahl geschlossener Wände je Standtyp
   const fixedWalls = wallFixedMap[cfg.type];
 
+  const clampedModules = clampGenerativeModules(cfg.modules);
+
   let modules: StandModules = {
-    ...cfg.modules,
+    ...clampedModules,
     wallsClosedSides: fixedWalls,
   };
 
@@ -416,12 +435,13 @@ const presetConfigs: Record<PresetName, StandConfig> = {
   },
 };
 
-function withNormalized(cfg: StandConfig) {
-  const normalized = normalizeConfig(cfg);
+function normalizeAndPrice(cfg: StandConfig) {
+  const clamped = { ...cfg, modules: clampGenerativeModules(cfg.modules) };
+  const normalized = normalizeConfig(clamped);
   return { config: normalized, price: calcPrice(normalized) };
 }
 
-const initial = withNormalized(presetConfigs.small);
+const initial = normalizeAndPrice(presetConfigs.small);
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Store
@@ -438,9 +458,8 @@ export const useConfigStore = create<ConfigState>((set, get) => {
 
   /** Helper: Recalculate (Normalize + Price) und setzen */
   const applyFinal = (cfg: StandConfig) => {
-    const normalized = normalizeConfig(cfg);
-    const price = calcPrice(normalized);
-    set({ config: normalized, price });
+    const { config, price } = normalizeAndPrice(cfg);
+    set({ config, price });
   };
 
   return {
@@ -458,14 +477,16 @@ export const useConfigStore = create<ConfigState>((set, get) => {
       const merged: StandConfig = {
         ...current,
         ...partial,
-        modules: mergeModules(current.modules, partial.modules),
+        modules: clampGenerativeModules(
+          mergeModules(current.modules, partial.modules)
+        ),
       };
       applyFinal(merged);
     },
 
     applyPreset: (preset) => {
       pushHistory();
-      const { config, price } = withNormalized(presetConfigs[preset]);
+      const { config, price } = normalizeAndPrice(presetConfigs[preset]);
       set({ config, price });
     },
 
@@ -476,7 +497,7 @@ export const useConfigStore = create<ConfigState>((set, get) => {
 
     reset: () => {
       pushHistory();
-      const { config, price } = withNormalized(presetConfigs.small);
+      const { config, price } = normalizeAndPrice(presetConfigs.small);
       set({ config, price });
     },
 

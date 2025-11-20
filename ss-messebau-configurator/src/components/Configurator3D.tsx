@@ -20,7 +20,7 @@ import {
   Html,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { useConfigStore } from "../store/configStore";
+import { MODULE_LIMITS, useConfigStore } from "../store/configStore";
 import {
   buildSceneAabbs,
   DEFAULT_CLEARANCE,
@@ -530,8 +530,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
-    if ((counters ?? 0) <= 0) return;
-    const count = counters!;
+    const count = Math.min(Math.max(counters ?? 0, 0), MODULE_LIMITS.counters);
+    if (count <= 0) return;
     const out: DetailedCounter[] = Array.from({ length: count }).map((_, idx) => {
       const spacing = width / (count + 1 || 1);
       const xPos = -width / 2 + spacing * (idx + 1);
@@ -552,8 +552,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   };
 
   const convertLegacyScreensToDetailed = () => {
-    if ((screens ?? 0) <= 0) return;
-    const count = screens!;
+    const count = Math.min(Math.max(screens ?? 0, 0), MODULE_LIMITS.screens);
+    if (count <= 0) return;
     const out: DetailedScreen[] = Array.from({ length: count }).map((_, idx) => {
       const total = count || 1;
       let x = 0;
