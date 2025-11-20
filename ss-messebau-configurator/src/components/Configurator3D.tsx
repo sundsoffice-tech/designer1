@@ -27,6 +27,7 @@ import {
   findCollisionForMany,
   makeAabb,
 } from "../lib/collision";
+import { clampDimension, COUNTER_SIZE_LIMITS, SCREEN_SIZE_LIMITS } from "../config/sizeLimits";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -116,6 +117,26 @@ function clampXZ(
   };
 }
 
+function clampCounterScale(
+  scale: THREE.Vector3,
+  base: { w: number; d: number; h: number }
+): THREE.Vector3 {
+  const nextW = clampDimension(base.w * scale.x, COUNTER_SIZE_LIMITS.min.w, COUNTER_SIZE_LIMITS.max.w);
+  const nextD = clampDimension(base.d * scale.z, COUNTER_SIZE_LIMITS.min.d, COUNTER_SIZE_LIMITS.max.d);
+  const nextH = clampDimension(base.h * scale.y, COUNTER_SIZE_LIMITS.min.h, COUNTER_SIZE_LIMITS.max.h);
+  return new THREE.Vector3(nextW / base.w, nextH / base.h, nextD / base.d);
+}
+
+function clampScreenScale(
+  scale: THREE.Vector3,
+  base: { w: number; h: number; t: number }
+): THREE.Vector3 {
+  const nextW = clampDimension(base.w * scale.x, SCREEN_SIZE_LIMITS.min.w, SCREEN_SIZE_LIMITS.max.w);
+  const nextH = clampDimension(base.h * scale.y, SCREEN_SIZE_LIMITS.min.h, SCREEN_SIZE_LIMITS.max.h);
+  const nextT = clampDimension(base.t * scale.z, SCREEN_SIZE_LIMITS.min.t, SCREEN_SIZE_LIMITS.max.t);
+  return new THREE.Vector3(nextW / base.w, nextH / base.h, nextT / base.t);
+}
+
 /** Geometrien */
 function CounterBlock({
   variant,
@@ -189,6 +210,7 @@ function Transformable({
   snap,
   children,
   onChange,
+  onScaleChange,
   onDragStart,
   onDragEnd,
 }: {
@@ -197,17 +219,38 @@ function Transformable({
   snap: boolean;
   children: ReactNode;
   onChange?: (pos: THREE.Vector3) => void;
+  onScaleChange?: (scale: THREE.Vector3, prevScale: THREE.Vector3) => THREE.Vector3;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
   const tcRef = useRef<any>(null);
   const groupRef = useRef<THREE.Group>(null!);
+  const lastScaleRef = useRef<THREE.Vector3>(new THREE.Vector3(1, 1, 1));
+
+  useEffect(() => {
+    if (groupRef.current) {
+      lastScaleRef.current.copy(groupRef.current.scale);
+    }
+  }, []);
 
   useEffect(() => {
     const tc = tcRef.current;
     if (!tc) return;
 
-    const handleChange = () => onChange?.(groupRef.current.position);
+    const handleChange = () => {
+      const group = groupRef.current;
+      if (!group) return;
+
+      if (onScaleChange && !lastScaleRef.current.equals(group.scale)) {
+        const guarded = onScaleChange(group.scale.clone(), lastScaleRef.current.clone());
+        group.scale.copy(guarded);
+        lastScaleRef.current.copy(guarded);
+      } else {
+        lastScaleRef.current.copy(group.scale);
+      }
+
+      onChange?.(group.position);
+    };
     const handleMouseDown = () => onDragStart?.();
     const handleMouseUp = () => onDragEnd?.();
     const handleDraggingChanged = (e: any) => {
@@ -226,7 +269,7 @@ function Transformable({
       tc.removeEventListener("mouseUp", handleMouseUp);
       tc.removeEventListener("dragging-changed", handleDraggingChanged);
     };
-  }, [onChange, onDragEnd, onDragStart]);
+  }, [onChange, onDragEnd, onDragStart, onScaleChange]);
 
   if (!enabled) {
     return <group ref={groupRef}>{children}</group>;
@@ -814,9 +857,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       {countersDetailed.length > 0
         ? countersDetailed.map((ctr) => {
             const variant: CounterVariant = ctr.variant ?? (mAny.counterVariant ?? "basic");
-            const w = ctr.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
-            const d = ctr.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
-            const h = ctr.size?.h ?? 1.1;
+            const rawW = ctr.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
+            const rawD = ctr.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
+            const rawH = ctr.size?.h ?? 1.1;
+            const w = clampDimension(rawW, COUNTER_SIZE_LIMITS.min.w, COUNTER_SIZE_LIMITS.max.w);
+            const d = clampDimension(rawD, COUNTER_SIZE_LIMITS.min.d, COUNTER_SIZE_LIMITS.max.d);
+            const h = clampDimension(rawH, COUNTER_SIZE_LIMITS.min.h, COUNTER_SIZE_LIMITS.max.h);
             const px = ctr.position?.x ?? 0;
             const pz = ctr.position?.z ?? 0;
             const key = `ctr-d-${ctr.id}`;
@@ -828,6 +874,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 enabled={editMode && selected}
                 mode={transformMode}
                 snap={snapOn}
+                onScaleChange={(scale) => clampCounterScale(scale, { w, d, h })}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
@@ -985,9 +1032,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       {/* Screens – Detailed bevorzugt, sonst Legacy */}
       {screensDetailed.length > 0
         ? screensDetailed.map((scr) => {
-            const w = scr.size?.w ?? 0.9;
-            const h = scr.size?.h ?? 0.55;
-            const t = scr.size?.t ?? 0.02;
+            const rawW = scr.size?.w ?? 0.9;
+            const rawH = scr.size?.h ?? 0.55;
+            const rawT = scr.size?.t ?? 0.02;
+            const w = clampDimension(rawW, SCREEN_SIZE_LIMITS.min.w, SCREEN_SIZE_LIMITS.max.w);
+            const h = clampDimension(rawH, SCREEN_SIZE_LIMITS.min.h, SCREEN_SIZE_LIMITS.max.h);
+            const t = clampDimension(rawT, SCREEN_SIZE_LIMITS.min.t, SCREEN_SIZE_LIMITS.max.t);
             const mount = scr.mount ?? "wall";
             const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
             const key = `scr-d-${scr.id}`;
@@ -1029,6 +1079,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 enabled={editMode && selected}
                 mode={transformMode}
                 snap={snapOn}
+                onScaleChange={(scale) => clampScreenScale(scale, { w, h, t })}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
