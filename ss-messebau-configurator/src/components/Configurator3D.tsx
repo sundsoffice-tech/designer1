@@ -434,6 +434,143 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
   const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
 
+  // Keyboard-Nudging für selektierte Objekte (WASD / Pfeiltasten)
+  useEffect(() => {
+    if (!editMode || !selectedKey) return;
+
+    const handleNudge = (dx: number, dz: number) => {
+      // Kabine
+      if (selectedKey === "cabin" && cabinEnabled && cabin) {
+        const next = clampXZ(cabinPosX + dx, cabinPosZ + dz, width, depth, cabinWidth / 2, cabinDepth / 2);
+        setConfig({ modules: { cabin: { position: { x: next.x, z: next.z } } } as any });
+        return;
+      }
+
+      // Truss
+      if (selectedKey === "truss" && trussEnabled) {
+        const next = clampXZ(trussOffsetX + dx, trussOffsetZ + dz, width, depth, 0.4, 0.4);
+        setConfig({ modules: { trussOffset: { x: next.x, z: next.z } } as any });
+        return;
+      }
+
+      // Counters (detailed)
+      if (selectedKey.startsWith("ctr-d-")) {
+        const id = selectedKey.replace("ctr-d-", "");
+        const c = countersDetailed.find((c0) => c0.id === id);
+        if (!c) return;
+
+        const variant: CounterVariant = c.variant ?? (mAny.counterVariant ?? "basic");
+        const w = c.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
+        const d = c.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
+        const px = c.position?.x ?? 0;
+        const pz = c.position?.z ?? 0;
+        const next = clampXZ(px + dx, pz + dz, width, depth, w / 2, d / 2);
+
+        setConfig({
+          modules: {
+            countersDetailed: countersDetailed.map((c0) =>
+              c0.id === id ? { ...c0, position: { ...c0.position, x: next.x, z: next.z } } : c0
+            ),
+          } as any,
+        });
+        return;
+      }
+
+      // Screens (detailed)
+      if (selectedKey.startsWith("scr-d-")) {
+        const id = selectedKey.replace("scr-d-", "");
+        const s = screensDetailed.find((s0) => s0.id === id);
+        if (!s) return;
+
+        const mount = s.mount ?? "wall";
+        const w = s.size?.w ?? 0.9;
+        const h = s.size?.h ?? 0.55;
+        const t = s.size?.t ?? 0.02;
+        let px = s.position?.x ?? 0;
+        let pz = s.position?.z ?? 0;
+
+        if (mount === "wall") {
+          const side = s.wallSide ?? "back";
+          if (side === "back") {
+            px += dx;
+            const next = clampXZ(px, backWallFrontZ, width, depth, w / 2, 0.001);
+            px = next.x;
+            pz = backWallFrontZ;
+          } else if (side === "left") {
+            pz += dz;
+            const next = clampXZ(leftWallInnerX, pz, width, depth, 0.001, h / 2);
+            px = leftWallInnerX;
+            pz = next.z;
+          } else {
+            pz += dz;
+            const next = clampXZ(rightWallInnerX, pz, width, depth, 0.001, h / 2);
+            px = rightWallInnerX;
+            pz = next.z;
+          }
+        } else {
+          const next = clampXZ(px + dx, pz + dz, width, depth, w / 2, t / 2);
+          px = next.x;
+          pz = next.z;
+        }
+
+        setConfig({
+          modules: {
+            detailedScreens: screensDetailed.map((s0) =>
+              s0.id === id ? { ...s0, position: { x: px, z: pz } } : s0
+            ),
+          } as any,
+        });
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const moveKeys = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"]);
+      if (!moveKeys.has(key)) return;
+
+      const fineStep = 0.05;
+      const baseStep = 0.15;
+      const fastStep = 0.5;
+      const step = e.shiftKey ? fastStep : e.altKey ? fineStep : baseStep;
+
+      let dx = 0;
+      let dz = 0;
+      if (key === "arrowup" || key === "w") dz = -step;
+      if (key === "arrowdown" || key === "s") dz = step;
+      if (key === "arrowleft" || key === "a") dx = -step;
+      if (key === "arrowright" || key === "d") dx = step;
+
+      if (dx !== 0 || dz !== 0) {
+        e.preventDefault();
+        handleNudge(dx, dz);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    backWallFrontZ,
+    cabin,
+    cabinDepth,
+    cabinEnabled,
+    cabinPosX,
+    cabinPosZ,
+    cabinWidth,
+    countersDetailed,
+    depth,
+    editMode,
+    leftWallInnerX,
+    mAny.counterVariant,
+    rightWallInnerX,
+    screensDetailed,
+    selectedKey,
+    setConfig,
+    trussEnabled,
+    trussOffsetX,
+    trussOffsetZ,
+    width,
+  ]);
+
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
     if ((counters ?? 0) <= 0) return;
