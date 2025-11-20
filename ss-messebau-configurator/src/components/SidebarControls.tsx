@@ -1,6 +1,10 @@
 // src/components/SidebarControls.tsx
 import { useState } from "react";
-import { useConfigStore, type DeepPartial } from "../store/configStore";
+import {
+  MODULE_LIMITS,
+  useConfigStore,
+  type DeepPartial,
+} from "../store/configStore";
 import type { StandModules } from "../lib/pricing";
 import { collisionPlayground } from "../lib/playgrounds";
 
@@ -740,23 +744,33 @@ export default function SidebarControls() {
                 <input
                   type="number"
                   min={0}
+                  max={MODULE_LIMITS.counters}
                   value={config.modules.counters}
                   onChange={(e) =>
-                    patchModules({ counters: Number(e.target.value) || 0 })
+                    patchModules({
+                      counters: Math.min(
+                        MODULE_LIMITS.counters,
+                        Math.max(0, Number(e.target.value) || 0)
+                      ),
+                    })
                   }
                 />
                 <div className="stepper-buttons">
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={() => stepModule("counters", -1, 0)}
+                    onClick={() =>
+                      stepModule("counters", -1, 0, MODULE_LIMITS.counters)
+                    }
                   >
                     –
                   </button>
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={() => stepModule("counters", 1, 0)}
+                    onClick={() =>
+                      stepModule("counters", 1, 0, MODULE_LIMITS.counters)
+                    }
                   >
                     +
                   </button>
@@ -819,23 +833,33 @@ export default function SidebarControls() {
                 <input
                   type="number"
                   min={0}
+                  max={MODULE_LIMITS.screens}
                   value={config.modules.screens}
                   onChange={(e) =>
-                    patchModules({ screens: Number(e.target.value) || 0 })
+                    patchModules({
+                      screens: Math.min(
+                        MODULE_LIMITS.screens,
+                        Math.max(0, Number(e.target.value) || 0)
+                      ),
+                    })
                   }
                 />
                 <div className="stepper-buttons">
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={() => stepModule("screens", -1, 0)}
+                    onClick={() =>
+                      stepModule("screens", -1, 0, MODULE_LIMITS.screens)
+                    }
                   >
                     –
                   </button>
                   <button
                     type="button"
                     className="icon-btn"
-                    onClick={() => stepModule("screens", 1, 0)}
+                    onClick={() =>
+                      stepModule("screens", 1, 0, MODULE_LIMITS.screens)
+                    }
                   >
                     +
                   </button>

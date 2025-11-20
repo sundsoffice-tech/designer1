@@ -5,6 +5,11 @@ Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
 - `src/components/SidebarControls.tsx` – UI/Presets & Kollisionshilfe
 - `src/store/configStore.ts` – Zustand + Normalisierung
 
+## Globale Modul-Limits
+- Tresen/Counters und Screens sind auf jeweils 12 Stück limitiert.
+- Limits greifen im Store (auch bei `setConfig`/`patchModules`), in der Sidebar (Stepper/
+  Inputs) und in Legacy-Konvertern zu detaillierten Objekten.
+
 ## Kollisionsprüfung (AABB)
 - Alle bewegten Objekte (Counters, Screens, Kabine, Truss-Griff/‑Stützen) erhalten AABBs mit
   einem Mindestabstand (Default `0.2 m`, konfigurierbar über `modules.collisionClearance`).
