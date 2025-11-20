@@ -43,6 +43,13 @@ type DetailedScreen = {
   rotationY?: number;
 };
 
+type Selected =
+  | { kind: "cabin" }
+  | { kind: "counter"; id: string }
+  | { kind: "screen"; id: string }
+  | { kind: "truss" }
+  | null;
+
 type CabinWithPosition = {
   enabled: boolean;
   width: number;
@@ -52,23 +59,9 @@ type CabinWithPosition = {
   position?: { x?: number; z?: number };
 };
 
-/** Edit‑Modus Toggle (Taste 'E') */
-function useEditModeHotkey(): boolean {
-  const [edit, setEdit] = useState<boolean>(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      if (k === "e") setEdit((v) => !v);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-  return edit;
-}
-
 /** Transform‑Modus & Snap Shortcuts (T/R/S/G/Esc) */
 function useTransformKeyboard(
-  setSelectedKey: (v: string | null) => void
+  clearSelection: () => void
 ): { mode: "translate" | "rotate" | "scale"; snap: boolean } {
   const [mode, setMode] = useState<"translate" | "rotate" | "scale">("translate");
   const [snap, setSnap] = useState<boolean>(false);
@@ -80,14 +73,16 @@ function useTransformKeyboard(
       if (k === "r") setMode("rotate");
       if (k === "s") setMode("scale");
       if (k === "g") setSnap((v) => !v);
-      if (k === "escape") setSelectedKey(null);
+      if (k === "escape") clearSelection();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setSelectedKey]);
+  }, [clearSelection]);
 
   return { mode, snap };
 }
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** clamp X/Z in Standfläche, optional mit halben Abmessungen eines Objekts */
 function clampXZ(
@@ -179,6 +174,9 @@ function Transformable({
   enabled,
   mode,
   snap,
+  showX = true,
+  showY = true,
+  showZ = true,
   children,
   onChange,
   onDragStart,
@@ -187,6 +185,9 @@ function Transformable({
   enabled: boolean;
   mode: "translate" | "rotate" | "scale";
   snap: boolean;
+  showX?: boolean;
+  showY?: boolean;
+  showZ?: boolean;
   children: ReactNode;
   onChange?: (pos: THREE.Vector3) => void;
   onDragStart?: () => void;
@@ -227,9 +228,9 @@ function Transformable({
     <TransformControls
       ref={tcRef}
       mode={mode}
-      showX
-      showZ
-      showY={false}
+      showX={showX}
+      showZ={showZ}
+      showY={showY}
       translationSnap={snap ? 0.1 : 0}
       rotationSnap={snap ? THREE.MathUtils.degToRad(15) : 0}
       scaleSnap={snap ? 0.1 : 0}
@@ -244,11 +245,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const { width, depth, height, modules } = config;
 
   // ---- Lokale Edit-/UI-State
-  const editMode = useEditModeHotkey();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [selected, setSelected] = useState<Selected>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "e") {
+        setEditMode((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Transform‑Shortcuts (T/R/S/G/Esc)
-  const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelectedKey);
+  const { mode: transformMode, snap: snapOn } = useTransformKeyboard(() => setSelected(null));
 
   // Orbit sperren / freigeben
   const setOrbitEnabled = (enabled: boolean) => {
@@ -435,7 +446,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
-  const convertLegacyCountersToDetailed = () => {
+  const convertLegacyCountersToDetailed = (focusIdx = 0) => {
     if ((counters ?? 0) <= 0) return;
     const count = counters!;
     const out: DetailedCounter[] = Array.from({ length: count }).map((_, idx) => {
@@ -449,15 +460,17 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         position: { x: xPos, z: zPos },
       };
     });
+    const focus = out[Math.min(out.length - 1, Math.max(0, focusIdx))];
     setConfig({
       modules: {
         countersDetailed: out,
         counters: 0,
       } as any,
     });
+    if (focus) setSelected({ kind: "counter", id: focus.id });
   };
 
-  const convertLegacyScreensToDetailed = () => {
+  const convertLegacyScreensToDetailed = (focusIdx = 0) => {
     if ((screens ?? 0) <= 0) return;
     const count = screens!;
     const out: DetailedScreen[] = Array.from({ length: count }).map((_, idx) => {
@@ -489,33 +502,42 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           wall === "left" ? Math.PI / 2 : wall === "right" ? -Math.PI / 2 : 0,
       };
     });
+    const focus = out[Math.min(out.length - 1, Math.max(0, focusIdx))];
     setConfig({
       modules: {
         detailedScreens: out,
         screens: 0,
       } as any,
     });
+    if (focus) setSelected({ kind: "screen", id: focus.id });
   };
 
   // ---- Selektion / Gültigkeit prüfen (falls Objekt weg ist -> deselect)
   useEffect(() => {
-    if (!selectedKey) return;
-    const validKeys = new Set<string>();
-    if (cabinEnabled) validKeys.add("cabin");
-    if (trussEnabled) validKeys.add("truss");
-    countersDetailed.forEach((c) => validKeys.add(`ctr-d-${c.id}`));
-    screensDetailed.forEach((s) => validKeys.add(`scr-d-${s.id}`));
-    if (!validKeys.has(selectedKey)) setSelectedKey(null);
-  }, [selectedKey, cabinEnabled, trussEnabled, countersDetailed, screensDetailed]);
+    if (!selected) return;
+    if (selected.kind === "cabin" && !cabinEnabled) return setSelected(null);
+    if (selected.kind === "truss" && !trussEnabled) return setSelected(null);
+    if (selected.kind === "counter") {
+      const exists = countersDetailed.some((c) => c.id === selected.id);
+      if (!exists) return setSelected(null);
+    }
+    if (selected.kind === "screen") {
+      const exists = screensDetailed.some((s) => s.id === selected.id);
+      if (!exists) return setSelected(null);
+    }
+  }, [selected, cabinEnabled, trussEnabled, countersDetailed, screensDetailed]);
 
-  const isSelected = (key: string) => selectedKey === key;
+  const isCabinSelected = selected?.kind === "cabin";
+  const isTrussSelected = selected?.kind === "truss";
+  const isCounterSelected = (id: string) => selected?.kind === "counter" && selected.id === id;
+  const isScreenSelected = (id: string) => selected?.kind === "screen" && selected.id === id;
 
   // ---- Render
   return (
     <group
       position={[0, 0, 0]}
       // Klick ins Leere / auf Grundfläche: Selektion aufheben
-      onPointerMissed={() => setSelectedKey(null)}
+      onPointerMissed={() => setSelected(null)}
     >
       {/* Kurze HUD-Hilfe im Edit‑Modus */}
       {editMode && (
@@ -541,7 +563,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         rotation-x={-Math.PI / 2}
         receiveShadow
         castShadow={false}
-        onClick={() => setSelectedKey(null)}
+        onClick={() => setSelected(null)}
       >
         <planeGeometry args={[scaleX + 0.4, scaleZ + 0.4]} />
         <meshStandardMaterial color="#020617" metalness={0.2} roughness={0.8} />
@@ -602,9 +624,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       {/* Lagerraum / Kabine (Drag-fähig im Edit-Modus) */}
       {cabinEnabled && cabin && (
         <Transformable
-          enabled={editMode && isSelected("cabin")}
+          enabled={editMode && isCabinSelected}
           mode={transformMode}
           snap={snapOn}
+          showY={false}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
           onChange={(pos) => {
@@ -623,7 +646,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             position={[cabinPosX, cabinCenterY, cabinPosZ]}
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
-              setSelectedKey("cabin");
+              setSelected({ kind: "cabin" });
             }}
           >
             <mesh castShadow receiveShadow>
@@ -668,7 +691,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             })()}
 
             {/* Auswahl-Rahmen */}
-            {isSelected("cabin") && (
+            {isCabinSelected && (
               <mesh>
                 <boxGeometry args={[cabinWidth, cabinHeight, cabinDepth]} />
                 <meshBasicMaterial wireframe color="#22d3ee" />
@@ -687,15 +710,15 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const h = ctr.size?.h ?? 1.1;
             const px = ctr.position?.x ?? 0;
             const pz = ctr.position?.z ?? 0;
-            const key = `ctr-d-${ctr.id}`;
-            const selected = isSelected(key);
+            const selectedCounter = isCounterSelected(ctr.id);
 
             return (
               <Transformable
-                key={key}
-                enabled={editMode && selected}
+                key={ctr.id}
+                enabled={editMode && selectedCounter}
                 mode={transformMode}
                 snap={snapOn}
+                showY={false}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
@@ -712,7 +735,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   rotation-y={ctr.rotationY ?? 0}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedKey(key);
+                    setSelected({ kind: "counter", id: ctr.id });
                   }}
                 >
                   <group position={[0, h / 2, 0]}>
@@ -728,7 +751,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       />
                     </mesh>
                   )}
-                  {selected && (
+                  {selectedCounter && (
                     <mesh>
                       <boxGeometry args={[w, h, d]} />
                       <meshBasicMaterial wireframe color="#10b981" />
@@ -751,11 +774,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 position={[xPos, floorHeight, zPos]}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  convertLegacyCountersToDetailed();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedKey(k);
+                  convertLegacyCountersToDetailed(idx);
                 }}
               >
                 <group position={[0, 0.55, 0]}>
@@ -823,18 +842,27 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const h = scr.size?.h ?? 0.55;
             const t = scr.size?.t ?? 0.02;
             const mount = scr.mount ?? "wall";
-            const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
-            const key = `scr-d-${scr.id}`;
-            const selected = isSelected(key);
+            const selectedScreen = isScreenSelected(scr.id);
 
             // Position & Rotation
             let px = scr.position?.x ?? 0;
             let pz = scr.position?.z ?? 0;
+            const baseHeight =
+              scr.heightFromFloor ??
+              (mount === "truss"
+                ? trussHeight
+                : mount === "floor"
+                ? floorHeight + h / 2 + 0.05
+                : floorHeight + 1.6);
+            let posY = baseHeight;
             let rotY = scr.rotationY ?? 0;
 
             // Clamping je nach Mount
             if (mount === "wall") {
               const side = scr.wallSide ?? "back";
+              const minY = floorHeight + h / 2 + 0.05;
+              const maxY = floorHeight + wallHeight - h / 2;
+              posY = clamp(baseHeight, minY, maxY);
               if (side === "back") {
                 pz = backWallFrontZ;
                 const c = clampXZ(px, pz, width, depth, w / 2, 0.001);
@@ -842,12 +870,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 rotY = 0;
               } else if (side === "left") {
                 px = leftWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
+                const c = clampXZ(px, pz, width, depth, 0.001, w / 2);
                 pz = c.z;
                 rotY = Math.PI / 2;
               } else {
                 px = rightWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
+                const c = clampXZ(px, pz, width, depth, 0.001, w / 2);
                 pz = c.z;
                 rotY = -Math.PI / 2;
               }
@@ -855,37 +883,91 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
               px = c.x;
               pz = c.z;
+              posY = floorHeight + h / 2;
+            } else if (mount === "truss") {
+              const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
+              px = c.x;
+              pz = c.z;
+              const minY = trussHeight - 0.4;
+              const maxY = trussHeight + 0.4;
+              posY = clamp(baseHeight, minY, maxY);
             }
+
+            const wallSide = scr.wallSide ?? "back";
+            const showX = mount === "wall" ? wallSide === "back" : mount !== "wall";
+            const showZ = mount === "wall" ? wallSide !== "back" : true;
+            const showY = mount === "floor" ? false : true;
 
             return (
               <Transformable
-                key={key}
-                enabled={editMode && selected}
+                key={scr.id}
+                enabled={editMode && selectedScreen}
                 mode={transformMode}
                 snap={snapOn}
+                showX={showX}
+                showY={showY}
+                showZ={showZ}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
-                  pos.set(c.x, pos.y, c.z);
+                  let newX = pos.x;
+                  let newZ = pos.z;
+                  let newY = pos.y;
+                  let nextRotation = rotY;
+
+                  if (mount === "wall") {
+                    const minY = floorHeight + h / 2 + 0.05;
+                    const maxY = floorHeight + wallHeight - h / 2;
+                    newY = clamp(newY, minY, maxY);
+                    if (wallSide === "back") {
+                      newZ = backWallFrontZ;
+                      const c = clampXZ(newX, newZ, width, depth, w / 2, 0.001);
+                      newX = c.x;
+                      nextRotation = 0;
+                    } else if (wallSide === "left") {
+                      newX = leftWallInnerX;
+                      const c = clampXZ(newX, newZ, width, depth, 0.001, w / 2);
+                      newZ = c.z;
+                      nextRotation = Math.PI / 2;
+                    } else {
+                      newX = rightWallInnerX;
+                      const c = clampXZ(newX, newZ, width, depth, 0.001, w / 2);
+                      newZ = c.z;
+                      nextRotation = -Math.PI / 2;
+                    }
+                  } else if (mount === "floor") {
+                    const c = clampXZ(newX, newZ, width, depth, w / 2, t / 2);
+                    newX = c.x;
+                    newZ = c.z;
+                    newY = floorHeight + h / 2;
+                  } else {
+                    const c = clampXZ(newX, newZ, width, depth, w / 2, t / 2);
+                    newX = c.x;
+                    newZ = c.z;
+                    const minY = trussHeight - 0.4;
+                    const maxY = trussHeight + 0.4;
+                    newY = clamp(newY, minY, maxY);
+                  }
+
+                  pos.set(newX, newY, newZ);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
+                      ? { ...s0, position: { x: newX, z: newZ }, heightFromFloor: newY, rotationY: nextRotation }
                       : s0
                   );
                   setConfig({ modules: { detailedScreens: next } as any });
                 }}
               >
                 <group
-                  position={[px, floorHeight + y, pz]}
+                  position={[px, posY, pz]}
                   rotation-y={rotY}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedKey(key);
+                    setSelected({ kind: "screen", id: scr.id });
                   }}
                 >
                   <ScreenPanel w={w} h={h} t={t} />
-                  {selected && (
+                  {selectedScreen && (
                     <mesh>
                       <boxGeometry args={[w, h, t]} />
                       <meshBasicMaterial wireframe color="#f43f5e" />
@@ -908,7 +990,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   position={[xPos, floorHeight + 1.6, backWallFrontZ]}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    convertLegacyScreensToDetailed();
+                    convertLegacyScreensToDetailed(idx);
                   }}
                 >
                   <ScreenPanel />
@@ -931,7 +1013,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   rotation-y={Math.PI / 2}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    convertLegacyScreensToDetailed();
+                    convertLegacyScreensToDetailed(idx);
                   }}
                 >
                   <ScreenPanel />
@@ -953,7 +1035,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 rotation-y={-Math.PI / 2}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  convertLegacyScreensToDetailed();
+                  convertLegacyScreensToDetailed(idx);
                 }}
               >
                 <ScreenPanel />
@@ -1031,9 +1113,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         <group position={[trussOffsetX, 0, trussOffsetZ]}>
           {/* Drag-Griff für Truss (EditMode) */}
           <Transformable
-            enabled={editMode && isSelected("truss")}
+            enabled={editMode && isTrussSelected}
             mode={transformMode}
             snap={snapOn}
+            showY={false}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
             onChange={(pos) => {
@@ -1046,7 +1129,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               position={[0, trussHeight, 0]}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedKey("truss");
+                setSelected({ kind: "truss" });
               }}
             >
               {/* Kleiner visueller Griff */}
