@@ -23,6 +23,15 @@ import { useConfigStore } from "../store/configStore";
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
 
+type Selected =
+  | { kind: "cabin" }
+  | { kind: "counter"; id: string }
+  | { kind: "screen"; id: string }
+  | { kind: "truss" }
+  | null;
+
+type SelectedKind = Exclude<Selected, null>["kind"];
+
 /** Detaillierte, frei platzierbare Objekte (optionale Felder im Store) */
 type DetailedCounter = {
   id: string;
@@ -38,6 +47,7 @@ type DetailedScreen = {
   size?: { w: number; h: number; t?: number };
   mount?: "wall" | "truss" | "floor";
   wallSide?: WallSide;
+  /** Abstand von der Oberkante Boden (nicht Welt-Y) */
   heightFromFloor?: number;
   position: { x: number; z: number };
   rotationY?: number;
@@ -68,7 +78,7 @@ function useEditModeHotkey(): boolean {
 
 /** Transform‑Modus & Snap Shortcuts (T/R/S/G/Esc) */
 function useTransformKeyboard(
-  setSelectedKey: (v: string | null) => void
+  setSelected: (v: Selected) => void
 ): { mode: "translate" | "rotate" | "scale"; snap: boolean } {
   const [mode, setMode] = useState<"translate" | "rotate" | "scale">("translate");
   const [snap, setSnap] = useState<boolean>(false);
@@ -80,11 +90,11 @@ function useTransformKeyboard(
       if (k === "r") setMode("rotate");
       if (k === "s") setMode("scale");
       if (k === "g") setSnap((v) => !v);
-      if (k === "escape") setSelectedKey(null);
+      if (k === "escape") setSelected(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setSelectedKey]);
+  }, [setSelected]);
 
   return { mode, snap };
 }
@@ -107,6 +117,13 @@ function clampXZ(
     z: Math.min(maxZ, Math.max(minZ, z)),
   };
 }
+
+const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const MAX_DETAILED_COUNTERS = 12;
+const MAX_DETAILED_SCREENS = 24;
+const NUDGE_STEP_FINE = 0.1;
+const NUDGE_STEP_FAST = 0.25;
 
 /** Geometrien */
 function CounterBlock({
@@ -183,6 +200,9 @@ function Transformable({
   onChange,
   onDragStart,
   onDragEnd,
+  showX = true,
+  showY = true,
+  showZ = true,
 }: {
   enabled: boolean;
   mode: "translate" | "rotate" | "scale";
@@ -191,6 +211,9 @@ function Transformable({
   onChange?: (pos: THREE.Vector3) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  showX?: boolean;
+  showY?: boolean;
+  showZ?: boolean;
 }) {
   const tcRef = useRef<any>(null);
   const groupRef = useRef<THREE.Group>(null!);
@@ -227,9 +250,9 @@ function Transformable({
     <TransformControls
       ref={tcRef}
       mode={mode}
-      showX
-      showZ
-      showY={false}
+      showX={showX}
+      showZ={showZ}
+      showY={showY}
       translationSnap={snap ? 0.1 : 0}
       rotationSnap={snap ? THREE.MathUtils.degToRad(15) : 0}
       scaleSnap={snap ? 0.1 : 0}
@@ -245,10 +268,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
   // ---- Lokale Edit-/UI-State
   const editMode = useEditModeHotkey();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Selected>(null);
 
   // Transform‑Shortcuts (T/R/S/G/Esc)
-  const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelectedKey);
+  const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelected);
 
   // Orbit sperren / freigeben
   const setOrbitEnabled = (enabled: boolean) => {
@@ -431,13 +454,15 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   };
 
   // ---- Detaillierte Objekte aus Store (optional)
-  const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
-  const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
+  const countersDetailedRaw = (mAny.countersDetailed ?? []) as DetailedCounter[];
+  const screensDetailedRaw = (mAny.detailedScreens ?? []) as DetailedScreen[];
+  const countersDetailed = countersDetailedRaw.slice(0, MAX_DETAILED_COUNTERS);
+  const screensDetailed = screensDetailedRaw.slice(0, MAX_DETAILED_SCREENS);
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
     if ((counters ?? 0) <= 0) return;
-    const count = counters!;
+    const count = Math.min(counters!, MAX_DETAILED_COUNTERS);
     const out: DetailedCounter[] = Array.from({ length: count }).map((_, idx) => {
       const spacing = width / (count + 1 || 1);
       const xPos = -width / 2 + spacing * (idx + 1);
@@ -455,11 +480,14 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         counters: 0,
       } as any,
     });
+    if (out.length > 0) {
+      setSelected({ kind: "counter", id: out[0].id });
+    }
   };
 
   const convertLegacyScreensToDetailed = () => {
     if ((screens ?? 0) <= 0) return;
-    const count = screens!;
+    const count = Math.min(screens!, MAX_DETAILED_SCREENS);
     const out: DetailedScreen[] = Array.from({ length: count }).map((_, idx) => {
       const total = count || 1;
       let x = 0;
@@ -483,7 +511,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         size: { w: 0.9, h: 0.55, t: 0.02 },
         mount: "wall",
         wallSide: wall,
-        heightFromFloor: floorHeight + 1.6,
+        heightFromFloor: 1.6,
         position: { x, z },
         rotationY:
           wall === "left" ? Math.PI / 2 : wall === "right" ? -Math.PI / 2 : 0,
@@ -495,27 +523,259 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         screens: 0,
       } as any,
     });
+    if (out.length > 0) {
+      setSelected({ kind: "screen", id: out[0].id });
+    }
   };
+
+  // Anzahl der beweglichen Objekte begrenzen (Performance)
+  useEffect(() => {
+    const patch: any = {};
+
+    if (countersDetailedRaw.length > MAX_DETAILED_COUNTERS) {
+      patch.countersDetailed = countersDetailedRaw.slice(0, MAX_DETAILED_COUNTERS);
+    }
+    if (typeof counters === "number" && counters > MAX_DETAILED_COUNTERS) {
+      patch.counters = MAX_DETAILED_COUNTERS;
+    }
+
+    if (screensDetailedRaw.length > MAX_DETAILED_SCREENS) {
+      patch.detailedScreens = screensDetailedRaw.slice(0, MAX_DETAILED_SCREENS);
+    }
+    if (typeof screens === "number" && screens > MAX_DETAILED_SCREENS) {
+      patch.screens = MAX_DETAILED_SCREENS;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      setConfig({ modules: patch as any });
+    }
+  }, [
+    countersDetailedRaw,
+    screensDetailedRaw,
+    counters,
+    screens,
+    setConfig,
+  ]);
 
   // ---- Selektion / Gültigkeit prüfen (falls Objekt weg ist -> deselect)
   useEffect(() => {
-    if (!selectedKey) return;
+    if (!selected) return;
     const validKeys = new Set<string>();
     if (cabinEnabled) validKeys.add("cabin");
     if (trussEnabled) validKeys.add("truss");
     countersDetailed.forEach((c) => validKeys.add(`ctr-d-${c.id}`));
     screensDetailed.forEach((s) => validKeys.add(`scr-d-${s.id}`));
-    if (!validKeys.has(selectedKey)) setSelectedKey(null);
-  }, [selectedKey, cabinEnabled, trussEnabled, countersDetailed, screensDetailed]);
 
-  const isSelected = (key: string) => selectedKey === key;
+    const stillValid = (() => {
+      if (selected.kind === "cabin") return validKeys.has("cabin");
+      if (selected.kind === "truss") return validKeys.has("truss");
+      if (selected.kind === "counter") return validKeys.has(`ctr-d-${selected.id}`);
+      if (selected.kind === "screen") return validKeys.has(`scr-d-${selected.id}`);
+      return false;
+    })();
+
+    if (!stillValid) setSelected(null);
+  }, [selected, cabinEnabled, trussEnabled, countersDetailed, screensDetailed]);
+
+  // ---- Pfeiltasten-Nudging je nach Ebene
+  useEffect(() => {
+    if (!editMode || !selected) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.key.startsWith("Arrow")) return;
+
+      const lr = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      const ud = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0;
+      if (lr === 0 && ud === 0) return;
+
+      const step = e.shiftKey ? NUDGE_STEP_FAST : NUDGE_STEP_FINE;
+      const deltaHorizontal = lr * step;
+      const deltaVertical = ud * step;
+      e.preventDefault();
+
+      if (selected.kind === "cabin" && cabin) {
+        const next = clampXZ(
+          cabinPosX + deltaHorizontal,
+          cabinPosZ - deltaVertical,
+          width,
+          depth,
+          cabinWidth / 2,
+          cabinDepth / 2
+        );
+        setConfig({ modules: { cabin: { position: { x: next.x, z: next.z } } } as any });
+        return;
+      }
+
+      if (selected.kind === "truss") {
+        const next = clampXZ(trussOffsetX + deltaHorizontal, trussOffsetZ - deltaVertical, width, depth, 0.4, 0.4);
+        setConfig({ modules: { trussOffset: { x: next.x, z: next.z } } as any });
+        return;
+      }
+
+      if (selected.kind === "counter") {
+        const ctr = countersDetailed.find((c) => c.id === selected.id);
+        if (!ctr) return;
+        const w =
+          ctr.size?.w ?? ((ctr.variant ?? (mAny.counterVariant as CounterVariant) ?? "basic") === "premium" ? 1.4 : 0.9);
+        const d =
+          ctr.size?.d ?? ((ctr.variant ?? (mAny.counterVariant as CounterVariant) ?? "basic") === "premium" ? 0.6 : 0.5);
+        const c0 = ctr.position ?? { x: 0, z: 0 };
+        const next = clampXZ(c0.x + deltaHorizontal, c0.z - deltaVertical, width, depth, w / 2, d / 2);
+        setConfig({
+          modules: {
+            countersDetailed: countersDetailed.map((cc) =>
+              cc.id === ctr.id ? { ...cc, position: { ...cc.position, x: next.x, z: next.z } } : cc
+            ),
+          } as any,
+        });
+        return;
+      }
+
+      if (selected.kind === "screen") {
+        const scr = screensDetailed.find((s) => s.id === selected.id);
+        if (!scr) return;
+        const w = scr.size?.w ?? 0.9;
+        const h = scr.size?.h ?? 0.55;
+        const t = scr.size?.t ?? 0.02;
+        const mount = scr.mount ?? "wall";
+        const baseHeightFromFloor =
+          scr.heightFromFloor ?? (mount === "floor" ? h / 2 + 0.02 : mount === "truss" ? trussHeight - floorHeight : 1.6);
+        const clampWallY = (yWorld: number) => clampValue(yWorld, floorHeight + h / 2, floorHeight + wallHeight - h / 2);
+
+        if (mount === "wall") {
+          const side = scr.wallSide ?? "back";
+          const current = scr.position ?? { x: 0, z: 0 };
+          const targetYWorld = clampWallY(floorHeight + baseHeightFromFloor + deltaVertical);
+
+          if (side === "back") {
+            const nextX = clampValue(current.x + deltaHorizontal, -width / 2 + w / 2, width / 2 - w / 2);
+            setConfig({
+              modules: {
+                detailedScreens: screensDetailed.map((s0) =>
+                  s0.id === scr.id
+                    ? {
+                        ...s0,
+                        mount: "wall",
+                        wallSide: "back",
+                        rotationY: 0,
+                        heightFromFloor: targetYWorld - floorHeight,
+                        position: { x: nextX, z: backWallFrontZ },
+                      }
+                    : s0
+                ),
+              } as any,
+            });
+            return;
+          }
+
+          const nextZ = clampValue(current.z + deltaHorizontal, -depth / 2 + w / 2, depth / 2 - w / 2);
+          const rotationY = side === "left" ? Math.PI / 2 : -Math.PI / 2;
+          const xFixed = side === "left" ? leftWallInnerX : rightWallInnerX;
+          setConfig({
+            modules: {
+              detailedScreens: screensDetailed.map((s0) =>
+                s0.id === scr.id
+                  ? {
+                      ...s0,
+                      mount: "wall",
+                      wallSide: side,
+                      rotationY,
+                      heightFromFloor: targetYWorld - floorHeight,
+                      position: { x: xFixed, z: nextZ },
+                    }
+                  : s0
+              ),
+            } as any,
+          });
+          return;
+        }
+
+        if (mount === "floor") {
+          const current = scr.position ?? { x: 0, z: 0 };
+          const next = clampXZ(current.x + deltaHorizontal, current.z - deltaVertical, width, depth, w / 2, t / 2);
+          const heightFromFloor = baseHeightFromFloor;
+          setConfig({
+            modules: {
+              detailedScreens: screensDetailed.map((s0) =>
+                s0.id === scr.id
+                  ? {
+                      ...s0,
+                      mount: "floor",
+                      rotationY: 0,
+                      heightFromFloor,
+                      position: { x: next.x, z: next.z },
+                    }
+                  : s0
+              ),
+            } as any,
+          });
+          return;
+        }
+
+        const current = scr.position ?? { x: 0, z: 0 };
+        const next = clampXZ(current.x + deltaHorizontal, current.z - deltaVertical, width, depth, w / 2, t / 2);
+        const targetHeightFromFloor = clampValue(
+          baseHeightFromFloor + deltaVertical,
+          trussHeight - floorHeight - 0.5,
+          trussHeight - floorHeight + 0.5
+        );
+        setConfig({
+          modules: {
+            detailedScreens: screensDetailed.map((s0) =>
+              s0.id === scr.id
+                ? {
+                    ...s0,
+                    mount: "truss",
+                    rotationY: 0,
+                    heightFromFloor: targetHeightFromFloor,
+                    position: { x: next.x, z: next.z },
+                  }
+                : s0
+            ),
+          } as any,
+        });
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    editMode,
+    selected,
+    cabin,
+    cabinDepth,
+    cabinPosX,
+    cabinPosZ,
+    cabinWidth,
+    countersDetailed,
+    screensDetailed,
+    setConfig,
+    width,
+    depth,
+    trussOffsetX,
+    trussOffsetZ,
+    floorHeight,
+    wallHeight,
+    trussHeight,
+    backWallFrontZ,
+    leftWallInnerX,
+    rightWallInnerX,
+    mAny.counterVariant,
+  ]);
+
+  const isSelected = (kind: SelectedKind, id?: string) => {
+    if (!selected) return false;
+    if (selected.kind !== kind) return false;
+    if (id) return (selected as any).id === id;
+    return true;
+  };
 
   // ---- Render
   return (
     <group
       position={[0, 0, 0]}
       // Klick ins Leere / auf Grundfläche: Selektion aufheben
-      onPointerMissed={() => setSelectedKey(null)}
+      onPointerMissed={() => setSelected(null)}
     >
       {/* Kurze HUD-Hilfe im Edit‑Modus */}
       {editMode && (
@@ -541,7 +801,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         rotation-x={-Math.PI / 2}
         receiveShadow
         castShadow={false}
-        onClick={() => setSelectedKey(null)}
+        onClick={() => setSelected(null)}
       >
         <planeGeometry args={[scaleX + 0.4, scaleZ + 0.4]} />
         <meshStandardMaterial color="#020617" metalness={0.2} roughness={0.8} />
@@ -607,6 +867,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           snap={snapOn}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
+          showY={false}
           onChange={(pos) => {
             const c = clampXZ(pos.x, pos.z, width, depth, cabinWidth / 2, cabinDepth / 2);
             pos.set(c.x, pos.y, c.z);
@@ -623,7 +884,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             position={[cabinPosX, cabinCenterY, cabinPosZ]}
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
-              setSelectedKey("cabin");
+              setSelected({ kind: "cabin" });
             }}
           >
             <mesh castShadow receiveShadow>
@@ -688,7 +949,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const px = ctr.position?.x ?? 0;
             const pz = ctr.position?.z ?? 0;
             const key = `ctr-d-${ctr.id}`;
-            const selected = isSelected(key);
+            const selected = isSelected("counter", ctr.id);
 
             return (
               <Transformable
@@ -698,6 +959,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 snap={snapOn}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
+                showY={false}
                 onChange={(pos) => {
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
                   pos.set(c.x, pos.y, c.z);
@@ -712,7 +974,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   rotation-y={ctr.rotationY ?? 0}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedKey(key);
+                    setSelected({ kind: "counter", id: ctr.id });
                   }}
                 >
                   <group position={[0, h / 2, 0]}>
@@ -755,7 +1017,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedKey(k);
+                  setSelected(null);
                 }}
               >
                 <group position={[0, 0.55, 0]}>
@@ -823,38 +1085,64 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const h = scr.size?.h ?? 0.55;
             const t = scr.size?.t ?? 0.02;
             const mount = scr.mount ?? "wall";
-            const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
+            const storedHeight = scr.heightFromFloor;
+            const normalizedHeightFromFloor =
+              storedHeight !== undefined && storedHeight > wallHeight + floorHeight
+                ? storedHeight - floorHeight
+                : storedHeight;
+            const heightFromFloor =
+              normalizedHeightFromFloor ??
+              (mount === "floor"
+                ? h / 2 + 0.02
+                : mount === "truss"
+                ? trussHeight - floorHeight
+                : 1.6);
+            let worldY = floorHeight + heightFromFloor;
             const key = `scr-d-${scr.id}`;
-            const selected = isSelected(key);
+            const selected = isSelected("screen", scr.id);
 
             // Position & Rotation
             let px = scr.position?.x ?? 0;
             let pz = scr.position?.z ?? 0;
             let rotY = scr.rotationY ?? 0;
+            let showX = true;
+            let showY = mount !== "floor";
+            let showZ = true;
+
+            const clampWallY = (yVal: number) =>
+              clampValue(yVal, floorHeight + h / 2, floorHeight + wallHeight - h / 2);
 
             // Clamping je nach Mount
             if (mount === "wall") {
               const side = scr.wallSide ?? "back";
+              worldY = clampWallY(worldY);
               if (side === "back") {
                 pz = backWallFrontZ;
-                const c = clampXZ(px, pz, width, depth, w / 2, 0.001);
-                px = c.x;
+                px = clampValue(px, -width / 2 + w / 2, width / 2 - w / 2);
                 rotY = 0;
+                showZ = false;
               } else if (side === "left") {
                 px = leftWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
+                pz = clampValue(pz, -depth / 2 + w / 2, depth / 2 - w / 2);
                 rotY = Math.PI / 2;
+                showX = false;
               } else {
                 px = rightWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
+                pz = clampValue(pz, -depth / 2 + w / 2, depth / 2 - w / 2);
                 rotY = -Math.PI / 2;
+                showX = false;
               }
             } else if (mount === "floor") {
               const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
               px = c.x;
               pz = c.z;
+              worldY = floorHeight + h / 2;
+              showY = false;
+            } else if (mount === "truss") {
+              const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
+              px = c.x;
+              pz = c.z;
+              worldY = clampValue(worldY, trussHeight - 0.5, trussHeight + 0.5);
             }
 
             return (
@@ -865,23 +1153,122 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 snap={snapOn}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
+                showX={showX}
+                showY={showY}
+                showZ={showZ}
                 onChange={(pos) => {
+                  if (mount === "wall") {
+                    const side = scr.wallSide ?? "back";
+                    const clampedY = clampWallY(pos.y);
+                    if (side === "back") {
+                      const clampedX = clampValue(pos.x, -width / 2 + w / 2, width / 2 - w / 2);
+                      pos.set(clampedX, clampedY, backWallFrontZ);
+                      setConfig({
+                        modules: {
+                          detailedScreens: screensDetailed.map((s0) =>
+                            s0.id === scr.id
+                              ? {
+                                  ...s0,
+                                  mount: "wall",
+                                  wallSide: "back",
+                                  rotationY: 0,
+                                  heightFromFloor: clampedY - floorHeight,
+                                  position: { x: clampedX, z: backWallFrontZ },
+                                }
+                              : s0
+                          ),
+                        } as any,
+                      });
+                    } else if (side === "left") {
+                      const clampedZ = clampValue(pos.z, -depth / 2 + w / 2, depth / 2 - w / 2);
+                      pos.set(leftWallInnerX, clampedY, clampedZ);
+                      setConfig({
+                        modules: {
+                          detailedScreens: screensDetailed.map((s0) =>
+                            s0.id === scr.id
+                              ? {
+                                  ...s0,
+                                  mount: "wall",
+                                  wallSide: "left",
+                                  rotationY: Math.PI / 2,
+                                  heightFromFloor: clampedY - floorHeight,
+                                  position: { x: leftWallInnerX, z: clampedZ },
+                                }
+                              : s0
+                          ),
+                        } as any,
+                      });
+                    } else {
+                      const clampedZ = clampValue(pos.z, -depth / 2 + w / 2, depth / 2 - w / 2);
+                      pos.set(rightWallInnerX, clampedY, clampedZ);
+                      setConfig({
+                        modules: {
+                          detailedScreens: screensDetailed.map((s0) =>
+                            s0.id === scr.id
+                              ? {
+                                  ...s0,
+                                  mount: "wall",
+                                  wallSide: "right",
+                                  rotationY: -Math.PI / 2,
+                                  heightFromFloor: clampedY - floorHeight,
+                                  position: { x: rightWallInnerX, z: clampedZ },
+                                }
+                              : s0
+                          ),
+                        } as any,
+                      });
+                    }
+                    return;
+                  }
+
+                  if (mount === "floor") {
+                    const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
+                    const yFixed = floorHeight + heightFromFloor;
+                    pos.set(c.x, yFixed, c.z);
+                    setConfig({
+                      modules: {
+                        detailedScreens: screensDetailed.map((s0) =>
+                          s0.id === scr.id
+                            ? {
+                                ...s0,
+                                mount: "floor",
+                                rotationY: 0,
+                                heightFromFloor,
+                                position: { x: c.x, z: c.z },
+                              }
+                            : s0
+                        ),
+                      } as any,
+                    });
+                    return;
+                  }
+
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
-                  pos.set(c.x, pos.y, c.z);
-                  const next = screensDetailed.map((s0) =>
-                    s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
-                      : s0
-                  );
-                  setConfig({ modules: { detailedScreens: next } as any });
+                  const clampedY = clampValue(pos.y, trussHeight - 0.5, trussHeight + 0.5);
+                  pos.set(c.x, clampedY, c.z);
+                  setConfig({
+                    modules: {
+                      detailedScreens: screensDetailed.map((s0) =>
+                        s0.id === scr.id
+                          ? {
+                              ...s0,
+                              mount: "truss",
+                              rotationY: 0,
+                              heightFromFloor: clampedY - floorHeight,
+                              position: { x: c.x, z: c.z },
+                            }
+                          : s0
+                      ),
+                    } as any,
+                  });
                 }}
               >
                 <group
-                  position={[px, floorHeight + y, pz]}
+                  position={[px, worldY, pz]}
                   rotation-y={rotY}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedKey(key);
+                    setSelected({ kind: "screen", id: scr.id });
                   }}
                 >
                   <ScreenPanel w={w} h={h} t={t} />
@@ -1036,6 +1423,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             snap={snapOn}
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
+            showY={false}
             onChange={(pos) => {
               const c = clampXZ(pos.x, pos.z, width, depth, 0.4, 0.4);
               pos.set(c.x, pos.y, c.z);
@@ -1046,7 +1434,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               position={[0, trussHeight, 0]}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedKey("truss");
+                setSelected({ kind: "truss" });
               }}
             >
               {/* Kleiner visueller Griff */}
