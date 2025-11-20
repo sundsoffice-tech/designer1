@@ -2,6 +2,7 @@
 import {
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -19,8 +20,16 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import { useConfigStore } from "../store/configStore";
-
-type WallSide = "back" | "left" | "right";
+import type { WallSide } from "../lib/pricing";
+import {
+  buildAABB,
+  clampToStand,
+  hasCollision,
+  normalizePlacement,
+  type AABB,
+  type InteractionProfile,
+  type StandArea,
+} from "../lib/interactionRules";
 type CounterVariant = "basic" | "premium" | "corner";
 
 /** Detaillierte, frei platzierbare Objekte (optionale Felder im Store) */
@@ -87,25 +96,6 @@ function useTransformKeyboard(
   }, [setSelectedKey]);
 
   return { mode, snap };
-}
-
-/** clamp X/Z in Standfläche, optional mit halben Abmessungen eines Objekts */
-function clampXZ(
-  x: number,
-  z: number,
-  width: number,
-  depth: number,
-  halfW = 0,
-  halfD = 0
-) {
-  const minX = -width / 2 + halfW;
-  const maxX = width / 2 - halfW;
-  const minZ = -depth / 2 + halfD;
-  const maxZ = depth / 2 - halfD;
-  return {
-    x: Math.min(maxX, Math.max(minX, x)),
-    z: Math.min(maxZ, Math.max(minZ, z)),
-  };
 }
 
 /** Geometrien */
@@ -246,6 +236,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   // ---- Lokale Edit-/UI-State
   const editMode = useEditModeHotkey();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [collidingIds, setCollidingIds] = useState<Set<string>>(new Set());
 
   // Transform‑Shortcuts (T/R/S/G/Esc)
   const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelectedKey);
@@ -256,6 +247,17 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   };
   const disableOrbit = () => setOrbitEnabled(false);
   const enableOrbit = () => setOrbitEnabled(true);
+
+  const markCollision = (id: string, collided: boolean) => {
+    setCollidingIds((prev) => {
+      const next = new Set(prev);
+      if (collided) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const isColliding = (id: string) => collidingIds.has(id);
 
   // Basis-Module
   const {
@@ -327,6 +329,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const wallThickness = 0.06;
   const panelGap = 0.01;
 
+  const standArea: StandArea = useMemo(
+    () => ({ width, depth, wallThickness, panelGap }),
+    [width, depth, wallThickness, panelGap]
+  );
+
+  const collisionPadding = 0.05;
+
   // Innenpositionen der Wand-Frontflächen
   const backWallFrontZ = -depth / 2 + wallThickness + panelGap;
   const leftWallInnerX = -width / 2 + wallThickness + panelGap;
@@ -352,6 +361,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const cabinPosX = cabin?.position?.x ?? -width / 2 + cabinWidth / 2 + 0.25;
   const cabinPosZ = cabin?.position?.z ?? -depth / 2 + cabinDepth / 2 + 0.25;
   const cabinCenterY = floorHeight + cabinHeight / 2;
+
+  const cabinProfile: InteractionProfile = {
+    size: { w: cabinWidth, d: cabinDepth },
+    mount: "floor",
+    padding: collisionPadding,
+  };
+  const cabinPlacement = normalizePlacement({ x: cabinPosX, z: cabinPosZ }, cabinProfile, standArea);
 
   // Boden-Material
   const floorType = floorConfig?.type ?? "carpet";
@@ -433,6 +449,55 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   // ---- Detaillierte Objekte aus Store (optional)
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
   const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
+
+  const activeCollisionBoxes = useMemo<AABB[]>(() => {
+    const boxes: AABB[] = [];
+
+    if (cabinEnabled && cabin) {
+      boxes.push(
+        buildAABB(cabinPlacement.position, { w: cabinWidth, d: cabinDepth }, collisionPadding, "cabin")
+      );
+    }
+
+    countersDetailed.forEach((ctr) => {
+      const variant: CounterVariant = ctr.variant ?? (mAny.counterVariant ?? "basic");
+      const w = ctr.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
+      const d = ctr.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
+      const placement = normalizePlacement(
+        { x: ctr.position?.x ?? 0, z: ctr.position?.z ?? 0 },
+        { size: { w, d }, mount: "floor", padding: collisionPadding },
+        standArea
+      );
+      boxes.push(buildAABB(placement.position, { w, d }, collisionPadding, `ctr-d-${ctr.id}`));
+    });
+
+    screensDetailed.forEach((scr) => {
+      const mount = scr.mount ?? "wall";
+      if (mount !== "floor") return;
+      const w = scr.size?.w ?? 0.9;
+      const t = scr.size?.t ?? 0.02;
+      const placement = normalizePlacement(
+        { x: scr.position?.x ?? 0, z: scr.position?.z ?? 0 },
+        { size: { w, d: t }, mount: "floor", padding: collisionPadding },
+        standArea
+      );
+      boxes.push(buildAABB(placement.position, { w, d: t }, collisionPadding, `scr-d-${scr.id}`));
+    });
+
+    return boxes;
+  }, [
+    cabin,
+    cabinDepth,
+    cabinEnabled,
+    cabinPosX,
+    cabinPosZ,
+    cabinWidth,
+    collisionPadding,
+    countersDetailed,
+    mAny.counterVariant,
+    screensDetailed,
+    standArea,
+  ]);
 
   // ---- Legacy → Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
@@ -608,19 +673,26 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
           onChange={(pos) => {
-            const c = clampXZ(pos.x, pos.z, width, depth, cabinWidth / 2, cabinDepth / 2);
-            pos.set(c.x, pos.y, c.z);
+            const normalized = normalizePlacement({ x: pos.x, z: pos.z }, cabinProfile, standArea);
+            const candidate = buildAABB(normalized.position, cabinProfile.size, collisionPadding, "cabin");
+            const collides = hasCollision(candidate, activeCollisionBoxes, "cabin");
+            const finalPos = collides ? cabinPlacement.position : normalized.position;
+
+            pos.set(finalPos.x, pos.y, finalPos.z);
+            markCollision("cabin", collides);
+            if (collides) return;
+
             setConfig({
               modules: {
                 cabin: {
-                  position: { x: c.x, z: c.z },
+                  position: { x: finalPos.x, z: finalPos.z },
                 },
               } as any,
             });
           }}
         >
           <group
-            position={[cabinPosX, cabinCenterY, cabinPosZ]}
+            position={[cabinPlacement.position.x, cabinCenterY, cabinPlacement.position.z]}
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
               setSelectedKey("cabin");
@@ -671,7 +743,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             {isSelected("cabin") && (
               <mesh>
                 <boxGeometry args={[cabinWidth, cabinHeight, cabinDepth]} />
-                <meshBasicMaterial wireframe color="#22d3ee" />
+                <meshBasicMaterial wireframe color={isColliding("cabin") ? "#ef4444" : "#22d3ee"} />
               </mesh>
             )}
           </group>
@@ -690,6 +762,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const key = `ctr-d-${ctr.id}`;
             const selected = isSelected(key);
 
+            const counterProfile: InteractionProfile = {
+              size: { w, d },
+              mount: "floor",
+              padding: collisionPadding,
+            };
+            const normalizedPos = normalizePlacement({ x: px, z: pz }, counterProfile, standArea).position;
+
             return (
               <Transformable
                 key={key}
@@ -699,16 +778,25 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
-                  pos.set(c.x, pos.y, c.z);
+                  const normalized = normalizePlacement({ x: pos.x, z: pos.z }, counterProfile, standArea);
+                  const candidate = buildAABB(normalized.position, counterProfile.size, collisionPadding, key);
+                  const collides = hasCollision(candidate, activeCollisionBoxes, key);
+                  const finalPos = collides ? normalizedPos : normalized.position;
+
+                  pos.set(finalPos.x, pos.y, finalPos.z);
+                  markCollision(key, collides);
+                  if (collides) return;
+
                   const next = countersDetailed.map((c0) =>
-                    c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
+                    c0.id === ctr.id
+                      ? { ...c0, position: { ...c0.position, x: finalPos.x, z: finalPos.z } }
+                      : c0
                   );
                   setConfig({ modules: { countersDetailed: next } as any });
                 }}
               >
                 <group
-                  position={[px, floorHeight, pz]}
+                  position={[normalizedPos.x, floorHeight, normalizedPos.z]}
                   rotation-y={ctr.rotationY ?? 0}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -731,7 +819,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   {selected && (
                     <mesh>
                       <boxGeometry args={[w, h, d]} />
-                      <meshBasicMaterial wireframe color="#10b981" />
+                      <meshBasicMaterial
+                        wireframe
+                        color={isColliding(key) ? "#ef4444" : "#10b981"}
+                      />
                     </mesh>
                   )}
                 </group>
@@ -827,35 +918,25 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const key = `scr-d-${scr.id}`;
             const selected = isSelected(key);
 
-            // Position & Rotation
-            let px = scr.position?.x ?? 0;
-            let pz = scr.position?.z ?? 0;
-            let rotY = scr.rotationY ?? 0;
+            const wallSideForMount = (scr.wallSide as WallSide | undefined) ?? "back";
+            const profileDepth = mount === "wall" ? (wallSideForMount === "back" ? t : w) : t;
+            const screenProfile: InteractionProfile = {
+              size: { w, d: profileDepth },
+              mount: mount === "wall" ? "wall" : "floor",
+              wallSide: mount === "wall" ? wallSideForMount : undefined,
+              snapGap: mount === "wall" ? t / 2 : undefined,
+              stickToWall: mount === "wall",
+              padding: collisionPadding,
+            };
 
-            // Clamping je nach Mount
-            if (mount === "wall") {
-              const side = scr.wallSide ?? "back";
-              if (side === "back") {
-                pz = backWallFrontZ;
-                const c = clampXZ(px, pz, width, depth, w / 2, 0.001);
-                px = c.x;
-                rotY = 0;
-              } else if (side === "left") {
-                px = leftWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = Math.PI / 2;
-              } else {
-                px = rightWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = -Math.PI / 2;
-              }
-            } else if (mount === "floor") {
-              const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
-              px = c.x;
-              pz = c.z;
-            }
+            const normalized = normalizePlacement(
+              { x: scr.position?.x ?? 0, z: scr.position?.z ?? 0 },
+              screenProfile,
+              standArea
+            );
+            const px = normalized.position.x;
+            const pz = normalized.position.z;
+            const rotY = normalized.rotationY ?? scr.rotationY ?? 0;
 
             return (
               <Transformable
@@ -866,12 +947,17 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
-                  pos.set(c.x, pos.y, c.z);
+                  const normalizedPos = normalizePlacement({ x: pos.x, z: pos.z }, screenProfile, standArea);
+                  const candidate = buildAABB(normalizedPos.position, screenProfile.size, collisionPadding, key);
+                  const collides = hasCollision(candidate, activeCollisionBoxes, key);
+                  const finalPos = collides ? { x: px, z: pz } : normalizedPos.position;
+
+                  pos.set(finalPos.x, pos.y, finalPos.z);
+                  markCollision(key, collides);
+                  if (collides) return;
+
                   const next = screensDetailed.map((s0) =>
-                    s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
-                      : s0
+                    s0.id === scr.id ? { ...s0, position: { x: finalPos.x, z: finalPos.z } } : s0
                   );
                   setConfig({ modules: { detailedScreens: next } as any });
                 }}
@@ -888,7 +974,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   {selected && (
                     <mesh>
                       <boxGeometry args={[w, h, t]} />
-                      <meshBasicMaterial wireframe color="#f43f5e" />
+                      <meshBasicMaterial wireframe color={isColliding(key) ? "#ef4444" : "#f43f5e"} />
                     </mesh>
                   )}
                 </group>
@@ -1037,7 +1123,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             onDragStart={disableOrbit}
             onDragEnd={enableOrbit}
             onChange={(pos) => {
-              const c = clampXZ(pos.x, pos.z, width, depth, 0.4, 0.4);
+              const c = clampToStand(pos.x, pos.z, standArea, 0.4, 0.4);
               pos.set(c.x, pos.y, c.z);
               setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } as any });
             }}
