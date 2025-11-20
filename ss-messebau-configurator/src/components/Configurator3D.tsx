@@ -2,8 +2,10 @@
 import {
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
+  useCallback,
   type ReactNode,
   type MutableRefObject,
 } from "react";
@@ -19,8 +21,14 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import { useConfigStore } from "../store/configStore";
+import {
+  applyInteractionRules,
+  interactionProfiles,
+  type InteractionContext,
+  type InteractionOptions,
+  type WallSide,
+} from "../lib/interactionRules";
 
-type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
 
 /** Detaillierte, frei platzierbare Objekte (optionale Felder im Store) */
@@ -89,23 +97,21 @@ function useTransformKeyboard(
   return { mode, snap };
 }
 
-/** clamp X/Z in Standfläche, optional mit halben Abmessungen eines Objekts */
-function clampXZ(
-  x: number,
-  z: number,
-  width: number,
-  depth: number,
-  halfW = 0,
-  halfD = 0
-) {
-  const minX = -width / 2 + halfW;
-  const maxX = width / 2 - halfW;
-  const minZ = -depth / 2 + halfD;
-  const maxZ = depth / 2 - halfD;
-  return {
-    x: Math.min(maxX, Math.max(minX, x)),
-    z: Math.min(maxZ, Math.max(minZ, z)),
-  };
+/** Interaktions-Hook: kapselt Profile + Clamping auf Boden/Wände */
+function useInteractable(context: InteractionContext) {
+  return useCallback(
+    (
+      profileKey: keyof typeof interactionProfiles,
+      options: InteractionOptions = {}
+    ) =>
+      (pos: THREE.Vector3) => {
+        const profile = interactionProfiles[profileKey];
+        const result = applyInteractionRules(profile, pos, context, options);
+        pos.copy(result.position);
+        options.onCommit?.(result);
+      },
+    [context]
+  );
 }
 
 /** Geometrien */
@@ -326,6 +332,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   // Geometrie-Hilfswerte
   const wallThickness = 0.06;
   const panelGap = 0.01;
+
+  const interactionContext: InteractionContext = useMemo(
+    () => ({ width, depth, floorHeight, wallThickness, panelGap }),
+    [width, depth, floorHeight, wallThickness, panelGap]
+  );
+
+  const interactable = useInteractable(interactionContext);
 
   // Innenpositionen der Wand-Frontflächen
   const backWallFrontZ = -depth / 2 + wallThickness + panelGap;
@@ -668,6 +681,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             whiteSpace: "nowrap"
           }}>
             <strong>Edit</strong> (E) · Mode: <strong>{transformMode}</strong> (T/R/S) · Snap: <strong>{snapOn ? "0,1 m" : "aus"}</strong> (G) · ESC: Deselektieren
+            <br />
+            Regeln: Screen snappt an nächste Wand und gleitet entlang · Counter/Kabine/Truss klemmen auf Bodenraster
           </div>
         </Html>
       )}
@@ -738,26 +753,40 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
       {/* Lagerraum / Kabine (Drag-fähig im Edit-Modus) */}
       {cabinEnabled && cabin && (
+        (() => {
+          const cabinResolved = applyInteractionRules(
+            interactionProfiles.cabin,
+            new THREE.Vector3(cabinPosX, cabinCenterY, cabinPosZ),
+            interactionContext,
+            {
+              mount: "floor",
+              halfSize: { x: cabinWidth / 2, z: cabinDepth / 2 },
+            }
+          );
+
+          return (
         <Transformable
           enabled={editMode && isSelected("cabin")}
           mode={transformMode}
           snap={snapOn}
           onDragStart={disableOrbit}
           onDragEnd={enableOrbit}
-          onChange={(pos) => {
-            const c = clampXZ(pos.x, pos.z, width, depth, cabinWidth / 2, cabinDepth / 2);
-            pos.set(c.x, pos.y, c.z);
-            setConfig({
-              modules: {
-                cabin: {
-                  position: { x: c.x, z: c.z },
-                },
-              } as any,
-            });
-          }}
+          onChange={interactable("cabin", {
+            mount: "floor",
+            halfSize: { x: cabinWidth / 2, z: cabinDepth / 2 },
+            onCommit: ({ position }) => {
+              setConfig({
+                modules: {
+                  cabin: {
+                    position: { x: position.x, z: position.z },
+                  },
+                } as any,
+              });
+            },
+          })}
         >
           <group
-            position={[cabinPosX, cabinCenterY, cabinPosZ]}
+            position={[cabinResolved.position.x, cabinResolved.position.y, cabinResolved.position.z]}
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
               setSelectedKey("cabin");
@@ -813,6 +842,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             )}
           </group>
         </Transformable>
+          );
+        })()
       )}
 
       {/* Counters – Detailed bevorzugt, sonst Legacy */}
@@ -827,6 +858,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const key = `ctr-d-${ctr.id}`;
             const selected = isSelected(key);
 
+            const resolved = applyInteractionRules(
+              interactionProfiles.counter,
+              new THREE.Vector3(px, floorHeight, pz),
+              interactionContext,
+              {
+                mount: "floor",
+                halfSize: { x: w / 2, z: d / 2 },
+              }
+            );
+
             return (
               <Transformable
                 key={key}
@@ -835,17 +876,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 snap={snapOn}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
-                onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
-                  pos.set(c.x, pos.y, c.z);
-                  const next = countersDetailed.map((c0) =>
-                    c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
-                  );
-                  setConfig({ modules: { countersDetailed: next } as any });
-                }}
+                onChange={interactable("counter", {
+                  mount: "floor",
+                  halfSize: { x: w / 2, z: d / 2 },
+                  onCommit: ({ position }) => {
+                    const next = countersDetailed.map((c0) =>
+                      c0.id === ctr.id
+                        ? { ...c0, position: { ...c0.position, x: position.x, z: position.z } }
+                        : c0
+                    );
+                    setConfig({ modules: { countersDetailed: next } as any });
+                  },
+                })}
               >
                 <group
-                  position={[px, floorHeight, pz]}
+                  position={[resolved.position.x, resolved.position.y, resolved.position.z]}
                   rotation-y={ctr.rotationY ?? 0}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -882,10 +927,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const zPos = countersPlacement === "island" ? 0 : depth / 2 - 0.5;
             const variant = (modules as any).counterVariant ?? "basic";
             const k = `legacy-counter-${idx}`;
+            const resolved = applyInteractionRules(
+              interactionProfiles.counter,
+              new THREE.Vector3(xPos, floorHeight, zPos),
+              interactionContext,
+              { mount: "floor", halfSize: { x: 0.45, z: 0.25 } }
+            );
             return (
               <group
                 key={k}
-                position={[xPos, floorHeight, zPos]}
+                position={[resolved.position.x, resolved.position.y, resolved.position.z]}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   convertLegacyCountersToDetailed();
@@ -963,36 +1014,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
             const key = `scr-d-${scr.id}`;
             const selected = isSelected(key);
-
-            // Position & Rotation
-            let px = scr.position?.x ?? 0;
-            let pz = scr.position?.z ?? 0;
-            let rotY = scr.rotationY ?? 0;
-
-            // Clamping je nach Mount
-            if (mount === "wall") {
-              const side = scr.wallSide ?? "back";
-              if (side === "back") {
-                pz = backWallFrontZ;
-                const c = clampXZ(px, pz, width, depth, w / 2, 0.001);
-                px = c.x;
-                rotY = 0;
-              } else if (side === "left") {
-                px = leftWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = Math.PI / 2;
-              } else {
-                px = rightWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = -Math.PI / 2;
+            const resolved = applyInteractionRules(
+              interactionProfiles.screen,
+              new THREE.Vector3(scr.position?.x ?? 0, floorHeight + y, scr.position?.z ?? 0),
+              interactionContext,
+              {
+                mount,
+                wallSide: scr.wallSide,
+                halfSize: { x: w / 2, z: t / 2 },
+                wallSnapPadding: {
+                  back: { along: w / 2, away: t / 2 },
+                  left: { along: w / 2, away: t / 2 },
+                  right: { along: w / 2, away: t / 2 },
+                },
               }
-            } else if (mount === "floor") {
-              const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
-              px = c.x;
-              pz = c.z;
-            }
+            );
 
             return (
               <Transformable
@@ -1002,20 +1038,33 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 snap={snapOn}
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
-                onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
-                  pos.set(c.x, pos.y, c.z);
-                  const next = screensDetailed.map((s0) =>
-                    s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
-                      : s0
-                  );
-                  setConfig({ modules: { detailedScreens: next } as any });
-                }}
+                onChange={interactable("screen", {
+                  mount,
+                  wallSide: scr.wallSide,
+                  halfSize: { x: w / 2, z: t / 2 },
+                  wallSnapPadding: {
+                    back: { along: w / 2, away: t / 2 },
+                    left: { along: w / 2, away: t / 2 },
+                    right: { along: w / 2, away: t / 2 },
+                  },
+                  onCommit: ({ position, rotationY, wallSide }) => {
+                    const next = screensDetailed.map((s0) =>
+                      s0.id === scr.id
+                        ? {
+                            ...s0,
+                            position: { x: position.x, z: position.z },
+                            rotationY: rotationY ?? s0.rotationY,
+                            wallSide: wallSide ?? s0.wallSide,
+                          }
+                        : s0
+                    );
+                    setConfig({ modules: { detailedScreens: next } as any });
+                  },
+                })}
               >
                 <group
-                  position={[px, floorHeight + y, pz]}
-                  rotation-y={rotY}
+                  position={[resolved.position.x, resolved.position.y, resolved.position.z]}
+                  rotation-y={scr.rotationY ?? resolved.rotationY ?? 0}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedKey(key);
@@ -1039,10 +1088,24 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             if (screensWallSide === "back") {
               const spacing = width / (total + 1);
               const xPos = -width / 2 + spacing * (idx + 1);
+              const resolved = applyInteractionRules(
+                interactionProfiles.screen,
+                new THREE.Vector3(xPos, floorHeight + 1.6, backWallFrontZ),
+                interactionContext,
+                {
+                  mount: "wall",
+                  wallSide: "back",
+                  halfSize: { x: 0.45, z: 0.01 },
+                  wallSnapPadding: {
+                    back: { along: 0.45, away: 0.01 },
+                  },
+                }
+              );
               return (
                 <group
                   key={`screen-${idx}`}
-                  position={[xPos, floorHeight + 1.6, backWallFrontZ]}
+                  position={[resolved.position.x, resolved.position.y, resolved.position.z]}
+                  rotation-y={resolved.rotationY}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     convertLegacyScreensToDetailed();
@@ -1061,11 +1124,24 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             if (screensWallSide === "left") {
               const spacing = depth / (total + 1);
               const zPos = -depth / 2 + spacing * (idx + 1);
+              const resolved = applyInteractionRules(
+                interactionProfiles.screen,
+                new THREE.Vector3(leftWallInnerX, floorHeight + 1.6, zPos),
+                interactionContext,
+                {
+                  mount: "wall",
+                  wallSide: "left",
+                  halfSize: { x: 0.45, z: 0.01 },
+                  wallSnapPadding: {
+                    left: { along: 0.45, away: 0.01 },
+                  },
+                }
+              );
               return (
                 <group
                   key={`screen-${idx}`}
-                  position={[leftWallInnerX, floorHeight + 1.6, zPos]}
-                  rotation-y={Math.PI / 2}
+                  position={[resolved.position.x, resolved.position.y, resolved.position.z]}
+                  rotation-y={resolved.rotationY}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     convertLegacyScreensToDetailed();
@@ -1083,11 +1159,24 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
             const spacing = depth / (total + 1);
             const zPos = -depth / 2 + spacing * (idx + 1);
+            const resolved = applyInteractionRules(
+              interactionProfiles.screen,
+              new THREE.Vector3(rightWallInnerX, floorHeight + 1.6, zPos),
+              interactionContext,
+              {
+                mount: "wall",
+                wallSide: "right",
+                halfSize: { x: 0.45, z: 0.01 },
+                wallSnapPadding: {
+                  right: { along: 0.45, away: 0.01 },
+                },
+              }
+            );
             return (
               <group
                 key={`screen-${idx}`}
-                position={[rightWallInnerX, floorHeight + 1.6, zPos]}
-                rotation-y={-Math.PI / 2}
+                position={[resolved.position.x, resolved.position.y, resolved.position.z]}
+                rotation-y={resolved.rotationY}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   convertLegacyScreensToDetailed();
@@ -1164,166 +1253,177 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         })}
 
       {/* Truss – Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
-      {trussEnabled && (
-        <group position={[trussOffsetX, 0, trussOffsetZ]}>
-          {/* Drag-Griff für Truss (EditMode) */}
-          <Transformable
-            enabled={editMode && isSelected("truss")}
-            mode={transformMode}
-            snap={snapOn}
-            onDragStart={disableOrbit}
-            onDragEnd={enableOrbit}
-            onChange={(pos) => {
-              const c = clampXZ(pos.x, pos.z, width, depth, 0.4, 0.4);
-              pos.set(c.x, pos.y, c.z);
-              setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } as any });
-            }}
-          >
-            <group
-              position={[0, trussHeight, 0]}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedKey("truss");
-              }}
-            >
-              {/* Kleiner visueller Griff */}
-              {editMode && (
-                <mesh>
-                  <torusGeometry args={[0.25, 0.02, 8, 24]} />
-                  <meshStandardMaterial color="#22d3ee" metalness={0.7} roughness={0.25} />
-                </mesh>
-              )}
+      {trussEnabled &&
+        (() => {
+          const resolvedTruss = applyInteractionRules(
+            interactionProfiles.truss,
+            new THREE.Vector3(trussOffsetX, 0, trussOffsetZ),
+            interactionContext,
+            { mount: "floor", halfSize: { x: 0.4, z: 0.4 } }
+          );
+
+          return (
+            <group position={[resolvedTruss.position.x, 0, resolvedTruss.position.z]}>
+              {/* Drag-Griff für Truss (EditMode) */}
+              <Transformable
+                enabled={editMode && isSelected("truss")}
+                mode={transformMode}
+                snap={snapOn}
+                onDragStart={disableOrbit}
+                onDragEnd={enableOrbit}
+                onChange={interactable("truss", {
+                  mount: "floor",
+                  halfSize: { x: 0.4, z: 0.4 },
+                  onCommit: ({ position }) =>
+                    setConfig({ modules: { trussOffset: { x: position.x, z: position.z } } as any }),
+                })}
+              >
+                <group
+                  position={[0, trussHeight, 0]}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedKey("truss");
+                  }}
+                >
+                  {/* Kleiner visueller Griff */}
+                  {editMode && (
+                    <mesh>
+                      <torusGeometry args={[0.25, 0.02, 8, 24]} />
+                      <meshStandardMaterial color="#22d3ee" metalness={0.7} roughness={0.25} />
+                    </mesh>
+                  )}
+                </group>
+              </Transformable>
+
+              {/* Truss-Rahmen */}
+              <mesh position={[0, trussHeight, depth / 2]} castShadow>
+                <boxGeometry args={[width, 0.08, 0.08]} />
+                <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
+              </mesh>
+              <mesh position={[0, trussHeight, -depth / 2]} castShadow>
+                <boxGeometry args={[width, 0.08, 0.08]} />
+                <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
+              </mesh>
+              <mesh position={[-width / 2, trussHeight, 0]} castShadow>
+                <boxGeometry args={[0.08, 0.08, depth]} />
+                <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
+              </mesh>
+              <mesh position={[width / 2, trussHeight, 0]} castShadow>
+                <boxGeometry args={[0.08, 0.08, depth]} />
+                <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
+              </mesh>
+
+              {/* Truss-Lampen */}
+              {trussLightsFront > 0 &&
+                Array.from({ length: trussLightsFront }).map((_, i) => {
+                  const spacing = width / (trussLightsFront + 1);
+                  const x = -width / 2 + spacing * (i + 1);
+                  const y = trussHeight - 0.05;
+                  const z = depth / 2 - 0.04;
+                  return renderTrussLight(`truss-front-${i}`, x, y, z, x, y - 0.15, z - 0.25);
+                })}
+
+              {trussLightsBack > 0 &&
+                Array.from({ length: trussLightsBack }).map((_, i) => {
+                  const spacing = width / (trussLightsBack + 1);
+                  const x = -width / 2 + spacing * (i + 1);
+                  const y = trussHeight - 0.05;
+                  const z = -depth / 2 + 0.04;
+                  return renderTrussLight(`truss-back-${i}`, x, y, z, x, y - 0.15, z + 0.25);
+                })}
+
+              {trussLightsLeft > 0 &&
+                Array.from({ length: trussLightsLeft }).map((_, i) => {
+                  const spacing = depth / (trussLightsLeft + 1);
+                  const z = -depth / 2 + spacing * (i + 1);
+                  const y = trussHeight - 0.05;
+                  const x = -width / 2 + 0.04;
+                  return renderTrussLight(`truss-left-${i}`, x, y, z, x + 0.25, y - 0.15, z);
+                })}
+
+              {trussLightsRight > 0 &&
+                Array.from({ length: trussLightsRight }).map((_, i) => {
+                  const spacing = depth / (trussLightsRight + 1);
+                  const z = -depth / 2 + spacing * (i + 1);
+                  const y = trussHeight - 0.05;
+                  const x = width / 2 - 0.04;
+                  return renderTrussLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
+                })}
+
+              {/* Bannerrahmen */}
+              {(() => {
+                const bannerY = trussHeight - 0.4 - bannerHeight / 2;
+                const banners: ReactNode[] = [];
+
+                const materialProps = bannerTexture
+                  ? { map: bannerTexture as any }
+                  : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
+
+                // Front
+                if (bannersFront > 0) {
+                  Array.from({ length: bannersFront }).forEach((_, i) => {
+                    const spacing = width / (bannersFront + 1);
+                    const x = -width / 2 + spacing * (i + 1);
+                    const z = depth / 2 - 0.05;
+                    banners.push(
+                      <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
+                        <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
+                        <meshStandardMaterial {...materialProps} />
+                      </mesh>
+                    );
+                  });
+                }
+
+                // Back
+                if (bannersBack > 0) {
+                  Array.from({ length: bannersBack }).forEach((_, i) => {
+                    const spacing = width / (bannersBack + 1);
+                    const x = -width / 2 + spacing * (i + 1);
+                    const z = -depth / 2 + 0.05;
+                    banners.push(
+                      <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
+                        <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
+                        <meshStandardMaterial {...materialProps} />
+                      </mesh>
+                    );
+                  });
+                }
+
+                // Left
+                if (bannersLeft > 0) {
+                  Array.from({ length: bannersLeft }).forEach((_, i) => {
+                    const spacing = depth / (bannersLeft + 1);
+                    const z = -depth / 2 + spacing * (i + 1);
+                    const x = -width / 2 + 0.05;
+                    banners.push(
+                      <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
+                        <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
+                        <meshStandardMaterial {...materialProps} />
+                      </mesh>
+                    );
+                  });
+                }
+
+                // Right
+                if (bannersRight > 0) {
+                  Array.from({ length: bannersRight }).forEach((_, i) => {
+                    const spacing = depth / (bannersRight + 1);
+                    const z = -depth / 2 + spacing * (i + 1);
+                    const x = width / 2 - 0.05;
+                    banners.push(
+                      <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
+                        <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
+                        <meshStandardMaterial {...materialProps} />
+                      </mesh>
+                    );
+                  });
+                }
+
+                return banners;
+              })()}
             </group>
-          </Transformable>
-
-          {/* Truss-Rahmen */}
-          <mesh position={[0, trussHeight, depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[0, trussHeight, -depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[-width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-
-          {/* Truss-Lampen */}
-          {trussLightsFront > 0 &&
-            Array.from({ length: trussLightsFront }).map((_, i) => {
-              const spacing = width / (trussLightsFront + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = depth / 2 - 0.04;
-              return renderTrussLight(`truss-front-${i}`, x, y, z, x, y - 0.15, z - 0.25);
-            })}
-
-          {trussLightsBack > 0 &&
-            Array.from({ length: trussLightsBack }).map((_, i) => {
-              const spacing = width / (trussLightsBack + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = -depth / 2 + 0.04;
-              return renderTrussLight(`truss-back-${i}`, x, y, z, x, y - 0.15, z + 0.25);
-            })}
-
-          {trussLightsLeft > 0 &&
-            Array.from({ length: trussLightsLeft }).map((_, i) => {
-              const spacing = depth / (trussLightsLeft + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = -width / 2 + 0.04;
-              return renderTrussLight(`truss-left-${i}`, x, y, z, x + 0.25, y - 0.15, z);
-            })}
-
-          {trussLightsRight > 0 &&
-            Array.from({ length: trussLightsRight }).map((_, i) => {
-              const spacing = depth / (trussLightsRight + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = width / 2 - 0.04;
-              return renderTrussLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
-            })}
-
-          {/* Bannerrahmen */}
-          {(() => {
-            const bannerY = trussHeight - 0.4 - bannerHeight / 2;
-            const banners: ReactNode[] = [];
-
-            const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
-              : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
-
-            // Front
-            if (bannersFront > 0) {
-              Array.from({ length: bannersFront }).forEach((_, i) => {
-                const spacing = width / (bannersFront + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = depth / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Back
-            if (bannersBack > 0) {
-              Array.from({ length: bannersBack }).forEach((_, i) => {
-                const spacing = width / (bannersBack + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = -depth / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Left
-            if (bannersLeft > 0) {
-              Array.from({ length: bannersLeft }).forEach((_, i) => {
-                const spacing = depth / (bannersLeft + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = -width / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Right
-            if (bannersRight > 0) {
-              Array.from({ length: bannersRight }).forEach((_, i) => {
-                const spacing = depth / (bannersRight + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = width / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            return banners;
-          })()}
-        </group>
-      )}
+          );
+        })()}
     </group>
   );
 }
