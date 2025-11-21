@@ -266,10 +266,22 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
   if (hasLeft) allowedWalls.push("left");
   if (hasRight) allowedWalls.push("right");
 
+  // Türseiten: Front ist immer erlaubt, Seiten nur wenn Wand vorhanden
+  const allowedDoorSides: ("front" | "left" | "right")[] = ["front"];
+  if (hasLeft) allowedDoorSides.push("left");
+  if (hasRight) allowedDoorSides.push("right");
+
   const fixWall = (wall?: WallSide): WallSide | undefined => {
     if (!allowedWalls.length) return undefined;
     if (wall && allowedWalls.includes(wall)) return wall;
     return allowedWalls[0];
+  };
+
+  const fixDoorSide = (
+    side?: "front" | "left" | "right"
+  ): "front" | "left" | "right" => {
+    if (side && allowedDoorSides.includes(side)) return side;
+    return allowedDoorSides[0];
   };
 
   // LED / Screens nur auf existierenden Wänden platzieren
@@ -296,19 +308,22 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
       width: 1.5,
       depth: 1.5,
       height: baseHeight,
-      doorSide: modules.storageDoorSide ?? "front",
+      doorSide: fixDoorSide(modules.storageDoorSide),
     } as CabinWithPosition;
   } else {
     // Kabinenhöhe an Standhöhe koppeln
     modules.cabin.height = baseHeight;
 
     if (!modules.cabin.doorSide) {
-      modules.cabin.doorSide = modules.storageDoorSide ?? "front";
+      modules.cabin.doorSide = fixDoorSide(modules.storageDoorSide);
     }
 
     // Lagerraum-Flag steuert, ob Kabine aktiv ist
     (modules.cabin as CabinWithPosition).enabled = storageActive;
   }
+
+  // Türseite immer an erlaubte Wände anpassen
+  modules.storageDoorSide = fixDoorSide(modules.storageDoorSide);
 
   // Kabine positionieren (bewegbar, aber immer innerhalb der Standfläche)
   const cabin = modules.cabin as CabinWithPosition | undefined;
