@@ -25,3 +25,11 @@ Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
 - Objekte per Klick auswählen, Drag sperrt Orbit automatisch. Doppelklick auf Legacy-Counter
   konvertiert sie in frei platzierbare Varianten.
 
+## Fehleranalyse: 400/500 bei `/api/runtime/price`
+- Die Preislogik läuft komplett im Frontend. `useConfigStore` ruft die lokale Funktion
+  `calcPrice` auf; es gibt weder `fetch`- noch `axios`-Imports im Projekt.
+- Damit schickt der Konfigurator keine Requests an `/api/runtime/price` oder `/api/aiclient`.
+  Solche Calls stammen vermutlich von einer externen Browser-Extension (z. B. AI-Assistent)
+  oder einem Proxy, der auf `localhost:4000` zeigt. Ohne passenden Backend-Endpunkt enden
+  diese Anfragen mit 400/500-Fehlern, obwohl die App selbst rein statisch arbeitet.
+
