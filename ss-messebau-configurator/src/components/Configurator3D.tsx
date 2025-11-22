@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type MutableRefObject,
 } from "react";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   OrbitControls,
   Environment,
@@ -28,6 +28,7 @@ import {
   makeAabb,
 } from "../lib/collision";
 import useIsMobile from "../lib/useIsMobile";
+import useViewportSize from "../hooks/useViewportSize";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -59,6 +60,13 @@ type CabinWithPosition = {
   height: number;
   doorSide: "front" | "left" | "right" | "back";
   position?: { x?: number; z?: number };
+};
+
+type CameraSettings = {
+  position: readonly [number, number, number];
+  fov: number;
+  maxDistance: number;
+  minDistance: number;
 };
 
 /** Edit‑Modus Toggle (Taste 'E') */
@@ -181,6 +189,32 @@ function ScreenPanel({ w = 0.9, h = 0.55, t = 0.02 }) {
       <meshStandardMaterial color="#020617" roughness={0.2} metalness={0.7} />
     </mesh>
   );
+}
+
+function CameraViewportSync({
+  width,
+  height,
+  cameraSettings,
+}: {
+  width: number;
+  height: number;
+  cameraSettings: CameraSettings;
+}) {
+  const { camera, gl } = useThree();
+
+  useEffect(() => {
+    if (!width || !height) return;
+
+    const perspectiveCamera = camera as THREE.PerspectiveCamera;
+    perspectiveCamera.aspect = width / height;
+    perspectiveCamera.fov = cameraSettings.fov;
+    perspectiveCamera.position.set(...cameraSettings.position);
+    perspectiveCamera.updateProjectionMatrix();
+
+    gl.setSize(width, height, false);
+  }, [camera, gl, width, height, cameraSettings]);
+
+  return null;
 }
 
 /** TransformControls Wrapper: sperrt Orbit während Interaktion */
@@ -1476,23 +1510,28 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 export default function Configurator3D() {
   const orbitRef = useRef<any>(null);
   const isMobile = useIsMobile();
+  const { width, height, orientation } = useViewportSize();
 
-  const cameraSettings = useMemo(
-    () =>
-      isMobile
-        ? {
-            position: [5.5, 5.2, 8.5] as const,
-            fov: 52,
-            maxDistance: 14,
-            minDistance: 3.8,
-          }
-        : {
-            position: [6, 5, 8] as const,
-            fov: 45,
-            maxDistance: 18,
-            minDistance: 4,
-          },
-    [isMobile]
+  const cameraSettings = useMemo<CameraSettings>(
+    () => {
+      if (isMobile) {
+        const isPortrait = orientation === "portrait";
+        return {
+          position: isPortrait ? ([5.8, 5.6, 9.6] as const) : ([5.5, 5.2, 8.5] as const),
+          fov: isPortrait ? 50 : 52,
+          maxDistance: isPortrait ? 15 : 14,
+          minDistance: isPortrait ? 4.2 : 3.8,
+        };
+      }
+
+      return {
+        position: [6, 5, 8] as const,
+        fov: 45,
+        maxDistance: 18,
+        minDistance: 4,
+      };
+    },
+    [isMobile, orientation]
   );
 
   const shadowMapSize = isMobile ? 512 : 1024;
@@ -1503,12 +1542,20 @@ export default function Configurator3D() {
       shadows
       camera={{ position: cameraSettings.position, fov: cameraSettings.fov }}
       className="canvas-root"
-      style={{ width: "100%", height: "100%" }}
+      style={{
+        width: width ? `${width}px` : "100%",
+        height: height ? `${height}px` : "100%",
+      }}
       onPointerMissed={() => {
         // Fallback-Deselect, falls obere Ebene Events nicht bekommt
         // (Selektion-Reset passiert primär in StandMesh)
       }}
     >
+      <CameraViewportSync
+        width={width}
+        height={height}
+        cameraSettings={cameraSettings}
+      />
       <color attach="background" args={["#020617"]} />
 
       <ambientLight intensity={0.35} />
