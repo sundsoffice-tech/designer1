@@ -15,7 +15,6 @@ import {
   Environment,
   ContactShadows,
   Grid,
-  useTexture,
   TransformControls,
   Html,
 } from "@react-three/drei";
@@ -28,6 +27,7 @@ import {
   makeAabb,
 } from "../lib/collision";
 import useIsMobile from "../lib/useIsMobile";
+import { createStandScene } from "../scene/createStandScene";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -252,6 +252,11 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const { config, setConfig } = useConfigStore();
   const { width, depth, height, modules } = config;
 
+  const standScene = useMemo(() => createStandScene(config), [config]);
+  const sceneObjects = standScene.objects;
+
+  const cloneObject = useCallback(<T extends THREE.Object3D>(obj?: T) => obj?.clone() as T | undefined, []);
+
   // ---- Lokale Edit-/UI-State
   const editMode = useEditModeHotkey();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -268,11 +273,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
   // Basis-Module
   const {
-    wallsClosedSides,
     storageRoom,
     storageDoorSide,
-    ledFrames,
-    ledWall,
     counters,
     countersWall,
     countersWithPower,
@@ -285,16 +287,6 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
   // Truss & Licht
   const trussEnabled: boolean = !!mAny.truss;
-  const trussLightType: "spot" | "wash" = (mAny.trussLightType ?? "spot") as "spot" | "wash";
-
-  const trussLightsFront: number = mAny.trussLightsFront ?? 0;
-  const trussLightsBack: number = mAny.trussLightsBack ?? 0;
-  const trussLightsLeft: number = mAny.trussLightsLeft ?? 0;
-  const trussLightsRight: number = mAny.trussLightsRight ?? 0;
-
-  const wallLightsBack: number = mAny.wallLightsBack ?? 0;
-  const wallLightsLeft: number = mAny.wallLightsLeft ?? 0;
-  const wallLightsRight: number = mAny.wallLightsRight ?? 0;
 
   // Kollisionsabstand (konfigurierbar über modules.collisionClearance)
   const collisionClearance: number = Math.max(
@@ -302,23 +294,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     typeof mAny.collisionClearance === "number" ? mAny.collisionClearance : DEFAULT_CLEARANCE
   );
 
-  // Banner / Truss
-  const bannersFront: number = mAny.trussBannersFront ?? 0;
-  const bannersBack: number = mAny.trussBannersBack ?? 0;
-  const bannersLeft: number = mAny.trussBannersLeft ?? 0;
-  const bannersRight: number = mAny.trussBannersRight ?? 0;
-
-  const bannerWidth: number = mAny.trussBannerWidth ?? 3;
-  const bannerHeight: number = mAny.trussBannerHeight ?? 1;
-  const bannerThickness = 0.04;
-
   // Boden/Standhöhen
   const floorConfig = modules.floor;
   const isRaised = floorConfig?.raised ?? modules.raisedFloor ?? false;
   const floorHeight = isRaised ? 0.08 : 0.025;
 
   const wallHeight = height;
-  const wallCenterY = floorHeight + wallHeight / 2;
 
   const defaultTrussHeight = floorHeight + wallHeight + 0.5;
   const trussHeight = Math.max(
@@ -329,15 +310,6 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const trussOffsetX: number = (mAny.trussOffset?.x ?? 0) as number;
   const trussOffsetZ: number = (mAny.trussOffset?.z ?? 0) as number;
 
-  // useTexture -> Fallback 1x1 PNG (weiß)
-  const BLANK_PNG =
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAosBv2jz2l0AAAAASUVORK5CYII=";
-  const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
-  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG);
-
-  const scaleX = width;
-  const scaleZ = depth;
-
   // Geometrie-Hilfswerte
   const wallThickness = 0.06;
   const panelGap = 0.01;
@@ -347,7 +319,6 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const leftWallInnerX = -width / 2 + wallThickness + panelGap;
   const rightWallInnerX = width / 2 - wallThickness - panelGap;
 
-  const ledWallSide = (ledWall as WallSide) ?? "back";
   const screensWallSide = (screensWall as WallSide) ?? "back";
   const countersPlacement = (countersWall as "front" | "island") ?? "front";
 
@@ -367,83 +338,6 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const cabinPosX = cabin?.position?.x ?? -width / 2 + cabinWidth / 2 + 0.25;
   const cabinPosZ = cabin?.position?.z ?? -depth / 2 + cabinDepth / 2 + 0.25;
   const cabinCenterY = floorHeight + cabinHeight / 2;
-
-  // Boden-Material
-  const floorType = floorConfig?.type ?? "carpet";
-  const floorMaterial = (() => {
-    switch (floorType) {
-      case "laminate":
-        return { color: "#e5e7eb", roughness: 0.35, metalness: 0.08 } as const;
-      case "vinyl":
-        return { color: "#0f172a", roughness: 0.3, metalness: 0.15 } as const;
-      case "wood":
-        return { color: "#92400e", roughness: 0.6, metalness: 0.1 } as const;
-      case "carpet":
-      default:
-        return { color: "#1e293b", roughness: 0.95, metalness: 0.05 } as const;
-    }
-  })();
-
-  /** Wand-Oberflächen (system | wood | banner | seg | led) */
-  type Surface = "system" | "wood" | "banner" | "seg" | "led";
-  const wallsDetail = (mAny.wallsDetail ?? {}) as Record<WallSide, { surface?: Surface; height?: number }>;
-  const surfaceOf = (side: WallSide): Surface => (wallsDetail[side]?.surface ?? "system") as Surface;
-  const wallMaterialProps = (s: Surface) => {
-    switch (s) {
-      case "wood":
-        return { color: "#8B5A2B", roughness: 0.8, metalness: 0.05 } as const;
-      case "banner":
-        return { color: "#111827", roughness: 0.5, metalness: 0.2 } as const;
-      case "seg":
-        return { color: "#f3f4f6", roughness: 0.85, metalness: 0.05 } as const;
-      case "led":
-        return {
-          color: "#0f172a",
-          roughness: 0.35,
-          metalness: 0.15,
-          emissive: "#38bdf8",
-          emissiveIntensity: 0.9,
-        } as const;
-      case "system":
-      default:
-        return { color: "#e5e7eb", roughness: 0.9, metalness: 0.05 } as const;
-    }
-  };
-
-  // Helper: Truss-Lichtkörper je nach Typ
-  const renderTrussLight = (
-    key: string,
-    x: number,
-    y: number,
-    z: number,
-    lx: number,
-    ly: number,
-    lz: number
-  ) => {
-    return (
-      <group key={key}>
-        {trussLightType === "spot" ? (
-          <mesh position={[x, y, z]} castShadow>
-            <coneGeometry args={[0.07, 0.12, 10]} />
-            <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.2} roughness={0.4} />
-          </mesh>
-        ) : (
-          <mesh position={[x, y, z]} castShadow>
-            <boxGeometry args={[0.14, 0.08, 0.1]} />
-            <meshStandardMaterial
-              color="#fde68a"
-              emissive="#fbbf24"
-              emissiveIntensity={0.9}
-              roughness={0.35}
-              metalness={0.4}
-            />
-          </mesh>
-        )}
-
-        <pointLight position={[lx, ly, lz]} intensity={1.1} distance={6} decay={2} color="#fef3c7" />
-      </group>
-    );
-  };
 
   // ---- Detaillierte Objekte aus Store (optional)
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
@@ -631,68 +525,27 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       )}
 
       {/* Basisplatte (Rand, damit Schatten bleibt) */}
-      <mesh
-        position={[0, 0.0, 0]}
-        rotation-x={-Math.PI / 2}
-        receiveShadow
-        castShadow={false}
-        onClick={() => setSelectedKey(null)}
-      >
-        <planeGeometry args={[scaleX + 0.4, scaleZ + 0.4]} />
-        <meshStandardMaterial color="#020617" metalness={0.2} roughness={0.8} />
-      </mesh>
+      {cloneObject(sceneObjects.basePlate) && (
+        <primitive
+          object={cloneObject(sceneObjects.basePlate)!}
+          onClick={() => setSelectedKey(null)}
+        />
+      )}
 
       {/* Doppelboden-Körper */}
-      {isRaised && (
-        <mesh position={[0, floorHeight / 2, 0]} receiveShadow castShadow>
-          <boxGeometry args={[scaleX, floorHeight, scaleZ]} />
-          <meshStandardMaterial color="#020617" roughness={0.6} metalness={0.2} />
-        </mesh>
+      {isRaised && sceneObjects.raisedFloor && (
+        <primitive object={cloneObject(sceneObjects.raisedFloor)!} />
       )}
 
       {/* Bodenfläche */}
-      <mesh position={[0, floorHeight + 0.001, 0]} rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[scaleX, scaleZ]} />
-        <meshStandardMaterial
-          color={floorMaterial.color}
-          roughness={floorMaterial.roughness}
-          metalness={floorMaterial.metalness}
-        />
-      </mesh>
+      {cloneObject(sceneObjects.floor) && (
+        <primitive object={cloneObject(sceneObjects.floor)!} />
+      )}
 
       {/* Wände */}
-      {wallsClosedSides >= 1 && (
-        <mesh
-          position={[0, wallCenterY, -depth / 2 + wallThickness / 2]}
-          castShadow
-          receiveShadow
-        >
-          <boxGeometry args={[width, wallHeight, wallThickness]} />
-          <meshStandardMaterial {...wallMaterialProps(surfaceOf("back"))} />
-        </mesh>
-      )}
-
-      {wallsClosedSides >= 2 && (
-        <mesh
-          position={[-width / 2 + wallThickness / 2, wallCenterY, 0]}
-          castShadow
-          receiveShadow
-        >
-          <boxGeometry args={[wallThickness, wallHeight, depth]} />
-          <meshStandardMaterial {...wallMaterialProps(surfaceOf("left"))} />
-        </mesh>
-      )}
-
-      {wallsClosedSides >= 3 && (
-        <mesh
-          position={[width / 2 - wallThickness / 2, wallCenterY, 0]}
-          castShadow
-          receiveShadow
-        >
-          <boxGeometry args={[wallThickness, wallHeight, depth]} />
-          <meshStandardMaterial {...wallMaterialProps(surfaceOf("right"))} />
-        </mesh>
-      )}
+      {sceneObjects.walls.map((wall, idx) => (
+        <primitive key={`wall-${idx}`} object={cloneObject(wall)!} />
+      ))}
 
       {/* Lagerraum / Kabine (Drag-fähig im Edit-Modus) */}
       {cabinEnabled && cabin && (
@@ -906,16 +759,14 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             );
           })
         : // Legacy: statisch – Doppelklick => Detailed
-          Array.from({ length: counters ?? 0 }).map((_, idx) => {
-            const spacing = width / ((counters ?? 0) + 1 || 1);
-            const xPos = -width / 2 + spacing * (idx + 1);
-            const zPos = countersPlacement === "island" ? 0 : depth / 2 - 0.5;
-            const variant = (modules as any).counterVariant ?? "basic";
+          sceneObjects.counters.map((ctr, idx) => {
             const k = `legacy-counter-${idx}`;
+            const clone = cloneObject(ctr);
+            if (!clone) return null;
             return (
               <group
                 key={k}
-                position={[xPos, floorHeight, zPos]}
+                position={clone.position.toArray() as [number, number, number]}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   convertLegacyCountersToDetailed();
@@ -925,9 +776,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   setSelectedKey(k);
                 }}
               >
-                <group position={[0, 0.55, 0]}>
-                  <CounterBlock variant={variant} />
-                </group>
+                <primitive object={clone} />
                 {countersWithPower && (
                   <mesh position={[0.45, 0.1, 0.25]} castShadow={false}>
                     <boxGeometry args={[0.08, 0.08, 0.08]} />
@@ -948,40 +797,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           })}
 
       {/* LED-Rahmen (Legacy – verteilt an einer Wand) */}
-      {Array.from({ length: ledFrames ?? 0 }).map((_, idx) => {
-        const total = ledFrames || 1;
-
-        if (ledWallSide === "back") {
-          const spacing = width / (total + 1);
-          const xPos = -width / 2 + spacing * (idx + 1);
-          return (
-            <mesh key={`led-${idx}`} position={[xPos, floorHeight + 1.5, backWallFrontZ]}>
-              <boxGeometry args={[1.2, 2.2, 0.03]} />
-              <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-            </mesh>
-          );
-        }
-
-        if (ledWallSide === "left") {
-          const spacing = depth / (total + 1);
-          const zPos = -depth / 2 + spacing * (idx + 1);
-          return (
-            <mesh key={`led-${idx}`} position={[leftWallInnerX, floorHeight + 1.5, zPos]} rotation-y={Math.PI / 2}>
-              <boxGeometry args={[1.2, 2.2, 0.03]} />
-              <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-            </mesh>
-          );
-        }
-
-        const spacing = depth / (total + 1);
-        const zPos = -depth / 2 + spacing * (idx + 1);
-        return (
-          <mesh key={`led-${idx}`} position={[rightWallInnerX, floorHeight + 1.5, zPos]} rotation-y={-Math.PI / 2}>
-            <boxGeometry args={[1.2, 2.2, 0.03]} />
-            <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-          </mesh>
-        );
+      {sceneObjects.ledFrames.map((frame, idx) => {
+        const clone = cloneObject(frame);
+        if (!clone) return null;
+        return <primitive key={`led-${idx}`} object={clone} />;
       })}
+
+      {sceneObjects.ledWall && <primitive object={cloneObject(sceneObjects.ledWall)!} />}
 
       {/* Screens – Detailed bevorzugt, sonst Legacy */}
       {screensDetailed.length > 0
@@ -1107,67 +929,20 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             );
           })
         : // Legacy Screens
-          Array.from({ length: screens ?? 0 }).map((_, idx) => {
-            const total = screens || 1;
-
-            if (screensWallSide === "back") {
-              const spacing = width / (total + 1);
-              const xPos = -width / 2 + spacing * (idx + 1);
-              return (
-                <group
-                  key={`screen-${idx}`}
-                  position={[xPos, floorHeight + 1.6, backWallFrontZ]}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    convertLegacyScreensToDetailed();
-                  }}
-                >
-                  <ScreenPanel />
-                  {editMode && (
-                    <Html center position={[0, 0, 0.06]}>
-                      <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
-                    </Html>
-                  )}
-                </group>
-              );
-            }
-
-            if (screensWallSide === "left") {
-              const spacing = depth / (total + 1);
-              const zPos = -depth / 2 + spacing * (idx + 1);
-              return (
-                <group
-                  key={`screen-${idx}`}
-                  position={[leftWallInnerX, floorHeight + 1.6, zPos]}
-                  rotation-y={Math.PI / 2}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    convertLegacyScreensToDetailed();
-                  }}
-                >
-                  <ScreenPanel />
-                  {editMode && (
-                    <Html center position={[0, 0, 0.06]}>
-                      <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
-                    </Html>
-                  )}
-                </group>
-              );
-            }
-
-            const spacing = depth / (total + 1);
-            const zPos = -depth / 2 + spacing * (idx + 1);
+          sceneObjects.screensDetailed.map((scr, idx) => {
+            const clone = cloneObject(scr.group);
+            if (!clone) return null;
             return (
               <group
                 key={`screen-${idx}`}
-                position={[rightWallInnerX, floorHeight + 1.6, zPos]}
-                rotation-y={-Math.PI / 2}
+                position={clone.position.toArray() as [number, number, number]}
+                rotation-y={clone.rotation.y}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   convertLegacyScreensToDetailed();
                 }}
               >
-                <ScreenPanel />
+                <primitive object={clone} />
                 {editMode && (
                   <Html center position={[0, 0, 0.06]}>
                     <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
@@ -1177,65 +952,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             );
           })}
 
-      {/* Wand-Strahler Rückwand */}
-      {wallLightsBack > 0 &&
-        wallsClosedSides >= 1 &&
-        Array.from({ length: wallLightsBack }).map((_, i) => {
-          const spacing = width / (wallLightsBack + 1);
-          const x = -width / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const z = backWallFrontZ + 0.05;
-
-          return (
-            <group key={`wall-back-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x, y - 0.05, z + 0.05]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
-
-      {/* Wand-Strahler linke Wand */}
-      {wallLightsLeft > 0 &&
-        wallsClosedSides >= 2 &&
-        Array.from({ length: wallLightsLeft }).map((_, i) => {
-          const spacing = depth / (wallLightsLeft + 1);
-          const z = -depth / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const x = leftWallInnerX + 0.05;
-
-          return (
-            <group key={`wall-left-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x + 0.05, y - 0.05, z]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
-
-      {/* Wand-Strahler rechte Wand */}
-      {wallLightsRight > 0 &&
-        wallsClosedSides >= 3 &&
-        Array.from({ length: wallLightsRight }).map((_, i) => {
-          const spacing = depth / (wallLightsRight + 1);
-          const z = -depth / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const x = rightWallInnerX - 0.05;
-
-          return (
-            <group key={`wall-right-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x - 0.05, y - 0.05, z]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
+      {/* Wand-Strahler */}
+      {sceneObjects.wallLights.map((light, idx) => {
+        const clone = cloneObject(light);
+        if (!clone) return null;
+        return <primitive key={`wall-light-${idx}`} object={clone} />;
+      })}
 
       {/* Truss – Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
       {trussEnabled && (
@@ -1341,132 +1063,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             </group>
           </Transformable>
 
-          {/* Truss-Rahmen */}
-          <mesh position={[0, trussHeight, depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[0, trussHeight, -depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[-width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <mesh position={[width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.8} roughness={0.3} />
-          </mesh>
-
-          {/* Truss-Lampen */}
-          {trussLightsFront > 0 &&
-            Array.from({ length: trussLightsFront }).map((_, i) => {
-              const spacing = width / (trussLightsFront + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = depth / 2 - 0.04;
-              return renderTrussLight(`truss-front-${i}`, x, y, z, x, y - 0.15, z - 0.25);
-            })}
-
-          {trussLightsBack > 0 &&
-            Array.from({ length: trussLightsBack }).map((_, i) => {
-              const spacing = width / (trussLightsBack + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = -depth / 2 + 0.04;
-              return renderTrussLight(`truss-back-${i}`, x, y, z, x, y - 0.15, z + 0.25);
-            })}
-
-          {trussLightsLeft > 0 &&
-            Array.from({ length: trussLightsLeft }).map((_, i) => {
-              const spacing = depth / (trussLightsLeft + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = -width / 2 + 0.04;
-              return renderTrussLight(`truss-left-${i}`, x, y, z, x + 0.25, y - 0.15, z);
-            })}
-
-          {trussLightsRight > 0 &&
-            Array.from({ length: trussLightsRight }).map((_, i) => {
-              const spacing = depth / (trussLightsRight + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = width / 2 - 0.04;
-              return renderTrussLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
-            })}
-
-          {/* Bannerrahmen */}
-          {(() => {
-            const bannerY = trussHeight - 0.4 - bannerHeight / 2;
-            const banners: ReactNode[] = [];
-
-            const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
-              : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
-
-            // Front
-            if (bannersFront > 0) {
-              Array.from({ length: bannersFront }).forEach((_, i) => {
-                const spacing = width / (bannersFront + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = depth / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Back
-            if (bannersBack > 0) {
-              Array.from({ length: bannersBack }).forEach((_, i) => {
-                const spacing = width / (bannersBack + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = -depth / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Left
-            if (bannersLeft > 0) {
-              Array.from({ length: bannersLeft }).forEach((_, i) => {
-                const spacing = depth / (bannersLeft + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = -width / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Right
-            if (bannersRight > 0) {
-              Array.from({ length: bannersRight }).forEach((_, i) => {
-                const spacing = depth / (bannersRight + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = width / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            return banners;
-          })()}
+          {sceneObjects.truss && <primitive object={cloneObject(sceneObjects.truss)!} />}
         </group>
       )}
     </group>
