@@ -558,7 +558,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       const total = count || 1;
       let x = 0;
       let z = 0;
-      let wall: WallSide = (screensWallSide as WallSide) ?? "back";
+      const wall: WallSide = (screensWallSide as WallSide) ?? "back";
       if (wall === "back") {
         const spacing = width / (total + 1);
         x = -width / 2 + spacing * (idx + 1);
