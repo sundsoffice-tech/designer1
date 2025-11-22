@@ -75,6 +75,11 @@ body,
   border-color: #374151;
 }
 
+.app-header__menu-btn:active {
+  background: #111827;
+  transform: translateY(1px);
+}
+
 .app-main {
   flex: 1;
   display: flex;
@@ -456,6 +461,100 @@ body,
     padding: 10px 12px 12px;
     overflow-y: auto;
     height: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+    gap: 12px;
+  }
+
+  .app-header__title {
+    font-size: 16px;
+  }
+
+  .app-header__menu-btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+
+  .mobile-drawer-content {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .mobile-drawer-body {
+    padding: 12px 14px 14px;
+    overflow-x: hidden;
+  }
+
+  .mobile-drawer .sidebar {
+    max-width: 100%;
+  }
+
+  .sidebar {
+    padding: 16px 14px;
+    gap: 14px;
+  }
+
+  .sidebar-section {
+    margin-bottom: 10px;
+  }
+
+  .sidebar label {
+    font-size: 14px;
+    margin-bottom: 10px;
+    gap: 6px;
+  }
+
+  .sidebar input,
+  .sidebar select,
+  .preset-btn,
+  .btn-primary,
+  .btn-secondary,
+  .mobile-drawer-close,
+  .app-header__menu-btn,
+  .icon-btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+
+  .sidebar input,
+  .sidebar select {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .form-grid {
+    gap: 10px;
+  }
+
+  .preset-row,
+  .sidebar-section-header,
+  .number-input-row {
+    gap: 8px;
+  }
+
+  .checkbox-row {
+    gap: 10px;
+    font-size: 14px;
+  }
+
+  .section-title {
+    font-size: 14px;
+  }
+
+  .sidebar small,
+  .section-sub,
+  .preset-btn small {
+    font-size: 12px;
+  }
+
+  .preset-btn strong {
+    font-size: 14px;
   }
 }
 
