@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -123,6 +124,78 @@ function clampXZ(
     x: Math.min(maxX, Math.max(minX, x)),
     z: Math.min(maxZ, Math.max(minZ, z)),
   };
+}
+
+function buildMatrices(
+  transforms: { position: THREE.Vector3; rotationY?: number }[]
+): THREE.Matrix4[] {
+  return transforms.map(({ position, rotationY = 0 }) => {
+    const matrix = new THREE.Matrix4();
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromEuler(new THREE.Euler(0, rotationY, 0));
+    matrix.compose(position, quaternion, new THREE.Vector3(1, 1, 1));
+    return matrix;
+  });
+}
+
+function InstancedWallLights({ matrices }: { matrices: THREE.Matrix4[] }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const geometry = useMemo(() => new THREE.SphereGeometry(0.05, 12, 12), []);
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#facc15",
+        emissive: "#facc15",
+        emissiveIntensity: 1.1,
+      }),
+    []
+  );
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    matrices.forEach((matrix, idx) => {
+      mesh.setMatrixAt(idx, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [matrices]);
+
+  if (matrices.length === 0) return null;
+
+  return <instancedMesh ref={meshRef} args={[geometry, material, matrices.length]} castShadow />;
+}
+
+function InstancedBanners({
+  matrices,
+  size,
+  materialProps,
+}: {
+  matrices: THREE.Matrix4[];
+  size: [number, number, number];
+  materialProps: THREE.MeshStandardMaterialParameters;
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const geometry = useMemo(() => new THREE.BoxGeometry(...size), [size]);
+  const material = useMemo(() => new THREE.MeshStandardMaterial({ ...materialProps }), [materialProps]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  useEffect(() => () => material.dispose(), [material]);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    matrices.forEach((matrix, idx) => {
+      mesh.setMatrixAt(idx, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [matrices]);
+
+  if (matrices.length === 0) return null;
+
+  return <instancedMesh ref={meshRef} args={[geometry, material, matrices.length]} castShadow />;
 }
 
 /** Geometrien */
@@ -369,6 +442,68 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
   const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG);
 
+  const bannerTransforms = useMemo(() => {
+    if (!trussEnabled) return [];
+    const bannerY = trussHeight - 0.4 - bannerHeight / 2;
+    const transforms: { position: THREE.Vector3; rotationY?: number }[] = [];
+
+    if (bannersFront > 0) {
+      const spacing = width / (bannersFront + 1);
+      Array.from({ length: bannersFront }).forEach((_, i) => {
+        transforms.push({
+          position: new THREE.Vector3(-width / 2 + spacing * (i + 1), bannerY, depth / 2 - 0.05),
+        });
+      });
+    }
+
+    if (bannersBack > 0) {
+      const spacing = width / (bannersBack + 1);
+      Array.from({ length: bannersBack }).forEach((_, i) => {
+        transforms.push({
+          position: new THREE.Vector3(-width / 2 + spacing * (i + 1), bannerY, -depth / 2 + 0.05),
+        });
+      });
+    }
+
+    if (bannersLeft > 0) {
+      const spacing = depth / (bannersLeft + 1);
+      Array.from({ length: bannersLeft }).forEach((_, i) => {
+        transforms.push({
+          position: new THREE.Vector3(-width / 2 + 0.05, bannerY, -depth / 2 + spacing * (i + 1)),
+          rotationY: Math.PI / 2,
+        });
+      });
+    }
+
+    if (bannersRight > 0) {
+      const spacing = depth / (bannersRight + 1);
+      Array.from({ length: bannersRight }).forEach((_, i) => {
+        transforms.push({
+          position: new THREE.Vector3(width / 2 - 0.05, bannerY, -depth / 2 + spacing * (i + 1)),
+          rotationY: -Math.PI / 2,
+        });
+      });
+    }
+
+    return transforms;
+  }, [
+    bannerHeight,
+    bannersBack,
+    bannersFront,
+    bannersLeft,
+    bannersRight,
+    depth,
+    trussEnabled,
+    trussHeight,
+    width,
+  ]);
+
+  const bannerMatrices = useMemo(() => buildMatrices(bannerTransforms), [bannerTransforms]);
+  const bannerMaterialProps = useMemo<THREE.MeshStandardMaterialParameters>(() => {
+    if (bannerTexture) return { map: bannerTexture as any };
+    return { color: "#111827", roughness: 0.5, metalness: 0.2 } as const;
+  }, [bannerTexture]);
+
   const scaleX = width;
   const scaleZ = depth;
 
@@ -384,6 +519,49 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const ledWallSide = (ledWall as WallSide) ?? "back";
   const screensWallSide = (screensWall as WallSide) ?? "back";
   const countersPlacement = (countersWall as "front" | "island") ?? "front";
+
+  const wallLightsBackTransforms = useMemo(() => {
+    if (wallLightsBack <= 0 || wallsClosedSides < 1) return [];
+    const spacing = width / (wallLightsBack + 1);
+    const y = floorHeight + wallHeight - 0.3;
+    const z = backWallFrontZ + 0.05;
+    return Array.from({ length: wallLightsBack }).map((_, i) => ({
+      position: new THREE.Vector3(-width / 2 + spacing * (i + 1), y, z),
+    }));
+  }, [backWallFrontZ, floorHeight, wallHeight, wallLightsBack, wallsClosedSides, width]);
+
+  const wallLightsLeftTransforms = useMemo(() => {
+    if (wallLightsLeft <= 0 || wallsClosedSides < 2) return [];
+    const spacing = depth / (wallLightsLeft + 1);
+    const y = floorHeight + wallHeight - 0.3;
+    const x = leftWallInnerX + 0.05;
+    return Array.from({ length: wallLightsLeft }).map((_, i) => ({
+      position: new THREE.Vector3(x, y, -depth / 2 + spacing * (i + 1)),
+    }));
+  }, [depth, floorHeight, leftWallInnerX, wallHeight, wallLightsLeft, wallsClosedSides]);
+
+  const wallLightsRightTransforms = useMemo(() => {
+    if (wallLightsRight <= 0 || wallsClosedSides < 3) return [];
+    const spacing = depth / (wallLightsRight + 1);
+    const y = floorHeight + wallHeight - 0.3;
+    const x = rightWallInnerX - 0.05;
+    return Array.from({ length: wallLightsRight }).map((_, i) => ({
+      position: new THREE.Vector3(x, y, -depth / 2 + spacing * (i + 1)),
+    }));
+  }, [depth, floorHeight, rightWallInnerX, wallHeight, wallLightsRight, wallsClosedSides]);
+
+  const wallLightsBackMatrices = useMemo(
+    () => buildMatrices(wallLightsBackTransforms),
+    [wallLightsBackTransforms]
+  );
+  const wallLightsLeftMatrices = useMemo(
+    () => buildMatrices(wallLightsLeftTransforms),
+    [wallLightsLeftTransforms]
+  );
+  const wallLightsRightMatrices = useMemo(
+    () => buildMatrices(wallLightsRightTransforms),
+    [wallLightsRightTransforms]
+  );
 
   // Türseite der Kabine
   const doorSide =
@@ -1212,64 +1390,55 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           })}
 
       {/* Wand-Strahler Rückwand */}
-      {wallLightsBack > 0 &&
-        wallsClosedSides >= 1 &&
-        Array.from({ length: wallLightsBack }).map((_, i) => {
-          const spacing = width / (wallLightsBack + 1);
-          const x = -width / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const z = backWallFrontZ + 0.05;
-
-          return (
-            <group key={`wall-back-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x, y - 0.05, z + 0.05]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
+      {wallLightsBackMatrices.length > 0 && (
+        <>
+          <InstancedWallLights matrices={wallLightsBackMatrices} />
+          {wallLightsBackTransforms.map((t, idx) => (
+            <pointLight
+              key={`wall-back-light-${idx}`}
+              position={[t.position.x, t.position.y - 0.05, t.position.z + 0.05]}
+              intensity={0.9}
+              distance={4}
+              decay={2}
+              color="#fee2b3"
+            />
+          ))}
+        </>
+      )}
 
       {/* Wand-Strahler linke Wand */}
-      {wallLightsLeft > 0 &&
-        wallsClosedSides >= 2 &&
-        Array.from({ length: wallLightsLeft }).map((_, i) => {
-          const spacing = depth / (wallLightsLeft + 1);
-          const z = -depth / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const x = leftWallInnerX + 0.05;
-
-          return (
-            <group key={`wall-left-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x + 0.05, y - 0.05, z]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
+      {wallLightsLeftMatrices.length > 0 && (
+        <>
+          <InstancedWallLights matrices={wallLightsLeftMatrices} />
+          {wallLightsLeftTransforms.map((t, idx) => (
+            <pointLight
+              key={`wall-left-light-${idx}`}
+              position={[t.position.x + 0.05, t.position.y - 0.05, t.position.z]}
+              intensity={0.9}
+              distance={4}
+              decay={2}
+              color="#fee2b3"
+            />
+          ))}
+        </>
+      )}
 
       {/* Wand-Strahler rechte Wand */}
-      {wallLightsRight > 0 &&
-        wallsClosedSides >= 3 &&
-        Array.from({ length: wallLightsRight }).map((_, i) => {
-          const spacing = depth / (wallLightsRight + 1);
-          const z = -depth / 2 + spacing * (i + 1);
-          const y = floorHeight + wallHeight - 0.3;
-          const x = rightWallInnerX - 0.05;
-
-          return (
-            <group key={`wall-right-light-${i}`}>
-              <mesh position={[x, y, z]} castShadow>
-                <sphereGeometry args={[0.05, 12, 12]} />
-                <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={1.1} />
-              </mesh>
-              <pointLight position={[x - 0.05, y - 0.05, z]} intensity={0.9} distance={4} decay={2} color="#fee2b3" />
-            </group>
-          );
-        })}
+      {wallLightsRightMatrices.length > 0 && (
+        <>
+          <InstancedWallLights matrices={wallLightsRightMatrices} />
+          {wallLightsRightTransforms.map((t, idx) => (
+            <pointLight
+              key={`wall-right-light-${idx}`}
+              position={[t.position.x - 0.05, t.position.y - 0.05, t.position.z]}
+              intensity={0.9}
+              distance={4}
+              decay={2}
+              color="#fee2b3"
+            />
+          ))}
+        </>
+      )}
 
       {/* Truss – Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
       {trussEnabled && (
@@ -1430,77 +1599,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               return renderTrussLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
             })}
 
-          {/* Bannerrahmen */}
-          {(() => {
-            const bannerY = trussHeight - 0.4 - bannerHeight / 2;
-            const banners: ReactNode[] = [];
-
-            const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
-              : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
-
-            // Front
-            if (bannersFront > 0) {
-              Array.from({ length: bannersFront }).forEach((_, i) => {
-                const spacing = width / (bannersFront + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = depth / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Back
-            if (bannersBack > 0) {
-              Array.from({ length: bannersBack }).forEach((_, i) => {
-                const spacing = width / (bannersBack + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = -depth / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Left
-            if (bannersLeft > 0) {
-              Array.from({ length: bannersLeft }).forEach((_, i) => {
-                const spacing = depth / (bannersLeft + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = -width / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Right
-            if (bannersRight > 0) {
-              Array.from({ length: bannersRight }).forEach((_, i) => {
-                const spacing = depth / (bannersRight + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = width / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            return banners;
-          })()}
+          {bannerMatrices.length > 0 && (
+            <InstancedBanners
+              matrices={bannerMatrices}
+              size={[bannerWidth, bannerHeight, bannerThickness]}
+              materialProps={bannerMaterialProps}
+            />
+          )}
         </group>
       )}
     </group>
