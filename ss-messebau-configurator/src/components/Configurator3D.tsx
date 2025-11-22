@@ -27,6 +27,7 @@ import {
   findCollisionForMany,
   makeAabb,
 } from "../lib/collision";
+import useIsMobile from "../lib/useIsMobile";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -1474,12 +1475,35 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
 export default function Configurator3D() {
   const orbitRef = useRef<any>(null);
+  const isMobile = useIsMobile();
+
+  const cameraSettings = useMemo(
+    () =>
+      isMobile
+        ? {
+            position: [5.5, 5.2, 8.5] as const,
+            fov: 52,
+            maxDistance: 14,
+            minDistance: 3.8,
+          }
+        : {
+            position: [6, 5, 8] as const,
+            fov: 45,
+            maxDistance: 18,
+            minDistance: 4,
+          },
+    [isMobile]
+  );
+
+  const shadowMapSize = isMobile ? 512 : 1024;
+  const contactShadowResolution = isMobile ? 512 : 1024;
 
   return (
     <Canvas
       shadows
-      camera={{ position: [6, 5, 8], fov: 45 }}
+      camera={{ position: cameraSettings.position, fov: cameraSettings.fov }}
       className="canvas-root"
+      style={{ width: "100%", height: "100%" }}
       onPointerMissed={() => {
         // Fallback-Deselect, falls obere Ebene Events nicht bekommt
         // (Selektion-Reset passiert primär in StandMesh)
@@ -1492,8 +1516,8 @@ export default function Configurator3D() {
         position={[6, 10, 4]}
         intensity={1.4}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={shadowMapSize}
+        shadow-mapSize-height={shadowMapSize}
       />
       <directionalLight position={[-4, 6, -4]} intensity={0.4} />
 
@@ -1523,7 +1547,7 @@ export default function Configurator3D() {
         height={20}
         blur={1.8}
         far={15}
-        resolution={1024}
+        resolution={contactShadowResolution}
         color="#000000"
       />
 
@@ -1532,8 +1556,8 @@ export default function Configurator3D() {
         enablePan
         enableZoom
         maxPolarAngle={Math.PI / 2.05}
-        minDistance={4}
-        maxDistance={18}
+        minDistance={cameraSettings.minDistance}
+        maxDistance={cameraSettings.maxDistance}
       />
     </Canvas>
   );
