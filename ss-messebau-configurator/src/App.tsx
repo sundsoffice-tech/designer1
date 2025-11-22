@@ -1,6 +1,7 @@
 import { useState } from "react";
-import SidebarControls from "./components/SidebarControls";
+import ConfiguratorPanel from "./components/ConfiguratorPanel";
 import Configurator3D from "./components/Configurator3D";
+import MobileDrawer from "./components/MobileDrawer";
 
 export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -10,7 +11,7 @@ export default function App() {
       <div className="mobile-banner">Mobile Version aktiv</div>
 
       <header className="app-header">
-        <h1 className="app-header__title">S&amp;S Standkonfigurator</h1>
+        <h1 className="app-header__title">S&S Standkonfigurator</h1>
         <button
           type="button"
           className="app-header__menu-btn"
@@ -27,9 +28,16 @@ export default function App() {
           <Configurator3D />
         </div>
         <div className="app-sidebar">
-          <SidebarControls />
+          <ConfiguratorPanel />
         </div>
       </main>
+
+      <MobileDrawer
+        open={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+      >
+        <ConfiguratorPanel />
+      </MobileDrawer>
     </div>
   );
 }
