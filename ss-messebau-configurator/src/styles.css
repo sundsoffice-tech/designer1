@@ -15,6 +15,22 @@ body,
   color: #e5e7eb;
 }
 
+.mobile-banner {
+  display: none;
+  padding: 8px 12px;
+  background: #ad1f34;
+  font-size: 12px;
+  text-align: center;
+  font-weight: 600;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .mobile-banner {
+    display: block;
+  }
+}
+
 .app-root {
   display: flex;
   height: 100vh;
