@@ -1,7 +1,7 @@
 import { useState } from "react";
 import ConfiguratorPanel from "./components/ConfiguratorPanel";
 import Configurator3D from "./components/Configurator3D";
-import MobileDrawer from "./components/MobileDrawer";
+import MobileFullScreenPanel from "./components/MobileFullScreenPanel";
 
 export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -17,7 +17,7 @@ export default function App() {
           className="app-header__menu-btn"
           aria-label="Menü öffnen"
           aria-expanded={isMobileMenuOpen}
-          onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+          onClick={() => setIsMobileMenuOpen(true)}
         >
           Menü
         </button>
@@ -32,12 +32,24 @@ export default function App() {
         </div>
       </main>
 
-      <MobileDrawer
+      {!isMobileMenuOpen && (
+        <div className="mobile-fab">
+          <button
+            type="button"
+            aria-label="Konfigurationsmenü öffnen"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
+            ⚙
+          </button>
+        </div>
+      )}
+
+      <MobileFullScreenPanel
         open={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
       >
         <ConfiguratorPanel />
-      </MobileDrawer>
+      </MobileFullScreenPanel>
     </div>
   );
 }
