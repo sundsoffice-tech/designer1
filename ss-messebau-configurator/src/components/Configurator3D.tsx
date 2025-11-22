@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type MutableRefObject,
 } from "react";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, type ThreeEvent, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   Environment,
@@ -28,6 +28,7 @@ import {
   makeAabb,
 } from "../lib/collision";
 import useIsMobile from "../lib/useIsMobile";
+import useViewportSize from "../hooks/useViewportSize";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -60,6 +61,8 @@ type CabinWithPosition = {
   doorSide: "front" | "left" | "right" | "back";
   position?: { x?: number; z?: number };
 };
+
+const MOBILE_HEADER_HEIGHT = 64;
 
 /** Edit‑Modus Toggle (Taste 'E') */
 function useEditModeHotkey(): boolean {
@@ -181,6 +184,50 @@ function ScreenPanel({ w = 0.9, h = 0.55, t = 0.02 }) {
       <meshStandardMaterial color="#020617" roughness={0.2} metalness={0.7} />
     </mesh>
   );
+}
+
+function MobileViewportSync({
+  width,
+  height,
+  isActive,
+}: {
+  width: number;
+  height: number;
+  isActive: boolean;
+}) {
+  const { camera, gl } = useThree();
+
+  useEffect(() => {
+    if (!isActive || width === 0 || height === 0) return;
+
+    const perspectiveCamera = camera as THREE.PerspectiveCamera;
+
+    perspectiveCamera.aspect = width / height;
+    perspectiveCamera.updateProjectionMatrix();
+    gl.setSize(width, height, false);
+  }, [camera, gl, height, isActive, width]);
+
+  return null;
+}
+
+function CameraSettingsApplier({
+  position,
+  fov,
+}: {
+  position: readonly [number, number, number];
+  fov: number;
+}) {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    const perspectiveCamera = camera as THREE.PerspectiveCamera;
+
+    perspectiveCamera.position.set(...position);
+    perspectiveCamera.fov = fov;
+    perspectiveCamera.updateProjectionMatrix();
+  }, [camera, fov, position]);
+
+  return null;
 }
 
 /** TransformControls Wrapper: sperrt Orbit während Interaktion */
@@ -1476,13 +1523,28 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 export default function Configurator3D() {
   const orbitRef = useRef<any>(null);
   const isMobile = useIsMobile();
+  const { width, height, orientation } = useViewportSize();
+
+  const canvasWidth = isMobile ? width : undefined;
+  const canvasHeight = isMobile ? Math.max(height - MOBILE_HEADER_HEIGHT, 0) : undefined;
+
+  const canvasStyle = useMemo(
+    () =>
+      isMobile && canvasWidth && canvasHeight
+        ? { width: `${canvasWidth}px`, height: `${canvasHeight}px` }
+        : { width: "100%", height: "100%" },
+    [canvasHeight, canvasWidth, isMobile]
+  );
 
   const cameraSettings = useMemo(
     () =>
       isMobile
         ? {
-            position: [5.5, 5.2, 8.5] as const,
-            fov: 52,
+            position:
+              orientation === "portrait"
+                ? ([5.8, 5.6, 10] as const)
+                : ([5.5, 5.2, 8.5] as const),
+            fov: orientation === "portrait" ? 55 : 52,
             maxDistance: 14,
             minDistance: 3.8,
           }
@@ -1492,7 +1554,7 @@ export default function Configurator3D() {
             maxDistance: 18,
             minDistance: 4,
           },
-    [isMobile]
+    [isMobile, orientation]
   );
 
   const shadowMapSize = isMobile ? 512 : 1024;
@@ -1503,12 +1565,21 @@ export default function Configurator3D() {
       shadows
       camera={{ position: cameraSettings.position, fov: cameraSettings.fov }}
       className="canvas-root"
-      style={{ width: "100%", height: "100%" }}
+      style={canvasStyle}
       onPointerMissed={() => {
         // Fallback-Deselect, falls obere Ebene Events nicht bekommt
         // (Selektion-Reset passiert primär in StandMesh)
       }}
     >
+      <MobileViewportSync
+        width={canvasWidth ?? width}
+        height={canvasHeight ?? height}
+        isActive={isMobile}
+      />
+      <CameraSettingsApplier
+        position={cameraSettings.position}
+        fov={cameraSettings.fov}
+      />
       <color attach="background" args={["#020617"]} />
 
       <ambientLight intensity={0.35} />
