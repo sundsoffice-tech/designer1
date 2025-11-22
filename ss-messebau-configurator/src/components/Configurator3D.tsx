@@ -15,7 +15,6 @@ import {
   Environment,
   ContactShadows,
   Grid,
-  useTexture,
   TransformControls,
   Html,
 } from "@react-three/drei";
@@ -328,11 +327,37 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const trussOffsetX: number = (mAny.trussOffset?.x ?? 0) as number;
   const trussOffsetZ: number = (mAny.trussOffset?.z ?? 0) as number;
 
-  // useTexture -> Fallback 1x1 PNG (weiß)
+  // Banner-Textur (1x1 PNG Fallback) – ohne R3F-Kontext laden, damit die Canvas-Fehler
+  // "useTexture can only be used within the Canvas component" nicht auftreten, falls
+  // das Element außerhalb des Fiber-Kontextes gemountet wird.
   const BLANK_PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAosBv2jz2l0AAAAASUVORK5CYII=";
   const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
-  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG);
+
+  const [bannerTexture, setBannerTexture] = useState<THREE.Texture | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loader = new THREE.TextureLoader();
+
+    const onLoad = (texture: THREE.Texture) => {
+      if (!mounted) return;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      setBannerTexture(texture);
+    };
+
+    const onError = () => {
+      if (mounted) setBannerTexture(null);
+    };
+
+    const texture = loader.load(bannerImageUrl || BLANK_PNG, onLoad, undefined, onError);
+
+    return () => {
+      mounted = false;
+      texture?.dispose();
+    };
+  }, [bannerImageUrl]);
 
   const scaleX = width;
   const scaleZ = depth;
@@ -1401,7 +1426,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const banners: ReactNode[] = [];
 
             const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
+              ? { map: bannerTexture }
               : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
 
             // Front
