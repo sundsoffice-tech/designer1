@@ -100,8 +100,111 @@ body,
   height: 100%;
 }
 
-.mobile-drawer {
+.mobile-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 25;
   display: none;
+}
+
+.mobile-fab button {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #f8fafc;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+}
+
+.mobile-fab button:active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.mobile-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
+  display: none;
+  align-items: stretch;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.mobile-panel-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-panel-content {
+  background: #ffffff;
+  color: #0f172a;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(10px);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.mobile-panel-backdrop.is-open .mobile-panel-content {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.mobile-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  min-height: 56px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.mobile-panel-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mobile-panel-close {
+  border: none;
+  background: #0f172a;
+  color: #f8fafc;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.mobile-panel-close:hover {
+  background: #111827;
+}
+
+.mobile-panel-close:active {
+  transform: translateY(1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  background: #f8fafc;
+  padding: 12px 14px 16px;
 }
 
 /* SIDEBAR */
@@ -391,84 +494,29 @@ body,
 @media (max-width: 1023px) {
   .app-main {
     flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .app-header,
+  .mobile-banner {
+    display: none;
   }
 
   .app-sidebar {
     display: none;
   }
 
-  .mobile-drawer {
-    position: fixed;
-    inset: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 30;
+  .app-canvas-area,
+  .main-viewport {
+    height: 100vh;
+  }
+
+  .mobile-fab {
     display: block;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
   }
 
-  .mobile-drawer.is-open {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .mobile-drawer-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
-  }
-
-  .mobile-drawer-content {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-height: 85vh;
-    background: rgba(15, 23, 42, 0.98);
-    border-radius: 14px 14px 0 0;
-    border: 1px solid #1f2937;
-    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.55);
-    overflow: hidden;
+  .mobile-panel-backdrop {
     display: flex;
-    flex-direction: column;
-  }
-
-  .mobile-drawer .sidebar {
-    width: 100%;
-    height: auto;
-    box-shadow: none;
-    border-right: 0;
-  }
-
-  .mobile-drawer-header {
-    display: flex;
-    justify-content: flex-end;
-    padding: 10px 14px 0;
-  }
-
-  .mobile-drawer-close {
-    background: #020617;
-    color: #e5e7eb;
-    border: 1px solid #1f2937;
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .mobile-drawer-close:hover {
-    background: #0b1220;
-    border-color: #374151;
-  }
-
-  .mobile-drawer-body {
-    padding: 10px 12px 12px;
-    overflow-y: auto;
-    height: 100%;
   }
 }
 
@@ -488,18 +536,9 @@ body,
     font-size: 15px;
   }
 
-  .mobile-drawer-content {
-    max-width: 100%;
+  .mobile-panel-body {
+    padding: 14px 16px 18px;
     overflow-x: hidden;
-  }
-
-  .mobile-drawer-body {
-    padding: 12px 14px 14px;
-    overflow-x: hidden;
-  }
-
-  .mobile-drawer .sidebar {
-    max-width: 100%;
   }
 
   .sidebar {
@@ -522,7 +561,7 @@ body,
   .preset-btn,
   .btn-primary,
   .btn-secondary,
-  .mobile-drawer-close,
+  .mobile-panel-close,
   .app-header__menu-btn,
   .icon-btn {
     min-height: 44px;
