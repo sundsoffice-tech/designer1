@@ -989,7 +989,9 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const h = scr.size?.h ?? 0.55;
             const t = scr.size?.t ?? 0.02;
             const mount = scr.mount ?? "wall";
-            const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
+            const defaultHeight =
+              scr.mount === "floor" ? floorHeight + h / 2 : floorHeight + 1.6;
+            const y = (scr.heightFromFloor ?? defaultHeight) - floorHeight; // lokaler Offset
             const key = `scr-d-${scr.id}`;
             const selected = isSelected(key);
 
