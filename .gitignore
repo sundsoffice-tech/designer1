@@ -1,0 +1,5 @@
+node_modules
+render-server/node_modules
+render-server/render-output
+ss-messebau-configurator/node_modules
+ss-messebau-configurator/dist
