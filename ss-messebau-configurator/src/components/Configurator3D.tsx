@@ -402,6 +402,63 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const cabinPosZ = cabin?.position?.z ?? -depth / 2 + cabinDepth / 2 + 0.25;
   const cabinCenterY = floorHeight + cabinHeight / 2;
 
+  const clampScreenHeight = (heightFromFloor: number, screenHeight: number) => {
+    const min = floorHeight + screenHeight / 2;
+    const max = floorHeight + wallHeight - screenHeight / 2;
+    return Math.min(Math.max(heightFromFloor, min), max);
+  };
+
+  const resolveScreenPlacement = (
+    scr: DetailedScreen,
+    size: { w: number; h: number; t: number }
+  ): {
+    position: { x: number; z: number };
+    rotationY: number;
+    footprint: { w: number; d: number };
+    height: number;
+  } => {
+    const mount = scr.mount ?? "wall";
+    const wallSide = scr.wallSide ?? "back";
+    const desiredX = scr.position?.x ?? 0;
+    const desiredZ = scr.position?.z ?? 0;
+    const rotationY = scr.rotationY ?? 0;
+
+    let position = { x: desiredX, z: desiredZ };
+    let rotY = rotationY;
+    let footprint = { w: size.w, d: size.t };
+
+    if (mount === "wall") {
+      if (wallSide === "back") {
+        const c = clampXZ(position.x, backWallFrontZ, width, depth, size.w / 2, size.t / 2);
+        position = { x: c.x, z: backWallFrontZ };
+        rotY = 0;
+        footprint = { w: size.w, d: size.t };
+      } else if (wallSide === "left") {
+        const c = clampXZ(leftWallInnerX, position.z, width, depth, size.t / 2, size.w / 2);
+        position = { x: leftWallInnerX, z: c.z };
+        rotY = Math.PI / 2;
+        footprint = { w: size.t, d: size.w };
+      } else {
+        const c = clampXZ(rightWallInnerX, position.z, width, depth, size.t / 2, size.w / 2);
+        position = { x: rightWallInnerX, z: c.z };
+        rotY = -Math.PI / 2;
+        footprint = { w: size.t, d: size.w };
+      }
+    } else if (mount === "floor") {
+      const c = clampXZ(position.x, position.z, width, depth, size.w / 2, size.t / 2);
+      position = { x: c.x, z: c.z };
+      footprint = { w: size.w, d: size.t };
+    } else {
+      const depthForTruss = Math.max(size.t, size.w * 0.25);
+      const c = clampXZ(position.x, position.z, width, depth, size.w / 2, depthForTruss / 2);
+      position = { x: c.x, z: c.z };
+      footprint = { w: size.w, d: depthForTruss };
+    }
+
+    const height = clampScreenHeight(scr.heightFromFloor ?? floorHeight + 1.6, size.h);
+    return { position, rotationY: rotY, footprint, height };
+  };
+
   // Boden-Material
   const floorType = floorConfig?.type ?? "carpet";
   const floorMaterial = (() => {
@@ -537,9 +594,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     });
 
     screensDetailed.forEach((scr) => {
+      const w = scr.size?.w ?? 0.9;
+      const h = scr.size?.h ?? 0.55;
+      const t = scr.size?.t ?? 0.02;
+      const placement = resolveScreenPlacement(scr, { w, h, t });
       next[`scr-d-${scr.id}`] = {
-        x: scr.position?.x ?? 0,
-        z: scr.position?.z ?? 0,
+        x: placement.position.x,
+        z: placement.position.z,
       };
     });
 
@@ -1023,40 +1084,13 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const w = scr.size?.w ?? 0.9;
             const h = scr.size?.h ?? 0.55;
             const t = scr.size?.t ?? 0.02;
-            const mount = scr.mount ?? "wall";
-            const y = (scr.heightFromFloor ?? (floorHeight + 1.6)) - floorHeight; // lokaler Offset
+            const placement = resolveScreenPlacement(scr, { w, h, t });
             const key = `scr-d-${scr.id}`;
             const selected = isSelected(key);
-
-            // Position & Rotation
-            let px = scr.position?.x ?? 0;
-            let pz = scr.position?.z ?? 0;
-            let rotY = scr.rotationY ?? 0;
-
-            // Clamping je nach Mount
-            if (mount === "wall") {
-              const side = scr.wallSide ?? "back";
-              if (side === "back") {
-                pz = backWallFrontZ;
-                const c = clampXZ(px, pz, width, depth, w / 2, 0.001);
-                px = c.x;
-                rotY = 0;
-              } else if (side === "left") {
-                px = leftWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = Math.PI / 2;
-              } else {
-                px = rightWallInnerX;
-                const c = clampXZ(px, pz, width, depth, 0.001, h / 2);
-                pz = c.z;
-                rotY = -Math.PI / 2;
-              }
-            } else if (mount === "floor") {
-              const c = clampXZ(px, pz, width, depth, w / 2, t / 2);
-              px = c.x;
-              pz = c.z;
-            }
+            const px = placement.position.x;
+            const pz = placement.position.z;
+            const rotY = placement.rotationY;
+            const y = placement.height;
 
             return (
               <Transformable
@@ -1067,46 +1101,48 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragStart={disableOrbit}
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
-                  const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
-                  let candidateW = w;
-                  let candidateD = t;
-                  if (mount === "wall") {
-                    if (scr.wallSide === "left" || scr.wallSide === "right") {
-                      candidateW = t;
-                      candidateD = w;
-                    }
-                  } else if (mount === "floor") {
-                    candidateD = t;
-                  }
+                  const placementNext = resolveScreenPlacement(
+                    { ...scr, position: { ...scr.position, x: pos.x, z: pos.z } },
+                    { w, h, t }
+                  );
                   const candidate = makeAabb(
                     key,
                     "Screen",
-                    c.x,
-                    c.z,
-                    candidateW,
-                    candidateD,
+                    placementNext.position.x,
+                    placementNext.position.z,
+                    placementNext.footprint.w,
+                    placementNext.footprint.d,
                     collisionClearance
                   );
                   const collision = ensureNoCollision(key, [candidate]);
 
                   if (collision.collided) {
                     const fallback = getFallbackPosition(key, { x: px, z: pz });
-                    pos.set(fallback.x, pos.y, fallback.z);
+                    pos.set(fallback.x, placement.height, fallback.z);
                     return;
                   }
 
-                  rememberValidPosition(key, { x: c.x, z: c.z });
-                  pos.set(c.x, pos.y, c.z);
+                  rememberValidPosition(key, placementNext.position);
+                  pos.set(placementNext.position.x, placementNext.height, placementNext.position.z);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
-                      ? { ...s0, position: { x: c.x, z: c.z } }
+                      ? {
+                          ...s0,
+                          position: {
+                            ...s0.position,
+                            x: placementNext.position.x,
+                            z: placementNext.position.z,
+                          },
+                          rotationY: placementNext.rotationY,
+                          heightFromFloor: placementNext.height,
+                        }
                       : s0
                   );
                   setConfig({ modules: { detailedScreens: next } as any });
                 }}
               >
                 <group
-                  position={[px, floorHeight + y, pz]}
+                  position={[px, y, pz]}
                   rotation-y={rotY}
                   onClick={(e) => {
                     e.stopPropagation();
