@@ -39,7 +39,7 @@ type ConfigState = {
   config: StandConfig;
   price: number;
 
-  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
+  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
   history: StandConfig[];
   future: StandConfig[];
   historyLimit: number;
@@ -242,7 +242,7 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
   // feste Anzahl geschlossener Wände je Standtyp
   const fixedWalls = wallFixedMap[cfg.type];
 
-  let modules: StandModules = {
+  const modules: StandModules = {
     ...cfg.modules,
     wallsClosedSides: fixedWalls,
   };
