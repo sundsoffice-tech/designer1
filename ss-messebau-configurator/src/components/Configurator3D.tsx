@@ -367,7 +367,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const BLANK_PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAosBv2jz2l0AAAAASUVORK5CYII=";
   const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
-  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG);
+  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG) as THREE.Texture;
 
   const scaleX = width;
   const scaleZ = depth;
@@ -478,6 +478,78 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       </group>
     );
   };
+
+  const bannerMaterialProps = useMemo(
+    () =>
+      bannerImageUrl
+        ? { map: bannerTexture }
+        : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const),
+    [bannerImageUrl, bannerTexture]
+  );
+
+  const trussBanners = useMemo<ReactNode[]>(() => {
+    const bannerY = trussHeight - 0.4 - bannerHeight / 2;
+    const banners: ReactNode[] = [];
+
+    const addBanner = (key: string, position: [number, number, number], rotationY = 0) => {
+      banners.push(
+        <mesh key={key} position={position} rotation={[0, rotationY, 0]} castShadow>
+          <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
+          <meshStandardMaterial {...bannerMaterialProps} />
+        </mesh>
+      );
+    };
+
+    if (bannersFront > 0) {
+      Array.from({ length: bannersFront }).forEach((_, i) => {
+        const spacing = width / (bannersFront + 1);
+        const x = -width / 2 + spacing * (i + 1);
+        const z = depth / 2 - 0.05;
+        addBanner(`banner-front-${i}`, [x, bannerY, z]);
+      });
+    }
+
+    if (bannersBack > 0) {
+      Array.from({ length: bannersBack }).forEach((_, i) => {
+        const spacing = width / (bannersBack + 1);
+        const x = -width / 2 + spacing * (i + 1);
+        const z = -depth / 2 + 0.05;
+        addBanner(`banner-back-${i}`, [x, bannerY, z]);
+      });
+    }
+
+    if (bannersLeft > 0) {
+      Array.from({ length: bannersLeft }).forEach((_, i) => {
+        const spacing = depth / (bannersLeft + 1);
+        const z = -depth / 2 + spacing * (i + 1);
+        const x = -width / 2 + 0.05;
+        addBanner(`banner-left-${i}`, [x, bannerY, z], Math.PI / 2);
+      });
+    }
+
+    if (bannersRight > 0) {
+      Array.from({ length: bannersRight }).forEach((_, i) => {
+        const spacing = depth / (bannersRight + 1);
+        const z = -depth / 2 + spacing * (i + 1);
+        const x = width / 2 - 0.05;
+        addBanner(`banner-right-${i}`, [x, bannerY, z], -Math.PI / 2);
+      });
+    }
+
+    return banners;
+  }, [
+    bannerHeight,
+    bannerMaterialProps,
+    bannerThickness,
+    bannerWidth,
+    bannersBack,
+    bannersFront,
+    bannersLeft,
+    bannersRight,
+    depth,
+    trussHeight,
+    width,
+  ]);
 
   // ---- Detaillierte Objekte aus Store (optional)
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
@@ -1431,76 +1503,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             })}
 
           {/* Bannerrahmen */}
-          {(() => {
-            const bannerY = trussHeight - 0.4 - bannerHeight / 2;
-            const banners: ReactNode[] = [];
-
-            const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
-              : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
-
-            // Front
-            if (bannersFront > 0) {
-              Array.from({ length: bannersFront }).forEach((_, i) => {
-                const spacing = width / (bannersFront + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = depth / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Back
-            if (bannersBack > 0) {
-              Array.from({ length: bannersBack }).forEach((_, i) => {
-                const spacing = width / (bannersBack + 1);
-                const x = -width / 2 + spacing * (i + 1);
-                const z = -depth / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Left
-            if (bannersLeft > 0) {
-              Array.from({ length: bannersLeft }).forEach((_, i) => {
-                const spacing = depth / (bannersLeft + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = -width / 2 + 0.05;
-                banners.push(
-                  <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            // Right
-            if (bannersRight > 0) {
-              Array.from({ length: bannersRight }).forEach((_, i) => {
-                const spacing = depth / (bannersRight + 1);
-                const z = -depth / 2 + spacing * (i + 1);
-                const x = width / 2 - 0.05;
-                banners.push(
-                  <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
-                    <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
-                    <meshStandardMaterial {...materialProps} />
-                  </mesh>
-                );
-              });
-            }
-
-            return banners;
-          })()}
+          {trussBanners}
         </group>
       )}
     </group>
