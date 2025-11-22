@@ -30,6 +30,14 @@ export default function SidebarControls() {
   const fixedWalls =
     wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
 
+  const allowedWalls: WallSide[] = [];
+  if (fixedWalls >= 1) allowedWalls.push("back");
+  if (fixedWalls >= 2) allowedWalls.push("left");
+  if (fixedWalls >= 3) allowedWalls.push("right");
+
+  const clampWall = (value: WallSide | undefined) =>
+    value && allowedWalls.includes(value) ? value : allowedWalls[0];
+
   // Boden-Konfiguration (advanced + Fallback auf legacy raisedFloor)
   const floor = config.modules.floor;
   const floorType = floor?.type ?? "carpet";
@@ -666,7 +674,16 @@ export default function SidebarControls() {
               <label>
                 Türposition Lagerraum
                 <select
-                  value={config.modules.storageDoorSide ?? "front"}
+                  value={(() => {
+                    const options = [
+                      "front",
+                      ...allowedWalls.filter((side) => side !== "back"),
+                    ] as ("front" | "left" | "right")[];
+                    const current = config.modules.storageDoorSide;
+                    return options.includes(current as any)
+                      ? (current as any)
+                      : options[0];
+                  })()}
                   onChange={(e) =>
                     patchModules({
                       storageDoorSide: e.target.value as "front" | "left" | "right",
@@ -674,8 +691,12 @@ export default function SidebarControls() {
                   }
                 >
                   <option value="front">Front</option>
-                  <option value="left">Links</option>
-                  <option value="right">Rechts</option>
+                  {allowedWalls.includes("left") && (
+                    <option value="left">Links</option>
+                  )}
+                  {allowedWalls.includes("right") && (
+                    <option value="right">Rechts</option>
+                  )}
                 </select>
               </label>
             </>
@@ -718,16 +739,27 @@ export default function SidebarControls() {
             <label>
               LED-Rahmen an Wand
               <select
-                value={config.modules.ledWall ?? "back"}
+                value={clampWall(config.modules.ledWall) ?? ""}
+                disabled={allowedWalls.length === 0}
                 onChange={(e) =>
                   patchModules({
                     ledWall: e.target.value as "back" | "left" | "right",
                   })
                 }
               >
-                <option value="back">Rückwand</option>
-                <option value="left">Linke Wand</option>
-                <option value="right">Rechte Wand</option>
+                {allowedWalls.length === 0 ? (
+                  <option value="">Keine geschlossene Wand verfügbar</option>
+                ) : (
+                  allowedWalls.map((side) => (
+                    <option key={side} value={side}>
+                      {side === "back"
+                        ? "Rückwand"
+                        : side === "left"
+                        ? "Linke Wand"
+                        : "Rechte Wand"}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           )}
@@ -848,16 +880,27 @@ export default function SidebarControls() {
             <label>
               Screens an Wand
               <select
-                value={config.modules.screensWall ?? "back"}
+                value={clampWall(config.modules.screensWall) ?? ""}
+                disabled={allowedWalls.length === 0}
                 onChange={(e) =>
                   patchModules({
                     screensWall: e.target.value as "back" | "left" | "right",
                   })
                 }
               >
-                <option value="back">Rückwand</option>
-                <option value="left">Linke Wand</option>
-                <option value="right">Rechte Wand</option>
+                {allowedWalls.length === 0 ? (
+                  <option value="">Keine geschlossene Wand verfügbar</option>
+                ) : (
+                  allowedWalls.map((side) => (
+                    <option key={side} value={side}>
+                      {side === "back"
+                        ? "Rückwand"
+                        : side === "left"
+                        ? "Linke Wand"
+                        : "Rechte Wand"}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
           )}
