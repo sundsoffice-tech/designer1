@@ -276,6 +276,35 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
   modules.ledWall = fixWall(modules.ledWall);
   modules.screensWall = fixWall(modules.screensWall);
 
+  // Wenn keine geeignete Wand existiert, wall-gebundene Module entfernen
+  if (!allowedWalls.length) {
+    modules.screens = 0;
+    modules.ledFrames = 0;
+    if (modules.detailedScreens) {
+      modules.detailedScreens = modules.detailedScreens.filter(
+        (scr) => (scr.mount ?? "wall") !== "wall"
+      );
+    }
+  }
+
+  // Fallback: falls keine gültige Wandseite, Zähler zurücksetzen
+  if (!modules.screensWall && (modules.screens ?? 0) > 0) {
+    modules.screens = 0;
+  }
+  if (!modules.ledWall && (modules.ledFrames ?? 0) > 0) {
+    modules.ledFrames = 0;
+  }
+
+  // Detaillierte Screens an vorhandene Wände anpassen
+  if (allowedWalls.length && modules.detailedScreens?.length) {
+    modules.detailedScreens = modules.detailedScreens.map((scr) => {
+      if ((scr.mount ?? "wall") !== "wall") return scr;
+      const side = scr.wallSide;
+      if (side && allowedWalls.includes(side)) return scr;
+      return { ...scr, wallSide: allowedWalls[0] };
+    });
+  }
+
   // --- Boden-Defaults ---
   if (!modules.floor) {
     modules.floor = {
