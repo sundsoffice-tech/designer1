@@ -3143,6 +3143,7 @@ function CameraRig({
   const setCurrentPose = useCameraStore((s) => s.setCurrentPose);
   const nextAction = useCameraStore((s) => s.nextAction);
   const clearAction = useCameraStore((s) => s.clearAction);
+  const guides = useCameraStore((s) => s.guides);
   const setLodScale = useCameraStore((s) => s.setLodScale);
   const defaultMouseButtons = useMemo(() => DEFAULT_MOUSE_BUTTONS, []);
 
@@ -3303,6 +3304,27 @@ function CameraRig({
           target[2],
           true
         );
+      } else if (action.type === "playGuide") {
+        const guide = guides.find((g) => g.id === action.guideId);
+        if (!guide || guide.waypoints.length === 0) {
+          clearAction(action.id);
+          restore();
+          return;
+        }
+
+        for (const waypoint of guide.waypoints) {
+          const target = waypoint.target ?? [0, floorHeight + 1.4, 0];
+          await controls.setLookAt(
+            waypoint.position[0],
+            waypoint.position[1],
+            waypoint.position[2],
+            target[0],
+            target[1],
+            target[2],
+            true
+          );
+          if (cancelled || activeActionRef.current !== action.id) break;
+        }
       } else {
         clearAction(action.id);
         restore();
@@ -3322,7 +3344,7 @@ function CameraRig({
     return () => {
       cancelled = true;
     };
-  }, [clearAction, floorHeight, nextAction, orbitRef, withTransition]);
+  }, [clearAction, floorHeight, guides, nextAction, orbitRef, withTransition]);
 
   useFrame((state, delta) => {
     const controls = orbitRef.current;
