@@ -38,7 +38,7 @@ import {
 
 } from "../services/modules";
 
-import type { ModuleCatalog, ModuleCompatibilityIndex, ModuleVariantMap } from "../types/modules";
+import { collectUniqueValues, type ModuleCatalog, type ModuleCompatibilityIndex, type ModuleVariantMap } from "@ss/shared";
 
 import bundlePresetsData from "../data/bundles.json";
 
@@ -1831,9 +1831,7 @@ function mergeModules(
       : list;
 
     if (Array.isArray(out.activeBundles)) {
-
-      out.activeBundles = Array.from(new Set(out.activeBundles));
-
+      out.activeBundles = collectUniqueValues(out.activeBundles, (bundle) => bundle);
     }
 
   }

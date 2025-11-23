@@ -5,7 +5,7 @@ import type {
   ModuleCompatibilityIndex,
   ModuleKind,
   ModuleBundle,
-} from "../types/modules";
+} from "@ss/shared";
 import { fetchApi } from "../lib/apiBase";
 import modulesJson from "../data/modules.json";
 

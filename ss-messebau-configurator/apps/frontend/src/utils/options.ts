@@ -1,5 +1,5 @@
 import type { StandConfig } from "../lib/pricing";
-import type { ModuleCatalog, ModuleKind, ResolvedModuleVariant } from "../types/modules";
+import type { ModuleCatalog, ModuleKind, ResolvedModuleVariant } from "@ss/shared";
 
 type AllowedOptions = {
   variants: ResolvedModuleVariant[];
