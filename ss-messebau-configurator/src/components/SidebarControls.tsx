@@ -1,7 +1,8 @@
-// src/components/SidebarControls.tsx
+﻿// src/components/SidebarControls.tsx
 import { useState } from "react";
 import { useConfigStore, type DeepPartial } from "../store/configStore";
 import type { StandModules } from "../lib/pricing";
+import { collisionPlayground } from "../lib/playgrounds";
 
 type WallSide = "back" | "left" | "right";
 
@@ -14,9 +15,9 @@ const wallFixedMap = {
 } as const;
 
 export default function SidebarControls() {
-  const { config, price, setConfig, applyPreset } = useConfigStore();
+  const { config, price, setConfig, applyPreset, replaceConfig } = useConfigStore();
 
-  // Helper: DeepPartial-Patch für modules (typsicher)
+  // Helper: DeepPartial-Patch f├╝r modules (typsicher)
   const patchModules = (mods: DeepPartial<StandModules>) =>
     setConfig({ modules: mods });
 
@@ -34,7 +35,7 @@ export default function SidebarControls() {
   const floorType = floor?.type ?? "carpet";
   const floorRaised = floor?.raised ?? config.modules.raisedFloor ?? false;
 
-  // Wand-Oberflächen aus modules.wallsDetail lesen
+  // Wand-Oberfl├ñchen aus modules.wallsDetail lesen
   const getWallSurface = (side: WallSide): string => {
     const wallsDetail = (config.modules as any).wallsDetail as
       | Partial<Record<WallSide, { surface?: string }>>
@@ -102,7 +103,7 @@ export default function SidebarControls() {
         surface === "wood"
           ? "Holzwand"
           : surface === "banner"
-          ? "Bannerfläche"
+          ? "Bannerfl├ñche"
           : surface === "seg"
           ? "Textil / SEG"
           : surface === "led"
@@ -113,11 +114,11 @@ export default function SidebarControls() {
 
     const wallLines: string[] = [];
     if (m.wallsClosedSides >= 1)
-      wallLines.push("  · " + wallSurfaceLabel("back", "Rückwand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("back", "R├╝ckwand"));
     if (m.wallsClosedSides >= 2)
-      wallLines.push("  · " + wallSurfaceLabel("left", "Linke Wand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("left", "Linke Wand"));
     if (m.wallsClosedSides >= 3)
-      wallLines.push("  · " + wallSurfaceLabel("right", "Rechte Wand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("right", "Rechte Wand"));
 
     const floorLbl = floorTypeLabel(m.floor?.type);
 
@@ -137,9 +138,9 @@ export default function SidebarControls() {
     const bRight = mm.trussBannersRight ?? 0;
 
     const text = [
-      "Neue Standanfrage über den 3D-Konfigurator:",
+      "Neue Standanfrage ├╝ber den 3D-Konfigurator:",
       "",
-      `Fläche: ${config.width} x ${config.depth} m (${area} m²)`,
+      `Fl├ñche: ${config.width} x ${config.depth} m (${area} m┬▓)`,
       `Standtyp: ${config.type}`,
       `Region: ${config.region}`,
       `Eilauftrag: ${config.rush ? "Ja" : "Nein"}`,
@@ -149,10 +150,10 @@ export default function SidebarControls() {
       `- Doppelboden: ${
         (m.floor?.raised ?? m.raisedFloor) ? "Ja" : "Nein"
       }`,
-      ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
+      ...(wallLines.length ? ["- W├ñnde:", ...wallLines] : []),
       `- Geschlossene Seiten: ${m.wallsClosedSides}`,
       `- Lagerraum: ${m.storageRoom ? "Ja" : "Nein"}${
-        m.storageRoom ? ` (Tür: ${m.storageDoorSide ?? "front"})` : ""
+        m.storageRoom ? ` (T├╝r: ${m.storageDoorSide ?? "front"})` : ""
       }`,
       `- LED-Rahmen: ${m.ledFrames} (Wand: ${m.ledWall ?? "back"})`,
       `- Counters: ${m.counters} (Position: ${
@@ -162,14 +163,14 @@ export default function SidebarControls() {
       `- Truss: ${m.truss ? "Ja" : "Nein"}`,
       `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
-      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
+      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} ├ù ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
       "",
-      `Richtpreis: ${price.toLocaleString("de-DE")} €`,
+      `Richtpreis: ${price.toLocaleString("de-DE")} Ôé¼`,
     ].join("\n");
 
     navigator.clipboard
       .writeText(text)
-      .catch(() => console.log("Kopieren nicht möglich."));
+      .catch(() => console.log("Kopieren nicht m├Âglich."));
     alert("Konfiguration wurde in die Zwischenablage kopiert.");
   };
 
@@ -188,7 +189,7 @@ export default function SidebarControls() {
         surface === "wood"
           ? "Holzwand"
           : surface === "banner"
-          ? "Bannerfläche"
+          ? "Bannerfl├ñche"
           : surface === "seg"
           ? "Textil / SEG"
           : surface === "led"
@@ -199,11 +200,11 @@ export default function SidebarControls() {
 
     const wallLines: string[] = [];
     if (m.wallsClosedSides >= 1)
-      wallLines.push("  · " + wallSurfaceLabel("back", "Rückwand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("back", "R├╝ckwand"));
     if (m.wallsClosedSides >= 2)
-      wallLines.push("  · " + wallSurfaceLabel("left", "Linke Wand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("left", "Linke Wand"));
     if (m.wallsClosedSides >= 3)
-      wallLines.push("  · " + wallSurfaceLabel("right", "Rechte Wand"));
+      wallLines.push("  ┬À " + wallSurfaceLabel("right", "Rechte Wand"));
 
     const floorLbl = floorTypeLabel(m.floor?.type);
 
@@ -223,11 +224,11 @@ export default function SidebarControls() {
     const bRight = mm.trussBannersRight ?? 0;
 
     const lines = [
-      "Neue Standanfrage über den 3D-Konfigurator:",
+      "Neue Standanfrage ├╝ber den 3D-Konfigurator:",
       "",
       "=== Standdaten ===",
       `Messe / Event: ${fair || "-"}`,
-      `Fläche: ${config.width} x ${config.depth} m (${area} m²)`,
+      `Fl├ñche: ${config.width} x ${config.depth} m (${area} m┬▓)`,
       `Standtyp: ${config.type}`,
       `Region: ${config.region}`,
       `Eilauftrag: ${config.rush ? "Ja" : "Nein"}`,
@@ -237,10 +238,10 @@ export default function SidebarControls() {
       `- Doppelboden: ${
         (m.floor?.raised ?? m.raisedFloor) ? "Ja" : "Nein"
       }`,
-      ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
+      ...(wallLines.length ? ["- W├ñnde:", ...wallLines] : []),
       `- Geschlossene Seiten: ${m.wallsClosedSides}`,
       `- Lagerraum: ${m.storageRoom ? "Ja" : "Nein"}${
-        m.storageRoom ? ` (Tür: ${m.storageDoorSide ?? "front"})` : ""
+        m.storageRoom ? ` (T├╝r: ${m.storageDoorSide ?? "front"})` : ""
       }`,
       `- LED-Rahmen: ${m.ledFrames} (Wand: ${m.ledWall ?? "back"})`,
       `- Counters: ${m.counters} (Position: ${
@@ -250,11 +251,11 @@ export default function SidebarControls() {
       `- Truss: ${m.truss ? "Ja" : "Nein"}`,
       `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
-      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${
+      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} ├ù ${
         bannerH || "?"
       } m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
       "",
-      `Richtpreis (brutto / Richtwert): ${price.toLocaleString("de-DE")} €`,
+      `Richtpreis (brutto / Richtwert): ${price.toLocaleString("de-DE")} Ôé¼`,
       "",
       "=== Kontaktdaten Kunde ===",
       `Name: ${customerName || "-"}`,
@@ -264,7 +265,7 @@ export default function SidebarControls() {
     ];
 
     const subject = encodeURIComponent(
-      `Standanfrage Konfigurator – ${company || customerName || "Unbekannt"}`
+      `Standanfrage Konfigurator ÔÇô ${company || customerName || "Unbekannt"}`
     );
     const body = encodeURIComponent(lines.join("\n"));
 
@@ -277,16 +278,16 @@ export default function SidebarControls() {
       <div className="sidebar-header">
         <div className="sidebar-title-row">
           <h1>S&S 3D Standkonfigurator</h1>
-          <span className="badge">Beta · intern</span>
+          <span className="badge">Beta ┬À intern</span>
         </div>
-        <small>Richtkalkulation für System- & Individualstände</small>
+        <small>Richtkalkulation f├╝r System- & Individualst├ñnde</small>
       </div>
 
       {/* Presets */}
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="section-title">Schnellstart</span>
-          <span className="section-sub">Typische Standgrößen</span>
+          <span className="section-sub">Typische Standgr├Â├ƒen</span>
         </div>
         <div className="preset-row">
           <button
@@ -294,33 +295,58 @@ export default function SidebarControls() {
             className="preset-btn"
             onClick={() => applyPreset("small")}
           >
-            <strong>9 m²</strong>
-            <small>3×3 · Reihenstand</small>
+            <strong>9 m┬▓</strong>
+            <small>3├ù3 ┬À Reihenstand</small>
           </button>
           <button
             type="button"
             className="preset-btn"
             onClick={() => applyPreset("medium")}
           >
-            <strong>24 m²</strong>
-            <small>6×4 · Eckstand</small>
+            <strong>24 m┬▓</strong>
+            <small>6├ù4 ┬À Eckstand</small>
           </button>
           <button
             type="button"
             className="preset-btn"
             onClick={() => applyPreset("premium")}
           >
-            <strong>40 m²</strong>
-            <small>8×5 · Kopfstand Premium</small>
+            <strong>40 m┬▓</strong>
+            <small>8├ù5 ┬À Kopfstand Premium</small>
           </button>
         </div>
+        <div className="preset-row">
+          <button
+            type="button"
+            className="preset-btn"
+            onClick={() => replaceConfig(collisionPlayground)}
+            title="L├ñdt den Mock-Stand mit eng stehenden Modulen, um Kollisionen zu testen"
+          >
+            <strong>Kollisions-Playground</strong>
+            <small>Mock-Stand mit vielen Objekten</small>
+          </button>
+        </div>
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Kollisionsschutz</span>
+          <span className="section-sub">AABB + Mindestabstand</span>
+        </div>
+        <p style={{ margin: "0.25rem 0 0", lineHeight: 1.35 }}>
+          Bewegte Objekte (Tresen, Screens, Kabine, Truss-Griff) prallen an einem
+          AABB-Sicherheitsabstand ab. Bei drohender ├£berschneidung erscheint ein
+          roter Wireframe + Hinweis. Der Mindestabstand l├ñsst sich ├╝ber
+          <code> modules.collisionClearance</code> im Store konfigurieren
+          (Playground: 0,25 m).
+        </p>
       </div>
 
       {/* Grunddaten */}
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="section-title">Grunddaten</span>
-          <span className="section-sub">Fläche & Standtyp</span>
+          <span className="section-sub">Fl├ñche & Standtyp</span>
         </div>
 
         <div className="form-grid">
@@ -350,9 +376,9 @@ export default function SidebarControls() {
             />
           </label>
 
-          {/* Wandhöhe */}
+          {/* Wandh├Âhe */}
           <label>
-            Wandhöhe (m)
+            Wandh├Âhe (m)
             <input
               type="number"
               min={2}
@@ -364,7 +390,7 @@ export default function SidebarControls() {
               }
             />
             <small style={{ fontSize: 10, color: "#6b7280" }}>
-              Standard: ca. 2,50 m – je nach Messe bis ~4,00 m.
+              Standard: ca. 2,50 m ÔÇô je nach Messe bis ~4,00 m.
             </small>
           </label>
 
@@ -389,7 +415,7 @@ export default function SidebarControls() {
             >
               <option value="NRW">NRW / Mitte</option>
               <option value="Nord">Norden</option>
-              <option value="Süd">Süden</option>
+              <option value="S├╝d">S├╝den</option>
               <option value="Ausland">Ausland</option>
             </select>
           </label>
@@ -410,7 +436,7 @@ export default function SidebarControls() {
         <div className="sidebar-section-header">
           <span className="section-title">Module</span>
           <span className="section-sub">
-            Boden, Wände, LED, Counter, Screens, Licht
+            Boden, W├ñnde, LED, Counter, Screens, Licht
           </span>
         </div>
 
@@ -442,19 +468,19 @@ export default function SidebarControls() {
             </select>
           </label>
 
-          {/* Wände – feste Logik */}
+          {/* W├ñnde ÔÇô feste Logik */}
           <label>
             Geschlossene Seiten
             <input type="number" value={fixedWalls} readOnly disabled />
             <small style={{ fontSize: 10, color: "#6b7280" }}>
               {config.type === "row" &&
-                "Reihenstand: 3 geschlossene Seiten (Rückwand + 2 Seitenwände)."}
+                "Reihenstand: 3 geschlossene Seiten (R├╝ckwand + 2 Seitenw├ñnde)."}
               {config.type === "corner" &&
-                "Eckstand: 2 geschlossene Seiten (Rückwand + eine Seitenwand)."}
+                "Eckstand: 2 geschlossene Seiten (R├╝ckwand + eine Seitenwand)."}
               {config.type === "head" &&
-                "Kopfstand: 1 geschlossene Rückwand, Seiten offen."}
+                "Kopfstand: 1 geschlossene R├╝ckwand, Seiten offen."}
               {config.type === "island" &&
-                "Inselstand: keine festen Wände, rundum offen."}
+                "Inselstand: keine festen W├ñnde, rundum offen."}
             </small>
           </label>
 
@@ -462,7 +488,7 @@ export default function SidebarControls() {
           {config.modules.wallsClosedSides >= 1 && (
             <>
               <label>
-                Wanddesign Rückwand
+                Wanddesign R├╝ckwand
                 <select
                   value={getWallSurface("back")}
                   onChange={(e) =>
@@ -472,15 +498,15 @@ export default function SidebarControls() {
                     )
                   }
                 >
-                  <option value="system">Systemwand (weiß)</option>
+                  <option value="system">Systemwand (wei├ƒ)</option>
                   <option value="wood">Holzwand</option>
-                  <option value="banner">Bannerfläche</option>
+                  <option value="banner">Bannerfl├ñche</option>
                   <option value="seg">SEG / Textilrahmen</option>
                   <option value="led">LED-Wand</option>
                 </select>
               </label>
               <label>
-                Strahler Rückwand
+                Strahler R├╝ckwand
                 <input
                   type="number"
                   min={0}
@@ -508,9 +534,9 @@ export default function SidebarControls() {
                     )
                   }
                 >
-                  <option value="system">Systemwand (weiß)</option>
+                  <option value="system">Systemwand (wei├ƒ)</option>
                   <option value="wood">Holzwand</option>
-                  <option value="banner">Bannerfläche</option>
+                  <option value="banner">Bannerfl├ñche</option>
                   <option value="seg">SEG / Textilrahmen</option>
                   <option value="led">LED-Wand</option>
                 </select>
@@ -544,9 +570,9 @@ export default function SidebarControls() {
                     )
                   }
                 >
-                  <option value="system">Systemwand (weiß)</option>
+                  <option value="system">Systemwand (wei├ƒ)</option>
                   <option value="wood">Holzwand</option>
-                  <option value="banner">Bannerfläche</option>
+                  <option value="banner">Bannerfl├ñche</option>
                   <option value="seg">SEG / Textilrahmen</option>
                   <option value="led">LED-Wand</option>
                 </select>
@@ -579,7 +605,7 @@ export default function SidebarControls() {
 
           {config.modules.storageRoom && (
             <>
-              {/* Kabine – Maße */}
+              {/* Kabine ÔÇô Ma├ƒe */}
               <label>
                 Kabine Breite (m)
                 <input
@@ -609,9 +635,9 @@ export default function SidebarControls() {
                 />
               </label>
 
-              {/* Kabine – Position */}
+              {/* Kabine ÔÇô Position */}
               <label>
-                Kabine X‑Position (m)
+                Kabine XÔÇæPosition (m)
                 <input
                   type="number"
                   step={0.1}
@@ -624,7 +650,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Kabine Z‑Position (m)
+                Kabine ZÔÇæPosition (m)
                 <input
                   type="number"
                   step={0.1}
@@ -638,7 +664,7 @@ export default function SidebarControls() {
               </label>
 
               <label>
-                Türposition Lagerraum
+                T├╝rposition Lagerraum
                 <select
                   value={config.modules.storageDoorSide ?? "front"}
                   onChange={(e) =>
@@ -674,7 +700,7 @@ export default function SidebarControls() {
                     className="icon-btn"
                     onClick={() => stepModule("ledFrames", -1, 0)}
                   >
-                    –
+                    ÔÇô
                   </button>
                   <button
                     type="button"
@@ -699,7 +725,7 @@ export default function SidebarControls() {
                   })
                 }
               >
-                <option value="back">Rückwand</option>
+                <option value="back">R├╝ckwand</option>
                 <option value="left">Linke Wand</option>
                 <option value="right">Rechte Wand</option>
               </select>
@@ -725,7 +751,7 @@ export default function SidebarControls() {
                     className="icon-btn"
                     onClick={() => stepModule("counters", -1, 0)}
                   >
-                    –
+                    ÔÇô
                   </button>
                   <button
                     type="button"
@@ -804,7 +830,7 @@ export default function SidebarControls() {
                     className="icon-btn"
                     onClick={() => stepModule("screens", -1, 0)}
                   >
-                    –
+                    ÔÇô
                   </button>
                   <button
                     type="button"
@@ -829,7 +855,7 @@ export default function SidebarControls() {
                   })
                 }
               >
-                <option value="back">Rückwand</option>
+                <option value="back">R├╝ckwand</option>
                 <option value="left">Linke Wand</option>
                 <option value="right">Rechte Wand</option>
               </select>
@@ -843,7 +869,7 @@ export default function SidebarControls() {
               checked={config.modules.truss ?? false}
               onChange={(e) => patchModules({ truss: e.target.checked })}
             />
-            Traversen-Hängepunkte (Truss)
+            Traversen-H├ñngepunkte (Truss)
           </label>
 
           {config.modules.truss && (
@@ -861,9 +887,9 @@ export default function SidebarControls() {
                 </select>
               </label>
 
-              {/* Truss-Höhe */}
+              {/* Truss-H├Âhe */}
               <label>
-                Truss-Höhe (m)
+                Truss-H├Âhe (m)
                 <input
                   type="number"
                   min={config.height + 0.3}
@@ -875,13 +901,13 @@ export default function SidebarControls() {
                   }
                 />
                 <small style={{ fontSize: 10, color: "#6b7280" }}>
-                  Höhe der Traverse (Mitte) über Boden. Standard:
-                  Wandhöhe + 0,5 m.
+                  H├Âhe der Traverse (Mitte) ├╝ber Boden. Standard:
+                  Wandh├Âhe + 0,5 m.
                 </small>
               </label>
 
               <label>
-                Lampen Truss – Front
+                Lampen Truss ÔÇô Front
                 <input
                   type="number"
                   min={0}
@@ -894,7 +920,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Lampen Truss – Back
+                Lampen Truss ÔÇô Back
                 <input
                   type="number"
                   min={0}
@@ -907,7 +933,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Lampen Truss – Links
+                Lampen Truss ÔÇô Links
                 <input
                   type="number"
                   min={0}
@@ -920,7 +946,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Lampen Truss – Rechts
+                Lampen Truss ÔÇô Rechts
                 <input
                   type="number"
                   min={0}
@@ -951,7 +977,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Banner-Höhe (m)
+                Banner-H├Âhe (m)
                 <input
                   type="number"
                   step={0.1}
@@ -966,7 +992,7 @@ export default function SidebarControls() {
               </label>
 
               <label>
-                Bannerrahmen – Front
+                Bannerrahmen ÔÇô Front
                 <input
                   type="number"
                   min={0}
@@ -979,7 +1005,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Bannerrahmen – Back
+                Bannerrahmen ÔÇô Back
                 <input
                   type="number"
                   min={0}
@@ -992,7 +1018,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Bannerrahmen – Links
+                Bannerrahmen ÔÇô Links
                 <input
                   type="number"
                   min={0}
@@ -1005,7 +1031,7 @@ export default function SidebarControls() {
                 />
               </label>
               <label>
-                Bannerrahmen – Rechts
+                Bannerrahmen ÔÇô Rechts
                 <input
                   type="number"
                   min={0}
@@ -1061,11 +1087,11 @@ export default function SidebarControls() {
       <div className="price-box">
         <div className="price-box-label">Unverbindliche Richtkalkulation</div>
         <div className="price-box-main">
-          <strong>{price.toLocaleString("de-DE")} €</strong>
+          <strong>{price.toLocaleString("de-DE")} Ôé¼</strong>
           <span className="price-badge">Projektpreis inkl. Aufbau</span>
         </div>
         <div style={{ fontSize: 11, marginTop: 2, color: "#9ca3af" }}>
-          Endgültige Preise je nach Messe, Technik und Detailumfang.
+          Endg├╝ltige Preise je nach Messe, Technik und Detailumfang.
         </div>
       </div>
 
@@ -1123,7 +1149,7 @@ export default function SidebarControls() {
               type="text"
               value={fair}
               onChange={(e) => setFair(e.target.value)}
-              placeholder="z. B. boot Düsseldorf, Halle 5"
+              placeholder="z. B. boot D├╝sseldorf, Halle 5"
             />
           </label>
 

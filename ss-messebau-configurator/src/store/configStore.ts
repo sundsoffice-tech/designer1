@@ -39,7 +39,7 @@ type ConfigState = {
   config: StandConfig;
   price: number;
 
-  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
+  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
   history: StandConfig[];
   future: StandConfig[];
   historyLimit: number;
@@ -156,8 +156,6 @@ function mergeModules(
     "wallsClosedSides",
     "storageRoom",
     "storageDoorSide",
-    "ledFrames",
-    "ledWall",
     "counters",
     "countersWall",
     "countersWithPower",
@@ -260,7 +258,7 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
     }
   }
 
-  // erlaubte Wandseiten (für LED / Screens)
+  // erlaubte Wandseiten (für Screens)
   const allowedWalls: WallSide[] = [];
   if (hasBack) allowedWalls.push("back");
   if (hasLeft) allowedWalls.push("left");
@@ -272,8 +270,7 @@ function normalizeConfig(cfg: StandConfig): StandConfig {
     return allowedWalls[0];
   };
 
-  // LED / Screens nur auf existierenden Wänden platzieren
-  modules.ledWall = fixWall(modules.ledWall);
+  // Screens nur auf existierenden Wänden platzieren
   modules.screensWall = fixWall(modules.screensWall);
 
   // --- Boden-Defaults ---
@@ -347,8 +344,7 @@ const presetConfigs: Record<PresetName, StandConfig> = {
       storageRoom: false,
       storageDoorSide: "front",
 
-      ledFrames: 0,
-      ledWall: "back",
+      
 
       counters: 1,
       countersWall: "front",
@@ -374,8 +370,7 @@ const presetConfigs: Record<PresetName, StandConfig> = {
       storageRoom: true,
       storageDoorSide: "front",
 
-      ledFrames: 2,
-      ledWall: "back",
+      
 
       counters: 2,
       countersWall: "front",
@@ -400,8 +395,7 @@ const presetConfigs: Record<PresetName, StandConfig> = {
       storageRoom: true,
       storageDoorSide: "left",
 
-      ledFrames: 3,
-      ledWall: "back",
+      
 
       counters: 3,
       countersWall: "island",

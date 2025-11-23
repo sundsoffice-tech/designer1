@@ -1,7 +1,9 @@
-// src/components/Configurator3D.tsx
+﻿// src/components/Configurator3D.tsx
 import {
   Suspense,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -19,6 +21,12 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import { useConfigStore } from "../store/configStore";
+import {
+  buildSceneAabbs,
+  DEFAULT_CLEARANCE,
+  findCollisionForMany,
+  makeAabb,
+} from "../lib/collision";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -52,7 +60,7 @@ type CabinWithPosition = {
   position?: { x?: number; z?: number };
 };
 
-/** Edit‑Modus Toggle (Taste 'E') */
+/** EditÔÇæModus Toggle (Taste 'E') */
 function useEditModeHotkey(): boolean {
   const [edit, setEdit] = useState<boolean>(false);
   useEffect(() => {
@@ -66,7 +74,7 @@ function useEditModeHotkey(): boolean {
   return edit;
 }
 
-/** Transform‑Modus & Snap Shortcuts (T/R/S/G/Esc) */
+/** TransformÔÇæModus & Snap Shortcuts (T/R/S/G/Esc) */
 function useTransformKeyboard(
   setSelectedKey: (v: string | null) => void
 ): { mode: "translate" | "rotate" | "scale"; snap: boolean } {
@@ -89,7 +97,7 @@ function useTransformKeyboard(
   return { mode, snap };
 }
 
-/** clamp X/Z in Standfläche, optional mit halben Abmessungen eines Objekts */
+/** clamp X/Z in Standfl├ñche, optional mit halben Abmessungen eines Objekts */
 function clampXZ(
   x: number,
   z: number,
@@ -174,7 +182,7 @@ function ScreenPanel({ w = 0.9, h = 0.55, t = 0.02 }) {
   );
 }
 
-/** TransformControls Wrapper: sperrt Orbit während Interaktion */
+/** TransformControls Wrapper: sperrt Orbit w├ñhrend Interaktion */
 function Transformable({
   enabled,
   mode,
@@ -247,7 +255,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const editMode = useEditModeHotkey();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  // Transform‑Shortcuts (T/R/S/G/Esc)
+  // TransformÔÇæShortcuts (T/R/S/G/Esc)
   const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelectedKey);
 
   // Orbit sperren / freigeben
@@ -287,6 +295,12 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const wallLightsLeft: number = mAny.wallLightsLeft ?? 0;
   const wallLightsRight: number = mAny.wallLightsRight ?? 0;
 
+  // Kollisionsabstand (konfigurierbar ├╝ber modules.collisionClearance)
+  const collisionClearance: number = Math.max(
+    0,
+    typeof mAny.collisionClearance === "number" ? mAny.collisionClearance : DEFAULT_CLEARANCE
+  );
+
   // Banner / Truss
   const bannersFront: number = mAny.trussBannersFront ?? 0;
   const bannersBack: number = mAny.trussBannersBack ?? 0;
@@ -297,7 +311,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const bannerHeight: number = mAny.trussBannerHeight ?? 1;
   const bannerThickness = 0.04;
 
-  // Boden/Standhöhen
+  // Boden/Standh├Âhen
   const floorConfig = modules.floor;
   const isRaised = floorConfig?.raised ?? modules.raisedFloor ?? false;
   const floorHeight = isRaised ? 0.08 : 0.025;
@@ -314,7 +328,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const trussOffsetX: number = (mAny.trussOffset?.x ?? 0) as number;
   const trussOffsetZ: number = (mAny.trussOffset?.z ?? 0) as number;
 
-  // useTexture -> Fallback 1x1 PNG (weiß)
+  // useTexture -> Fallback 1x1 PNG (wei├ƒ)
   const BLANK_PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAosBv2jz2l0AAAAASUVORK5CYII=";
   const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
@@ -327,7 +341,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const wallThickness = 0.06;
   const panelGap = 0.01;
 
-  // Innenpositionen der Wand-Frontflächen
+  // Innenpositionen der Wand-Frontfl├ñchen
   const backWallFrontZ = -depth / 2 + wallThickness + panelGap;
   const leftWallInnerX = -width / 2 + wallThickness + panelGap;
   const rightWallInnerX = width / 2 - wallThickness - panelGap;
@@ -336,7 +350,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const screensWallSide = (screensWall as WallSide) ?? "back";
   const countersPlacement = (countersWall as "front" | "island") ?? "front";
 
-  // Türseite der Kabine
+  // T├╝rseite der Kabine
   const doorSide =
     (cabin?.doorSide as "front" | "left" | "right" | "back") ??
     (storageDoorSide as "front" | "left" | "right" | "back") ??
@@ -369,7 +383,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     }
   })();
 
-  /** Wand-Oberflächen (system | wood | banner | seg | led) */
+  /** Wand-Oberfl├ñchen (system | wood | banner | seg | led) */
   type Surface = "system" | "wood" | "banner" | "seg" | "led";
   const wallsDetail = (mAny.wallsDetail ?? {}) as Record<WallSide, { surface?: Surface; height?: number }>;
   const surfaceOf = (side: WallSide): Surface => (wallsDetail[side]?.surface ?? "system") as Surface;
@@ -395,7 +409,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     }
   };
 
-  // Helper: Truss-Lichtkörper je nach Typ
+  // Helper: Truss-Lichtk├Ârper je nach Typ
   const renderTrussLight = (
     key: string,
     x: number,
@@ -434,7 +448,87 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
   const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
 
-  // ---- Legacy → Detailed Konverter (per Doppelklick)
+  const sceneAabbs = useMemo(
+    () => buildSceneAabbs(config, collisionClearance),
+    [config, collisionClearance]
+  );
+
+  const [collidingKeys, setCollidingKeys] = useState<Set<string>>(new Set());
+  const [lastValidPositions, setLastValidPositions] = useState<
+    Record<string, { x: number; z: number }>
+  >({});
+
+  const rememberValidPosition = useCallback((key: string, pos: { x: number; z: number }) => {
+    setLastValidPositions((prev) => ({ ...prev, [key]: pos }));
+  }, []);
+
+  const getFallbackPosition = useCallback(
+    (key: string, fallback: { x: number; z: number }) => lastValidPositions[key] ?? fallback,
+    [lastValidPositions]
+  );
+
+  const setCollisionState = useCallback((key: string, collided: boolean) => {
+    setCollidingKeys((prev) => {
+      const next = new Set(prev);
+      if (collided) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const ensureNoCollision = useCallback(
+    (key: string, boxes: ReturnType<typeof makeAabb>[], ignoreIds: string[] = []) => {
+      const ignored = new Set<string>([key, ...ignoreIds]);
+      const collision = findCollisionForMany(boxes, sceneAabbs, ignored);
+      if (collision.collided) {
+        setCollisionState(key, true);
+        return collision;
+      }
+      setCollisionState(key, false);
+      return collision;
+    },
+    [sceneAabbs, setCollisionState]
+  );
+
+  // initial g├╝ltige Positionen merken (Rollback bei Kollision)
+  useEffect(() => {
+    const next: Record<string, { x: number; z: number }> = {};
+
+    countersDetailed.forEach((ctr) => {
+      next[`ctr-d-${ctr.id}`] = {
+        x: ctr.position?.x ?? 0,
+        z: ctr.position?.z ?? 0,
+      };
+    });
+
+    screensDetailed.forEach((scr) => {
+      next[`scr-d-${scr.id}`] = {
+        x: scr.position?.x ?? 0,
+        z: scr.position?.z ?? 0,
+      };
+    });
+
+    if (cabinEnabled) {
+      next.cabin = { x: cabinPosX, z: cabinPosZ };
+    }
+
+    if (trussEnabled) {
+      next.truss = { x: trussOffsetX, z: trussOffsetZ };
+    }
+
+    setLastValidPositions(next);
+  }, [
+    cabinEnabled,
+    cabinPosX,
+    cabinPosZ,
+    countersDetailed,
+    screensDetailed,
+    trussEnabled,
+    trussOffsetX,
+    trussOffsetZ,
+  ]);
+
+  // ---- Legacy ÔåÆ Detailed Konverter (per Doppelklick)
   const convertLegacyCountersToDetailed = () => {
     if ((counters ?? 0) <= 0) return;
     const count = counters!;
@@ -497,7 +591,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     });
   };
 
-  // ---- Selektion / Gültigkeit prüfen (falls Objekt weg ist -> deselect)
+  // ---- Selektion / G├╝ltigkeit pr├╝fen (falls Objekt weg ist -> deselect)
   useEffect(() => {
     if (!selectedKey) return;
     const validKeys = new Set<string>();
@@ -514,10 +608,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   return (
     <group
       position={[0, 0, 0]}
-      // Klick ins Leere / auf Grundfläche: Selektion aufheben
+      // Klick ins Leere / auf Grundfl├ñche: Selektion aufheben
       onPointerMissed={() => setSelectedKey(null)}
     >
-      {/* Kurze HUD-Hilfe im Edit‑Modus */}
+      {/* Kurze HUD-Hilfe im EditÔÇæModus */}
       {editMode && (
         <Html position={[0, Math.max(2.2, height + 0.5), 0]} center>
           <div style={{
@@ -530,7 +624,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             pointerEvents: "none",
             whiteSpace: "nowrap"
           }}>
-            <strong>Edit</strong> (E) · Mode: <strong>{transformMode}</strong> (T/R/S) · Snap: <strong>{snapOn ? "0,1 m" : "aus"}</strong> (G) · ESC: Deselektieren
+            <strong>Edit</strong> (E) ┬À Mode: <strong>{transformMode}</strong> (T/R/S) ┬À Snap: <strong>{snapOn ? "0,1 m" : "aus"}</strong> (G) ┬À ESC: Deselektieren
           </div>
         </Html>
       )}
@@ -547,7 +641,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         <meshStandardMaterial color="#020617" metalness={0.2} roughness={0.8} />
       </mesh>
 
-      {/* Doppelboden-Körper */}
+      {/* Doppelboden-K├Ârper */}
       {isRaised && (
         <mesh position={[0, floorHeight / 2, 0]} receiveShadow castShadow>
           <boxGeometry args={[scaleX, floorHeight, scaleZ]} />
@@ -555,7 +649,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         </mesh>
       )}
 
-      {/* Bodenfläche */}
+      {/* Bodenfl├ñche */}
       <mesh position={[0, floorHeight + 0.001, 0]} rotation-x={-Math.PI / 2} receiveShadow>
         <planeGeometry args={[scaleX, scaleZ]} />
         <meshStandardMaterial
@@ -565,7 +659,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         />
       </mesh>
 
-      {/* Wände */}
+      {/* W├ñnde */}
       {wallsClosedSides >= 1 && (
         <mesh
           position={[0, wallCenterY, -depth / 2 + wallThickness / 2]}
@@ -599,7 +693,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         </mesh>
       )}
 
-      {/* Lagerraum / Kabine (Drag-fähig im Edit-Modus) */}
+      {/* Lagerraum / Kabine (Drag-f├ñhig im Edit-Modus) */}
       {cabinEnabled && cabin && (
         <Transformable
           enabled={editMode && isSelected("cabin")}
@@ -609,6 +703,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           onDragEnd={enableOrbit}
           onChange={(pos) => {
             const c = clampXZ(pos.x, pos.z, width, depth, cabinWidth / 2, cabinDepth / 2);
+            const candidate = makeAabb("cabin", "Kabine", c.x, c.z, cabinWidth, cabinDepth, collisionClearance);
+            const collision = ensureNoCollision("cabin", [candidate]);
+
+            if (collision.collided) {
+              const fallback = getFallbackPosition("cabin", { x: cabinPosX, z: cabinPosZ });
+              pos.set(fallback.x, pos.y, fallback.z);
+              return;
+            }
+
+            rememberValidPosition("cabin", { x: c.x, z: c.z });
             pos.set(c.x, pos.y, c.z);
             setConfig({
               modules: {
@@ -631,7 +735,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               <meshStandardMaterial color="#d1d5db" roughness={0.9} metalness={0.05} />
             </mesh>
 
-            {/* Türblatt (lokale Koordinaten) */}
+            {/* T├╝rblatt (lokale Koordinaten) */}
             {(() => {
               const doorThickness = 0.04;
               const doorHeight = Math.min(2.1, cabinHeight - 0.2);
@@ -674,11 +778,39 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 <meshBasicMaterial wireframe color="#22d3ee" />
               </mesh>
             )}
+            {collidingKeys.has("cabin") && (
+              <>
+                <mesh>
+                  <boxGeometry
+                    args={[
+                      cabinWidth + collisionClearance * 2,
+                      cabinHeight,
+                      cabinDepth + collisionClearance * 2,
+                    ]}
+                  />
+                  <meshBasicMaterial wireframe color="#ef4444" />
+                </mesh>
+                <Html center position={[0, cabinHeight / 2 + 0.05, 0]}>
+                  <div
+                    style={{
+                      background: "#991b1b",
+                      color: "white",
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    Belegt ÔÇô bitte verschieben
+                  </div>
+                </Html>
+              </>
+            )}
           </group>
         </Transformable>
       )}
 
-      {/* Counters – Detailed bevorzugt, sonst Legacy */}
+      {/* Counters ÔÇô Detailed bevorzugt, sonst Legacy */}
       {countersDetailed.length > 0
         ? countersDetailed.map((ctr) => {
             const variant: CounterVariant = ctr.variant ?? (mAny.counterVariant ?? "basic");
@@ -700,6 +832,16 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, d / 2);
+                  const candidate = makeAabb(key, "Counter", c.x, c.z, w, d, collisionClearance);
+                  const collision = ensureNoCollision(key, [candidate]);
+
+                  if (collision.collided) {
+                    const fallback = getFallbackPosition(key, { x: px, z: pz });
+                    pos.set(fallback.x, pos.y, fallback.z);
+                    return;
+                  }
+
+                  rememberValidPosition(key, { x: c.x, z: c.z });
                   pos.set(c.x, pos.y, c.z);
                   const next = countersDetailed.map((c0) =>
                     c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
@@ -734,11 +876,35 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       <meshBasicMaterial wireframe color="#10b981" />
                     </mesh>
                   )}
+                  {collidingKeys.has(key) && (
+                    <>
+                      <mesh>
+                        <boxGeometry
+                          args={[w + collisionClearance * 2, h + 0.05, d + collisionClearance * 2]}
+                        />
+                        <meshBasicMaterial wireframe color="#ef4444" />
+                      </mesh>
+                      <Html center position={[0, h + 0.1, 0]}>
+                        <div
+                          style={{
+                            background: "#991b1b",
+                            color: "white",
+                            padding: "4px 8px",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                          }}
+                        >
+                          Kollision erkannt
+                        </div>
+                      </Html>
+                    </>
+                  )}
                 </group>
               </Transformable>
             );
           })
-        : // Legacy: statisch – Doppelklick => Detailed
+        : // Legacy: statisch ÔÇô Doppelklick => Detailed
           Array.from({ length: counters ?? 0 }).map((_, idx) => {
             const spacing = width / ((counters ?? 0) + 1 || 1);
             const xPos = -width / 2 + spacing * (idx + 1);
@@ -773,14 +939,14 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 )}
                 {editMode && (
                   <Html center position={[0, 1.1, 0]}>
-                    <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
+                    <div className="badge-tip">Doppelklick: in ÔÇ×detailliertÔÇ£ umwandeln</div>
                   </Html>
                 )}
               </group>
             );
           })}
 
-      {/* LED-Rahmen (Legacy – verteilt an einer Wand) */}
+      {/* LED-Rahmen (Legacy ÔÇô verteilt an einer Wand) */}
       {Array.from({ length: ledFrames ?? 0 }).map((_, idx) => {
         const total = ledFrames || 1;
 
@@ -816,7 +982,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         );
       })}
 
-      {/* Screens – Detailed bevorzugt, sonst Legacy */}
+      {/* Screens ÔÇô Detailed bevorzugt, sonst Legacy */}
       {screensDetailed.length > 0
         ? screensDetailed.map((scr) => {
             const w = scr.size?.w ?? 0.9;
@@ -867,6 +1033,34 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 onDragEnd={enableOrbit}
                 onChange={(pos) => {
                   const c = clampXZ(pos.x, pos.z, width, depth, w / 2, t / 2);
+                  let candidateW = w;
+                  let candidateD = t;
+                  if (mount === "wall") {
+                    if (scr.wallSide === "left" || scr.wallSide === "right") {
+                      candidateW = t;
+                      candidateD = w;
+                    }
+                  } else if (mount === "floor") {
+                    candidateD = t;
+                  }
+                  const candidate = makeAabb(
+                    key,
+                    "Screen",
+                    c.x,
+                    c.z,
+                    candidateW,
+                    candidateD,
+                    collisionClearance
+                  );
+                  const collision = ensureNoCollision(key, [candidate]);
+
+                  if (collision.collided) {
+                    const fallback = getFallbackPosition(key, { x: px, z: pz });
+                    pos.set(fallback.x, pos.y, fallback.z);
+                    return;
+                  }
+
+                  rememberValidPosition(key, { x: c.x, z: c.z });
                   pos.set(c.x, pos.y, c.z);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
@@ -891,6 +1085,22 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       <meshBasicMaterial wireframe color="#f43f5e" />
                     </mesh>
                   )}
+                  {collidingKeys.has(key) && (
+                    <Html center position={[0, h + 0.05, 0]}>
+                      <div
+                        style={{
+                          background: "#991b1b",
+                          color: "white",
+                          padding: "4px 8px",
+                          borderRadius: 8,
+                          fontSize: 12,
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                        }}
+                      >
+                        Screen kollidiert
+                      </div>
+                    </Html>
+                  )}
                 </group>
               </Transformable>
             );
@@ -914,7 +1124,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   <ScreenPanel />
                   {editMode && (
                     <Html center position={[0, 0, 0.06]}>
-                      <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
+                      <div className="badge-tip">Doppelklick: in ÔÇ×detailliertÔÇ£ umwandeln</div>
                     </Html>
                   )}
                 </group>
@@ -937,7 +1147,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   <ScreenPanel />
                   {editMode && (
                     <Html center position={[0, 0, 0.06]}>
-                      <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
+                      <div className="badge-tip">Doppelklick: in ÔÇ×detailliertÔÇ£ umwandeln</div>
                     </Html>
                   )}
                 </group>
@@ -959,14 +1169,14 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 <ScreenPanel />
                 {editMode && (
                   <Html center position={[0, 0, 0.06]}>
-                    <div className="badge-tip">Doppelklick: in „detailliert“ umwandeln</div>
+                    <div className="badge-tip">Doppelklick: in ÔÇ×detailliertÔÇ£ umwandeln</div>
                   </Html>
                 )}
               </group>
             );
           })}
 
-      {/* Wand-Strahler Rückwand */}
+      {/* Wand-Strahler R├╝ckwand */}
       {wallLightsBack > 0 &&
         wallsClosedSides >= 1 &&
         Array.from({ length: wallLightsBack }).map((_, i) => {
@@ -1026,10 +1236,10 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           );
         })}
 
-      {/* Truss – Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
+      {/* Truss ÔÇô Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
       {trussEnabled && (
         <group position={[trussOffsetX, 0, trussOffsetZ]}>
-          {/* Drag-Griff für Truss (EditMode) */}
+          {/* Drag-Griff f├╝r Truss (EditMode) */}
           <Transformable
             enabled={editMode && isSelected("truss")}
             mode={transformMode}
@@ -1038,6 +1248,61 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             onDragEnd={enableOrbit}
             onChange={(pos) => {
               const c = clampXZ(pos.x, pos.z, width, depth, 0.4, 0.4);
+              const columnSize = 0.12;
+              const candidates = [
+                makeAabb(
+                  "truss-col-front-left",
+                  "Truss-St├╝tze",
+                  -width / 2 + c.x,
+                  depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-front-right",
+                  "Truss-St├╝tze",
+                  width / 2 + c.x,
+                  depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-back-left",
+                  "Truss-St├╝tze",
+                  -width / 2 + c.x,
+                  -depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+                makeAabb(
+                  "truss-col-back-right",
+                  "Truss-St├╝tze",
+                  width / 2 + c.x,
+                  -depth / 2 + c.z,
+                  columnSize,
+                  columnSize,
+                  collisionClearance
+                ),
+              ];
+
+              const ignoreSelf = [
+                "truss-col-front-left",
+                "truss-col-front-right",
+                "truss-col-back-left",
+                "truss-col-back-right",
+              ];
+
+              const collision = ensureNoCollision("truss", candidates, ignoreSelf);
+              if (collision.collided) {
+                const fallback = getFallbackPosition("truss", { x: trussOffsetX, z: trussOffsetZ });
+                pos.set(fallback.x, pos.y, fallback.z);
+                return;
+              }
+
+              rememberValidPosition("truss", { x: c.x, z: c.z });
               pos.set(c.x, pos.y, c.z);
               setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } as any });
             }}
@@ -1055,6 +1320,22 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   <torusGeometry args={[0.25, 0.02, 8, 24]} />
                   <meshStandardMaterial color="#22d3ee" metalness={0.7} roughness={0.25} />
                 </mesh>
+              )}
+              {collidingKeys.has("truss") && (
+                <Html center position={[0, 0.4, 0]}>
+                  <div
+                    style={{
+                      background: "#991b1b",
+                      color: "white",
+                      padding: "4px 8px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                    }}
+                  >
+                    Truss kollidiert
+                  </div>
+                </Html>
               )}
             </group>
           </Transformable>
@@ -1201,7 +1482,7 @@ export default function Configurator3D() {
       className="canvas-root"
       onPointerMissed={() => {
         // Fallback-Deselect, falls obere Ebene Events nicht bekommt
-        // (Selektion-Reset passiert primär in StandMesh)
+        // (Selektion-Reset passiert prim├ñr in StandMesh)
       }}
     >
       <color attach="background" args={["#020617"]} />
