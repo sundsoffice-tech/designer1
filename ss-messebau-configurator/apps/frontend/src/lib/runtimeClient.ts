@@ -1,4 +1,5 @@
 import { fetchApi } from "./apiBase";
+import { calcPrice } from "./pricing";
 import type { StandConfig } from "./pricing";
 
 type PriceRequestOptions = {
@@ -26,10 +27,43 @@ const resolveCustomerId = (options?: PriceRequestOptions) => {
   return options?.customerId || (envCustomerId ? String(envCustomerId) : undefined);
 };
 
+const isRuntimeDisabled = String(import.meta.env.VITE_DISABLE_RUNTIME).toLowerCase() === "true";
+
+const LOCAL_CONFIG_KEY = "ss-runtime-configs";
+
+type LocalConfigEntry = { config: StandConfig; createdAt: number };
+
+const readLocalConfigs = (): Record<string, LocalConfigEntry> => {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(LOCAL_CONFIG_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, LocalConfigEntry>;
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    // ignore parse errors and reset below
+  }
+  return {};
+};
+
+const writeLocalConfigs = (value: Record<string, LocalConfigEntry>) => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(value));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export async function fetchRuntimePrice(
   config: StandConfig,
   options?: PriceRequestOptions
 ): Promise<number> {
+  if (isRuntimeDisabled) {
+    const customerId = resolveCustomerId(options);
+    return calcPrice(config, undefined, { customerId });
+  }
+
   const customerId = resolveCustomerId(options);
   const payload: Record<string, unknown> = { config };
   if (customerId) payload.customerId = customerId;
@@ -61,6 +95,10 @@ export async function fetchRuntimePrice(
 export async function validateRuntimeConfig(
   config: StandConfig
 ): Promise<{ ok: boolean; issues: ValidationIssue[] }> {
+  if (isRuntimeDisabled) {
+    return { ok: true, issues: [] };
+  }
+
   let res: Response;
   try {
     res = await fetchApi("/api/runtime/validate", {
@@ -95,6 +133,14 @@ export async function validateRuntimeConfig(
 export async function saveRuntimeConfig(
   config: StandConfig
 ): Promise<{ id: string; expiresAt?: number }> {
+  if (isRuntimeDisabled) {
+    const existing = readLocalConfigs();
+    const id = `local-${Date.now().toString(36)}`;
+    existing[id] = { config, createdAt: Date.now() };
+    writeLocalConfigs(existing);
+    return { id };
+  }
+
   let res: Response;
   try {
     res = await fetchApi("/api/configs", {
@@ -120,6 +166,15 @@ export async function saveRuntimeConfig(
 }
 
 export async function loadRuntimeConfig(id: string): Promise<StandConfig> {
+  if (isRuntimeDisabled) {
+    const configs = readLocalConfigs();
+    const entry = configs[id];
+    if (!entry) {
+      throw new Error("Lokale Konfiguration nicht gefunden (Runtime-Backend ist deaktiviert)");
+    }
+    return entry.config;
+  }
+
   let res: Response;
   try {
     res = await fetchApi(`/api/configs/${encodeURIComponent(id)}`);

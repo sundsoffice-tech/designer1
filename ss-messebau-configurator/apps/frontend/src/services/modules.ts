@@ -9,6 +9,8 @@ import type {
 import { fetchApi } from "../lib/apiBase";
 import modulesJson from "../data/modules.json";
 
+const runtimeDisabled = String(import.meta.env.VITE_DISABLE_RUNTIME).toLowerCase() === "true";
+
 const colliderSchema = z.union([z.literal("aabb"), z.literal("obb"), z.literal("mesh")]);
 const dimensionsSchema = z.object({
   width: z.number().optional(),
@@ -111,6 +113,7 @@ let cachedRemoteVariants: ModuleVariantMap | null = null;
 let cachedRemoteCompatibility: ModuleCompatibilityIndex | null = null;
 
 const fetchRemoteCatalog = async (): Promise<ModuleCatalog | null> => {
+  if (runtimeDisabled) return null;
   try {
     const res = await fetchApi("/api/catalog/modules");
     if (!res.ok) return null;
