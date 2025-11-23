@@ -125,6 +125,10 @@ function clampXZ(
   };
 }
 
+function clampValue(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 /** Geometrien */
 function CounterBlock({
   variant,
@@ -1096,7 +1100,11 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   }
 
                   rememberValidPosition(key, { x: c.x, z: c.z });
-                  pos.set(c.x, pos.y, c.z);
+                  const clampedY =
+                    mount === "truss"
+                      ? clampValue(pos.y, trussHeight - 0.5, trussHeight + 0.5)
+                      : pos.y;
+                  pos.set(c.x, clampedY, c.z);
                   const next = screensDetailed.map((s0) =>
                     s0.id === scr.id
                       ? { ...s0, position: { x: c.x, z: c.z } }
