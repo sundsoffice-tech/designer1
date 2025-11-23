@@ -98,6 +98,12 @@ const LazyTrussBanners = lazy(() => import("./TrussBanners"));
 const clampDprValue = (value: number) => Math.min(2, Math.max(0.5, value));
 const MIN_PITCH_RAD = THREE.MathUtils.degToRad(15);
 const MAX_PITCH_RAD = THREE.MathUtils.degToRad(75);
+const DEFAULT_MOUSE_BUTTONS = {
+  left: CameraControls.ACTION.ROTATE,
+  middle: CameraControls.ACTION.TRUCK,
+  right: CameraControls.ACTION.NONE,
+  wheel: CameraControls.ACTION.DOLLY,
+};
 /** Detaillierte, frei platzierbare Objekte (optionale Felder im Store) */
 type DetailedCounter = CounterConfig;
 type DetailedScreen = ScreenConfig;
@@ -3138,6 +3144,7 @@ function CameraRig({
   const nextAction = useCameraStore((s) => s.nextAction);
   const clearAction = useCameraStore((s) => s.clearAction);
   const setLodScale = useCameraStore((s) => s.setLodScale);
+  const defaultMouseButtons = useMemo(() => DEFAULT_MOUSE_BUTTONS, []);
 
   const lastPoseRef = useRef<CameraPose | null>(null);
   const activeActionRef = useRef<number | null>(null);
@@ -3212,11 +3219,13 @@ function CameraRig({
     const controls = orbitRef.current;
     if (!controls) return;
 
+    controls.minPolarAngle = MIN_PITCH_RAD;
+    controls.maxPolarAngle = MAX_PITCH_RAD;
+    controls.mouseButtons = defaultMouseButtons;
+
     controls.infinityDolly = true;
     controls.minDistance = distanceRange.min;
     controls.maxDistance = distanceRange.max;
-    controls.minPolarAngle = MIN_PITCH_RAD;
-    controls.maxPolarAngle = MAX_PITCH_RAD;
     controls.dollyToCursor = true;
     controls.draggingSmoothTime = 0.22;
     controls.smoothTime = 0.82;
@@ -3245,6 +3254,7 @@ function CameraRig({
     config.width,
     distanceRange.max,
     distanceRange.min,
+    defaultMouseButtons,
     floorHeight,
     orbitRef,
   ]);
@@ -3627,12 +3637,7 @@ export default function Configurator3D() {
         dollyToCursor
         smoothTime={0.82}
         draggingSmoothTime={0.22}
-        mouseButtons={{
-          left: CameraControls.ACTION.ROTATE,
-          middle: CameraControls.ACTION.TRUCK,
-          right: CameraControls.ACTION.NONE,
-          wheel: CameraControls.ACTION.DOLLY,
-        }}
+        mouseButtons={DEFAULT_MOUSE_BUTTONS}
         touches={{
           one: CameraControls.ACTION.TOUCH_ROTATE,
           two: CameraControls.ACTION.TOUCH_DOLLY_TRUCK,
