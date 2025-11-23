@@ -59,72 +59,8 @@ jest.mock("../src/services/modules", () => ({
   moduleCompatibilityIndex: {},
 }));
 
-import { calcPriceDetailed, type StandConfig, type StandModules } from "../src/lib/pricing";
-
-const baseModules: StandModules = {
-  wallsClosedSides: 0,
-  storageRoom: false,
-  counters: 0,
-  countersWall: "front",
-  countersWithPower: false,
-  counterVariant: "basic",
-  ledFrames: 0,
-  ledFramesDetailed: [],
-  screens: 0,
-  screensWall: "back",
-  truss: false,
-  raisedFloor: false,
-  trussLights: 0,
-  trussLightsFront: 0,
-  trussLightsBack: 0,
-  trussLightsLeft: 0,
-  trussLightsRight: 0,
-  wallLightsBack: 0,
-  wallLightsLeft: 0,
-  wallLightsRight: 0,
-  walls: {},
-  wallsDetail: {},
-  wallPanelRules: {},
-  wallPanels: {},
-  cabin: undefined,
-  floor: undefined,
-  accessibility: undefined,
-  frameVariant: undefined,
-  frameSize: undefined,
-  frameColor: undefined,
-  activeBundles: undefined,
-  detailedScreens: [],
-  seating: [],
-  chairsDetailed: [],
-  roundTables: [],
-  customObjects: [],
-  trussConfig: undefined,
-  trussBannersFront: undefined,
-  trussBannersBack: undefined,
-  trussBannersLeft: undefined,
-  trussBannersRight: undefined,
-  trussBannerWidth: undefined,
-  trussBannerHeight: undefined,
-  trussHeightMode: undefined,
-  trussHeightOffset: undefined,
-  trussHeight: undefined,
-  trussOffset: undefined,
-  countersDetailed: [],
-};
-
-const makeConfig = (override?: Partial<StandConfig>): StandConfig => ({
-  width: 3,
-  depth: 3,
-  height: 3,
-  type: "row",
-  region: "NRW",
-  rush: false,
-  modules: {
-    ...baseModules,
-    ...(override?.modules as Partial<StandModules> | undefined),
-  },
-  ...override,
-});
+import { calcPriceDetailed } from "../src/lib/pricing";
+import { baseModules, makeConfig } from "./testData";
 
 describe("calcPriceDetailed", () => {
   it("calculates base price with day-rate labor and no modules", () => {

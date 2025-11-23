@@ -17,6 +17,12 @@ VITE_ENABLE_ADMIN_PANEL=false
 - Start frontend: `npm run dev` (variants: `npm run dev:ai` enables AI+Voice flags, `npm run dev:admin` adds Admin, `npm run dev:sales` enables Camera tools).
 - Start AI/runtime backend: `npm run api` (Express on :4000; serves `/api/ai`, runtime pricing/validation, uploads). Keep `VITE_API_BASE_URL` and `VITE_AI_API_BASE` pointing here.
 
+## Tests & CI/CD
+- Linting/Types/Build: `pnpm --filter @ss/frontend lint`, `pnpm --filter @ss/frontend typecheck`, `pnpm --filter @ss/frontend build` (CI uses pnpm 9.15; `npm` works locally too).
+- Unit/Integration: `pnpm --filter @ss/frontend test:unit -- --runInBand` (Jest + ts-jest, jsdom, React Testing Library + jest-dom setup in `jest.setup.ts`).
+- E2E: `pnpm --filter @ss/frontend test:e2e` (Playwright spins up Vite dev server on `:4173` via `playwright.config.ts`; set `PLAYWRIGHT_BASE_URL` to reuse a running preview).
+- CI-Pipeline: `.github/workflows/ci.yml` runs lint → typecheck → Jest → Playwright → build on PRs/pushes. Deploy job targets Vercel (`VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID`) on `main` when secrets are present.
+
 ## Smoke Tests
 ### Core configurator
 - With backend running, open `/`; change stand width/depth/height and type (row/corner) and confirm layout + price update.
