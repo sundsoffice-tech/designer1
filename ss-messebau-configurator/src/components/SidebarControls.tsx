@@ -34,9 +34,19 @@ export default function SidebarControls({
   drawerOpen: boolean;
   onClose: () => void;
 }) {
-  const { config, price, setConfig, applyPreset, replaceConfig, undo, redo, history, future } =
-    useConfigStore();
+  const {
+    config,
+    price,
+    setConfig,
+    applyPreset,
+    replaceConfig,
+    undo,
+    redo,
+    history,
+    future,
+  } = useConfigStore();
   const modules = config.modules;
+
   const sidebarClassName = drawerOpen
     ? "sidebar sidebar-open translate-x-0"
     : "sidebar sidebar-hidden -translate-x-full";
