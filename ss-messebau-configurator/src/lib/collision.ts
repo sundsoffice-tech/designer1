@@ -1,13 +1,23 @@
 import { resolveSeatingGeometry } from "../config/objectDimensions";
 import type { ChairConfig, StandConfig } from "./pricing";
 
-type Aabb = {
+export type Aabb = {
   id: string;
   label: string;
   minX: number;
   maxX: number;
   minZ: number;
   maxZ: number;
+
+  // optional extra metadata for 3D collision
+  centerX?: number;
+  centerZ?: number;
+  halfWidth?: number;
+  halfDepth?: number;
+  baseWidth?: number;
+  baseDepth?: number;
+  clearance?: number;
+  rotationY?: number;
 };
 
 export const DEFAULT_CLEARANCE = 0.2;
