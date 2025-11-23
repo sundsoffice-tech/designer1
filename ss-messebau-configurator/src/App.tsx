@@ -7,6 +7,8 @@ import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useConfigStore } from "./store/configStore";
 import { resolveEffectiveContrast, useAccessibilityStore } from "./store/accessibilityStore";
 import { useTranslation } from "./i18n";
+import { ContextMenuRoot, buildContextMenu, useContextMenuStore } from "./contextMenu";
+import { useSceneInteractionStore } from "./store/sceneInteractionStore";
 
 export default function App() {
   const { t } = useTranslation();
@@ -17,6 +19,9 @@ export default function App() {
   const contrastMode = useAccessibilityStore((s) => s.contrastMode);
   const prefersHighContrast = useAccessibilityStore((s) => s.prefersHighContrast);
   const setPrefersHighContrast = useAccessibilityStore((s) => s.setPrefersHighContrast);
+  const openContextMenu = useContextMenuStore((s) => s.openMenu);
+  const closeContextMenu = useContextMenuStore((s) => s.closeMenu);
+  const getInteractionContext = useSceneInteractionStore((s) => s.getContext);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-contrast: more)");
@@ -60,6 +65,22 @@ export default function App() {
     setIsSidebarOpen(isDesktop);
   }, [isDesktop]);
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+      if (event.key === "ContextMenu" || (event.shiftKey && event.key.toLowerCase() === "f10")) {
+        event.preventDefault();
+        const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        const context = getInteractionContext({ mousePosition: center });
+        openContextMenu({ ...buildContextMenu(context), position: center });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [closeContextMenu, getInteractionContext, openContextMenu]);
+
   const toggleSidebar = () => {
     if (isDesktop) {
       setIsSidebarOpen(true);
@@ -102,6 +123,7 @@ export default function App() {
           <Configurator3D />
         </ErrorBoundary>
       </main>
+      <ContextMenuRoot />
     </div>
   );
 }

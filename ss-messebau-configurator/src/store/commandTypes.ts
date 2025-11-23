@@ -1,0 +1,16 @@
+export type CommandId =
+  | "duplicate"
+  | "delete"
+  | "focusCamera"
+  | "focusHere"
+  | "changeMaterial"
+  | "resetTransform"
+  | "snapToGrid"
+  | "changeScreenVideo"
+  | "selectAll"
+  | "clearSelection"
+  | "undo"
+  | "redo"
+  | "centerCameraHere"
+  | "alignToGrid"
+  | "toggleCollisionLock";

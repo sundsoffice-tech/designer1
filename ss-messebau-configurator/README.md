@@ -29,8 +29,8 @@ Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
 ## OpenAI-Anbindung (Backend-Proxy)
 - Key bleibt serverseitig: `.env` auf Basis von `.env.example` mit `OPENAI_API_KEY`, optional `OPENAI_MODEL`, `PORT` und `CORS_ORIGIN` fuellen. `.env` ist in `.gitignore`.
 - Backend starten: `npm run api` (Express auf Port 4000). Healthcheck: `GET /api/ai/health`.
-- Frontend ruft `POST /api/ai/design` ueber `src/lib/aiClient.ts`; Basis-URL per `VITE_API_BASE_URL` konfigurierbar (Default `http://localhost:4000`).
-- KI-Assistenz sitzt in der Sidebar und schickt nur die aktuelle Konfig-JSON (keine Assets, kein Key) an die API. Antwort wird validiert und als Patch auf den Store angewendet.
+- Frontend nutzt `src/lib/aiClient.ts` fuer alle AI-Endpunkte (`/stand-from-text`, `/marketing-copy`, `/banner-image`, `/voice`). Basis-URL & API-Key kommen aus `VITE_AI_API_BASE` und `VITE_AI_API_KEY`.
+- Das Sidebar-Panel `AiAssistantPanel` ist per Feature-Flag `VITE_ENABLE_AI_ASSISTANT=true` lazy-loaded; ohne Flag/Config wird kein KI-Code geladen und die UI zeigt eine Fehlermeldung aus dem Client.
 
 ## Runtime-Backend (Preis/Plausibilitaet/Speichern)
 - Preise + Plausibilitaet laufen serverseitig: `POST /api/runtime/price` und `POST /api/runtime/validate` (Stand-JSON). Optionaler Kundenkontext per `customerId` im Body oder Header `x-customer-id` (Rabatte).
@@ -44,4 +44,8 @@ Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
 - Route: `/admin/catalog` laedt eine schlanke Admin-Shell mit `ObjectCatalogAdmin`.
 - Guard: nur sichtbar in `import.meta.env.DEV` oder wenn `VITE_ENABLE_ADMIN_PANEL=true` gesetzt ist (siehe `.env.example`).
 - Nicht in der Haupt-UI verlinkt; fallback ist ein kurzer Hinweistext, wenn der Admin-Bereich deaktiviert ist.
+
+## Kamera-Panel (Sales-Flag)
+- Setze `VITE_ENABLE_CAMERA_TOOLS=true`, um das Kamera-/Tour-Panel in der Sidebar einzublenden (Ansichten speichern, gefuehrte Tour starten/stoppen).
+- Standard bleibt `false`, damit das Feature nur bei Sales-Demos sichtbar ist.
 

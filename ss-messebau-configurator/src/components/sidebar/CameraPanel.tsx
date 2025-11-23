@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useCameraStore, type CameraPose } from "../../store/cameraStore";
+import { useCameraStore, type CameraPose, type CameraGuide, type SavedView } from "../../store/cameraStore";
 import { useTranslation } from "../../i18n";
 
 type CameraPanelProps = {
@@ -13,14 +13,18 @@ const clampValue = (value: number, min: number, max: number) => Math.min(max, Ma
 
 export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelProps) {
   const { t } = useTranslation();
-  const savedViews = useCameraStore((s) => s.savedViews);
-  const guides = useCameraStore((s) => s.guides);
+  const savedViews: SavedView[] = useCameraStore((s) => s.savedViews);
+  const guides: CameraGuide[] = useCameraStore((s) => s.guides);
   const currentPose = useCameraStore((s) => s.currentPose);
   const queueAction = useCameraStore((s) => s.queueAction);
   const saveCurrentView = useCameraStore((s) => s.saveCurrentView);
   const deleteView = useCameraStore((s) => s.deleteView);
   const loadView = useCameraStore((s) => s.loadView);
+  const createGuideFromViews = useCameraStore((s) => s.createGuideFromViews);
+  const deleteGuide = useCameraStore((s) => s.deleteGuide);
   const [viewName, setViewName] = useState<string>(t("camera.savePlaceholder"));
+  const [guideName, setGuideName] = useState<string>(t("camera.guideNamePlaceholder"));
+  const [draftViewIds, setDraftViewIds] = useState<string[]>([]);
 
   const targetY = useMemo(
     () => clampValue(height * 0.45 + floorHeight, floorHeight + 1.2, floorHeight + Math.max(height * 0.85, 2)),
@@ -59,6 +63,18 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
     const created = saveCurrentView(viewName);
     if (created) {
       setViewName(t("camera.savePlaceholder"));
+    }
+  };
+
+  const toggleDraftView = (id: string) => {
+    setDraftViewIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));
+  };
+
+  const saveGuide = () => {
+    const created = createGuideFromViews(guideName, draftViewIds);
+    if (created) {
+      setDraftViewIds([]);
+      setGuideName(t("camera.guideNamePlaceholder"));
     }
   };
 
@@ -149,6 +165,62 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 600 }}>{t("camera.customGuideTitle")}</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{t("camera.customGuideHint")}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {savedViews.map((view) => {
+              const active = draftViewIds.includes(view.id);
+              return (
+                <button
+                  key={`draft-${view.id}`}
+                  type="button"
+                  className="btn-secondary"
+                  style={{
+                    padding: "6px 10px",
+                    borderColor: active ? "var(--primary)" : "rgba(255,255,255,0.08)",
+                    background: active ? "rgba(59,130,246,0.12)" : "rgba(255,255,255,0.04)",
+                  }}
+                  onClick={() => toggleDraftView(view.id)}
+                >
+                  {view.name}
+                </button>
+              );
+            })}
+            {savedViews.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>{t("camera.customGuideEmpty")}</div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              type="text"
+              value={guideName}
+              onChange={(e) => setGuideName(e.target.value)}
+              placeholder={t("camera.guideNamePlaceholder")}
+              style={{ flex: 1, minWidth: 180 }}
+            />
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={draftViewIds.length < 2}
+              onClick={saveGuide}
+            >
+              {t("camera.saveGuideFromViews")}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={draftViewIds.length === 0}
+              onClick={() => setDraftViewIds([])}
+            >
+              {t("camera.clearGuideDraft")}
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            {t("camera.selectedForGuide", { count: draftViewIds.length })}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontWeight: 600 }}>{t("camera.guidedTitle")}</div>
           {guides.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--muted)" }}>{t("camera.noGuides")}</div>
@@ -167,7 +239,22 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
                 }}
               >
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{guide.name}</div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div style={{ fontWeight: 600 }}>{guide.name}</div>
+                    {guide.locked && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,0.08)",
+                          border: "1px solid rgba(255,255,255,0.12)",
+                        }}
+                      >
+                        {t("camera.systemGuide")}
+                      </span>
+                    )}
+                  </div>
                   {guide.description && (
                     <div style={{ fontSize: 12, color: "var(--muted)" }}>{guide.description}</div>
                   )}
@@ -179,6 +266,11 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
                 >
                   {t("camera.playGuide")}
                 </button>
+                {!guide.locked && (
+                  <button type="button" className="btn-secondary" onClick={() => deleteGuide(guide.id)}>
+                    {t("camera.deleteGuide")}
+                  </button>
+                )}
               </div>
             ))
           )}

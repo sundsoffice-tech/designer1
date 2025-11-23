@@ -21,7 +21,10 @@ export default function SeatingControls() {
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
 
-  const seating = config.modules.chairsDetailed ?? [];
+  const seating = useMemo(
+    () => config.modules.chairsDetailed ?? [],
+    [config.modules.chairsDetailed]
+  );
   const [coverChoice, setCoverChoice] = useState<Partial<Record<SeatingType, SeatingCover>>>({});
 
   const seatingCounts = useMemo(

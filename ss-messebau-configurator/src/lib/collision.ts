@@ -1,4 +1,5 @@
-﻿import type { StandConfig } from "./pricing";
+import { resolveSeatingGeometry } from "../config/objectDimensions";
+import type { ChairConfig, StandConfig } from "./pricing";
 
 type Aabb = {
   id: string;
@@ -70,7 +71,7 @@ export function buildSceneAabbs(
 
   // Kabine
   const cabin = modules.cabin;
-  const cabinEnabled = cabin?.enabled ?? modules.storageRoom;
+  const cabinEnabled = Boolean(cabin?.enabled ?? modules.storageRoom);
   if (cabin && cabinEnabled) {
     const x = cabin.position?.x ?? -cfg.width / 2 + (cabin.width ?? 1.5) / 2 + 0.25;
     const z = cabin.position?.z ?? -cfg.depth / 2 + (cabin.depth ?? 1.5) / 2 + 0.25;
@@ -111,6 +112,16 @@ export function buildSceneAabbs(
 
     const depth = mount === "floor" ? t || 0.1 : w * 0.25;
     boxes.push(makeAabb(`scr-d-${scr.id}`, "Screen", x, z, w, depth, clearance));
+  });
+
+  // Sitzmoebel
+  const chairs = (modules.chairsDetailed ?? []) as ChairConfig[];
+  chairs.forEach((chair, idx) => {
+    const type = chair.type ?? "chair";
+    const dims = resolveSeatingGeometry(type, chair.footprint, chair.seatHeight, chair.backHeight);
+    const x = chair.position?.x ?? 0;
+    const z = chair.position?.z ?? 0;
+    boxes.push(makeAabb(`seat-${chair.id ?? idx}`, "Sitzmoebel", x, z, dims.w, dims.d, clearance));
   });
 
   // Truss-St├╝tzen (vier Eck-Pfosten)

@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "./apiBase";
+import { fetchApi } from "./apiBase";
 import type { StandConfig } from "./pricing";
 
 type PriceRequestOptions = {
@@ -34,11 +34,17 @@ export async function fetchRuntimePrice(
   const payload: Record<string, unknown> = { config };
   if (customerId) payload.customerId = customerId;
 
-  const res = await fetch(`${apiBaseUrl}/api/runtime/price`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetchApi("/api/runtime/price", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Preis-API nicht erreichbar";
+    throw new Error(message);
+  }
 
   if (!res.ok) {
     const msg = await toErrorMessage(res);
@@ -55,11 +61,17 @@ export async function fetchRuntimePrice(
 export async function validateRuntimeConfig(
   config: StandConfig
 ): Promise<{ ok: boolean; issues: ValidationIssue[] }> {
-  const res = await fetch(`${apiBaseUrl}/api/runtime/validate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config }),
-  });
+  let res: Response;
+  try {
+    res = await fetchApi("/api/runtime/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Plausibilitaets-API nicht erreichbar";
+    throw new Error(message);
+  }
 
   if (!res.ok) {
     const msg = await toErrorMessage(res);
@@ -83,11 +95,17 @@ export async function validateRuntimeConfig(
 export async function saveRuntimeConfig(
   config: StandConfig
 ): Promise<{ id: string; expiresAt?: number }> {
-  const res = await fetch(`${apiBaseUrl}/api/configs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config }),
-  });
+  let res: Response;
+  try {
+    res = await fetchApi("/api/configs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Speichern fehlgeschlagen (Backend nicht erreichbar)";
+    throw new Error(message);
+  }
 
   if (!res.ok) {
     const msg = await toErrorMessage(res);
@@ -102,7 +120,13 @@ export async function saveRuntimeConfig(
 }
 
 export async function loadRuntimeConfig(id: string): Promise<StandConfig> {
-  const res = await fetch(`${apiBaseUrl}/api/configs/${encodeURIComponent(id)}`);
+  let res: Response;
+  try {
+    res = await fetchApi(`/api/configs/${encodeURIComponent(id)}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Konfiguration konnte nicht geladen werden.";
+    throw new Error(message);
+  }
 
   if (!res.ok) {
     const msg = await toErrorMessage(res);

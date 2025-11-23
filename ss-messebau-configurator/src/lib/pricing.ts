@@ -1,14 +1,14 @@
-// src/lib/pricing.ts
+﻿// src/lib/pricing.ts
 
 // ======================
 // Typen
 // ======================
 
 export type StandType = "row" | "corner" | "head" | "island";
-type Region = "NRW" | "Sued" | "Süd" | "Nord" | "Ausland";
+export type Region = "NRW" | "Sued" | "S\u00fcd" | "Nord" | "Ausland";
 
 export type WallSide = "back" | "left" | "right";
-type WallType = "plain" | "wood" | "led" | "banner" | "seg";
+export type WallType = "plain" | "wood" | "led" | "banner" | "seg";
 
 export type WallConfig = {
   closed: boolean;
@@ -20,7 +20,7 @@ export type WallSurface = "system" | "wood" | "banner" | "seg" | "led";
 
 export type WallDetailConfig = {
   surface?: WallSurface;
-  height?: number; // optional, falls Wand abweichend von Standhöhe
+  height?: number; // optional, falls Wand abweichend von StandhÃ¶he
   /** Optisches Finish (Farbe/Print) aus der Admin-Materialbibliothek */
   finishId?: string;
 };
@@ -29,7 +29,7 @@ export type WallPanelRules = {
   baseWidth: number;
   minWidth: number;
   maxWidth: number;
-  /** Fallback-Oberfläche für neu erzeugte Paneele */
+  /** Fallback-OberflÃ¤che fÃ¼r neu erzeugte Paneele */
   defaultSurface?: WallSurface;
 };
 
@@ -43,16 +43,26 @@ export type WallPanelConfig = {
   locked?: boolean;
 };
 
+export type WallAttachmentBinding = {
+  id: string;
+  wall?: WallSide;
+  floating: boolean;
+  /** zuletzt bekannte Wand (fuer spaetere Wiederherstellung) */
+  lastWall?: WallSide;
+};
+
 export type WallAttachmentIndex = {
   byWall: Record<WallSide, string[]>;
   floating: string[];
   /** neutrale Zielwand, auf die verschoben wurde (falls verfuegbar) */
   neutralWall?: WallSide;
+  /** direkte Lookup-Tabelle pro Objekt */
+  byId?: Record<string, WallAttachmentBinding>;
 };
 
-type FloorType = "carpet" | "laminate" | "vinyl" | "wood";
+export type FloorType = "carpet" | "laminate" | "vinyl" | "wood";
 
-type FloorConfig = {
+export type FloorConfig = {
   type: FloorType;
   raised: boolean;
   /** Optionaler Verweis auf eine Material-Definition aus der Admin-Bibliothek */
@@ -71,11 +81,11 @@ type AccessibilityConfig = {
 };
 
 // Kabine / Lagerraum
-type CabinDoorSide = "front" | "left" | "right" | "back";
+export type CabinDoorSide = "front" | "left" | "right" | "back";
 
-type CabinDoorConfig = {
+export type CabinDoorConfig = {
   side: CabinDoorSide;
-  width: number; // Meter (später für große Öffnungen nutzbar)
+  width: number; // Meter (spÃ¤ter fÃ¼r groÃŸe Ã–ffnungen nutzbar)
 };
 
 export type CabinConfig = {
@@ -83,10 +93,10 @@ export type CabinConfig = {
   width: number;
   depth: number;
   height: number;
-  /** Optional unterschiedliche Wandoberflächen pro Seite */
+  /** Optional unterschiedliche WandoberflÃ¤chen pro Seite */
   wallSurfaces?: Partial<Record<CabinDoorSide, WallSurface>>;
 
-  /** Legacy: eine einfache Türangabe (falls doors nicht genutzt wird) */
+  /** Legacy: eine einfache TÃ¼rangabe (falls doors nicht genutzt wird) */
   doorSide?: CabinDoorSide;
 
   /** Position der Kabinenmitte relativ zur Standmitte (0/0) */
@@ -95,7 +105,7 @@ export type CabinConfig = {
     z: number;
   };
 
-  /** Optionale Liste an Türen (einzeln oder mehrere / breite Öffnung) */
+  /** Optionale Liste an TÃ¼ren (einzeln oder mehrere / breite Ã–ffnung) */
   doors?: CabinDoorConfig[];
 };
 
@@ -187,7 +197,7 @@ export type RoundTableConfig = {
   height?: number;
   /** Optionaler Einzelpreis */
   unitPrice?: number;
-  /** individuelle Farbe der Tischoberfläche/Basis */
+  /** individuelle Farbe der TischoberflÃ¤che/Basis */
   color?: string;
   position: {
     x: number;
@@ -216,7 +226,7 @@ export type WallLightConfig = {
     x?: number;
     z?: number;
   };
-  /** Montagehöhe ab Boden (Meter) */
+  /** MontagehÃ¶he ab Boden (Meter) */
   heightFromFloor?: number;
   color?: string;
 };
@@ -261,7 +271,7 @@ export type CounterConfig = {
   size?: { w?: number; d?: number; h?: number };
   /** optionaler Template-/Admin-Preis */
   unitPrice?: number;
-  /** optionale Direktfarben für individuelle Tresen */
+  /** optionale Direktfarben fÃ¼r individuelle Tresen */
   colors?: {
     body?: string;
     accent?: string;
@@ -279,7 +289,7 @@ export type StandModules = {
   countersWall?: CounterPlacement;
   countersWithPower?: boolean;
   counterVariant?: CounterVariant;
-  /** Standard-Finish f�r alle Tresen (Admin-Palette) */
+  /** Standard-Finish fï¿½r alle Tresen (Admin-Palette) */
   counterFinishId?: string;
 
   ledFrames?: number;
@@ -323,9 +333,9 @@ export type StandModules = {
   wallLightsRight?: number;
   wallLightsDetailed?: WallLightConfig[];
 
-  // Wände (für Advanced-Pricing)
+  // WÃ¤nde (fÃ¼r Advanced-Pricing)
   walls?: Partial<Record<WallSide, WallConfig>>;
-  /** Detail-Oberflächen / Sonderhöhen für 3D & Pricing */
+  /** Detail-OberflÃ¤chen / SonderhÃ¶hen fÃ¼r 3D & Pricing */
   wallsDetail?: Partial<Record<WallSide, WallDetailConfig>>;
   /** Paneel-Regeln (Segmentbreiten usw.) */
   wallPanelRules?: Partial<WallPanelRules>;
@@ -354,7 +364,7 @@ export type StandModules = {
   /** Mindestabstand f\u00fcr Kollisionspr\u00fcfungen (Meter) */
   collisionClearance?: number;
 
-  // Truss-Details (optional, falls später genutzt)
+  // Truss-Details (optional, falls spÃ¤ter genutzt)
   trussConfig?: TrussConfig;
 
   // weitere Truss-Infos aus UI
@@ -365,11 +375,13 @@ export type StandModules = {
   trussBannerWidth?: number;
   trussBannerHeight?: number;
   trussBannerMipmaps?: string[];
+  trussBannerKtx2Url?: string;
+  trussBannerWebpUrl?: string;
   trussBannerImageUrl?: string;
   trussHeightMode?: "absolute" | "offset";
   trussHeightOffset?: number;
 
-  /** absolute Truss-Höhe über Hallenboden (m), optional */
+  /** absolute Truss-HÃ¶he Ã¼ber Hallenboden (m), optional */
   trussHeight?: number;
   /** optionale XY-Verschiebung der Truss (Meter, relativ zur Standmitte) */
   trussOffset?: { x?: number; z?: number };
@@ -383,14 +395,33 @@ export type StandModules = {
     ambientColor?: string;
     ambientIntensity?: number;
     environmentIntensity?: number;
+    /** Globaler Roughness-Multiplikator (0..1 = glatter, >1 = matter) */
+    materialRoughness?: number;
+    /** Globaler Metallanteil (Multiplikator) */
+    materialMetalness?: number;
     emissiveIntensity?: number;
+    /** Auswahl der HDRI-Umgebung (UI) */
+    hdri?: "hall" | "studio" | "outdoor";
+    /** HDRI als Hintergrund rendern */
+    background?: boolean;
+    /** Exposure / Tone Mapping */
+    exposure?: number;
+    toneMapping?: "aces" | "agx" | "reinhard" | "neutral";
+    /** Post-Processing */
+    bloom?: boolean;
+    bloomIntensity?: number;
+    dof?: boolean;
+    dofFocus?: number;
+    dofBokehScale?: number;
+    /** Spiegelungs-Staerke fuer glanzende Flaechen */
+    envMapIntensity?: number;
   };
 };
 
 export type StandConfig = {
   width: number; // Meter
   depth: number; // Meter
-  height: number; // Meter (Standard-Wandhöhe)
+  height: number; // Meter (Standard-WandhÃ¶he)
   type: StandType;
   region: Region;
   rush: boolean;
@@ -631,7 +662,7 @@ const resolveCustomerMultiplier = (
   };
 };
 
-const SOUTH_ALIASES = ["Sued", "S\u00fcd", "S\uFFFDd"];
+const SOUTH_ALIASES = ["Sued", "S\u00fcd", "S\u00c3\u00bcd"] as const;
 
 const resolveSouthValue = <T>(
   map: Partial<Record<string, T | undefined>>,
@@ -642,6 +673,13 @@ const resolveSouthValue = <T>(
     if (value != null) return value;
   }
   return fallback;
+};
+
+const normalizeRegion = (region: string): Region => {
+  if (region === "Nord" || region === "Ausland") return region;
+  if (region === "Sued") return "Sued";
+  if (region === "S\u00fcd" || region === "S\u00c3\u00bcd") return "S\u00fcd";
+  return "NRW";
 };
 
 const resolvePricing = (model?: PricingModel): ResolvedPricing => {
@@ -657,7 +695,7 @@ const resolvePricing = (model?: PricingModel): ResolvedPricing => {
     Nord: travelCostSource.Nord ?? 0,
     Ausland: travelCostSource.Ausland ?? 0,
     Sued: southTravel,
-    Süd: southTravel,
+    "S\u00fcd": southTravel,
   };
 
   const regionFactorSource = merged.regionFactorMap ?? {};
@@ -667,7 +705,7 @@ const resolvePricing = (model?: PricingModel): ResolvedPricing => {
     Nord: regionFactorSource.Nord ?? 1,
     Ausland: regionFactorSource.Ausland ?? 1,
     Sued: southFactor,
-    Süd: southFactor,
+    "S\u00fcd": southFactor,
   };
 
   return {
@@ -1141,6 +1179,7 @@ function calcFrameCost(modules: StandModules): VariantCost {
   const result: VariantCost = { total: 0, perVariant: {} };
 
   frames.forEach((frame) => {
+    if (!frame.variant) return;
     const def = moduleVariantsByKey[frame.variant];
     if (!def) return;
     const count = Math.max(1, Number(frame.count) || 1);
@@ -1308,14 +1347,11 @@ export function calcPriceDetailed(
   );
   const area = cfg.width * cfg.depth;
   const resolveRegionValue = (map: Record<Region, number>) => {
-    const fallback = map as Record<string, number>;
-    return (
-      fallback[cfg.region] ??
-      fallback.Sued ??
-      fallback["Süd"] ??
-      fallback.NRW ??
-      0
-    );
+    const region = normalizeRegion(cfg.region);
+    if (region === "Sued" || region === "S\u00fcd") {
+      return resolveSouthValue(map, map.NRW ?? 0);
+    }
+    return map[region] ?? map.NRW ?? 0;
   };
 
   const materialCost = area * pricing.baseMaterialPerM2;

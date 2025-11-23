@@ -284,6 +284,10 @@ export default function ObjectCatalogAdmin() {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const target = templates[tplId];
+      if (!target) {
+        setStatus("Vorlage nicht gefunden.");
+        return;
+      }
       updateTemplate(tplId, {
         assetDataUrl: dataUrl,
         assetFileName: file.name,
@@ -291,7 +295,7 @@ export default function ObjectCatalogAdmin() {
       if (editingId === tplId) {
         setDraft((d) => ({ ...d, assetDataUrl: dataUrl, assetFileName: file.name }));
       }
-      setStatus(`3D-Datei aktualisiert${target?.name ? ` (${target.name})` : ""}`);
+      setStatus(`3D-Datei aktualisiert${target.name ? ` (${target.name})` : ""}`);
     } catch (err) {
       console.error(err);
       alert("3D-Datei konnte nicht gelesen werden.");

@@ -7,10 +7,12 @@ import "./styles.css";
 
 const adminEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_PANEL === "true";
 const isAdminRoute =
-  typeof window !== "undefined" && window.location.pathname.includes("/admin/catalog");
-const AdminShell = adminEnabled ? lazy(() => import("./components/AdminShell")) : null;
+  typeof window !== "undefined" && window.location.pathname.startsWith("/admin/catalog");
+// Keep admin chunk out of the prod bundle unless explicitly enabled
+const adminShellLoader = adminEnabled ? () => import("./components/AdminShell") : null;
+const AdminShell = adminShellLoader ? lazy(adminShellLoader) : null;
 
-const AdminUnavailable = () => (
+export const AdminUnavailable = () => (
   <div className="app-root" style={{ flexDirection: "column" }}>
     <main
       className="main-viewport"

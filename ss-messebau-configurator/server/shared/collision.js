@@ -164,7 +164,7 @@ export function buildSceneAabbs(cfg, clearance = DEFAULT_CLEARANCE) {
     const mAny = modules ?? {};
     // Kabine
     const cabin = mAny.cabin;
-    if (cabin && (cabin.enabled ?? mAny.storageRoom)) {
+    if (cabin && Boolean(cabin.enabled ?? mAny.storageRoom)) {
         const x = cabin.position?.x ?? -cfg.width / 2 + (cabin.width ?? 1.5) / 2 + 0.25;
         const z = cabin.position?.z ?? -cfg.depth / 2 + (cabin.depth ?? 1.5) / 2 + 0.25;
         boxes.push(makeAabb("cabin", "Kabine", x, z, cabin.width ?? 1.5, cabin.depth ?? 1.5, clearance));

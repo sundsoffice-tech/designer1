@@ -3,14 +3,10 @@ import type { ModuleCatalog, ModuleKind, ResolvedModuleVariant } from "../types/
 
 type AllowedOptions = {
   variants: ResolvedModuleVariant[];
-  sizes: number[];
-  colors: string[];
 };
 
 const createEmptyResult = (): AllowedOptions => ({
   variants: [],
-  sizes: [],
-  colors: [],
 });
 
 const hasLedWall = (config?: StandConfig): boolean => {
@@ -29,14 +25,6 @@ const restrictVariants = (
 ): ResolvedModuleVariant[] => {
   if (!allowed || allowed.length === 0) return variants;
   return variants.filter((variant) => allowed.includes(variant.key));
-};
-
-const collectUniqueOptions = <T>(
-  variants: ResolvedModuleVariant[],
-  picker: (variant: ResolvedModuleVariant) => T[] | undefined
-): T[] => {
-  const merged = variants.flatMap((variant) => picker(variant) ?? []);
-  return merged.length ? Array.from(new Set(merged)) : [];
 };
 
 /**
@@ -66,7 +54,5 @@ export function getAllowedOptions(
 
   return {
     variants: filtered,
-    sizes: collectUniqueOptions(filtered, (variant) => variant.sizes),
-    colors: collectUniqueOptions(filtered, (variant) => variant.colors),
   };
 }

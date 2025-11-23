@@ -70,14 +70,10 @@ describe("getAllowedOptions", () => {
   it("returns empty result when catalog or module is missing", () => {
     expect(getAllowedOptions(null, makeConfig(), "ledFrame")).toEqual({
       variants: [],
-      sizes: [],
-      colors: [],
     });
 
     expect(getAllowedOptions(catalog, makeConfig(), "unknown")).toEqual({
       variants: [],
-      sizes: [],
-      colors: [],
     });
   });
 
@@ -85,8 +81,6 @@ describe("getAllowedOptions", () => {
     const result = getAllowedOptions(catalog, makeConfig(), "ledFrame");
 
     expect(result.variants.map((v) => v.key)).toEqual(["ledFrame_octalumina", "ledFrame_basic"]);
-    expect(result.sizes).toEqual([2.5, 3, 4]);
-    expect(result.colors).toEqual(["black", "white", "silver"]);
   });
 
   it("filters LED frames when a LED wall is configured", () => {
@@ -97,8 +91,6 @@ describe("getAllowedOptions", () => {
     const result = getAllowedOptions(catalog, configWithLedWall, "ledFrame");
 
     expect(result.variants.map((v) => v.key)).toEqual(["ledFrame_octalumina"]);
-    expect(result.sizes).toEqual([2.5, 3]);
-    expect(result.colors).toEqual(["black", "white"]);
   });
 
   it("filters counters when a power addon is requested", () => {
@@ -107,11 +99,32 @@ describe("getAllowedOptions", () => {
     const result = getAllowedOptions(catalog, withPowerAddon, "counter");
 
     expect(result.variants.map((v) => v.key)).toEqual(["counter_premium"]);
-    expect(result.colors).toEqual(["black", "white"]);
   });
 
   it("keeps all counters when no power addon is requested", () => {
     const result = getAllowedOptions(catalog, makeConfig(), "counter");
+
+    expect(result.variants.map((v) => v.key)).toEqual(["counter_basic", "counter_premium"]);
+  });
+
+  it("returns all variants when compatibility config is missing even if guard triggers", () => {
+    const catalogWithoutCompat: ModuleCatalog = {
+      modules: catalog.modules.map((mod) =>
+        mod.module === "ledFrame" ? { ...mod, compatibleWith: undefined } : mod
+      ),
+    };
+
+    const configWithLedWall = makeConfig({
+      wallsDetail: { back: { surface: "led" } },
+    });
+
+    const result = getAllowedOptions(catalogWithoutCompat, configWithLedWall, "ledFrame");
+
+    expect(result.variants.map((v) => v.key)).toEqual(["ledFrame_octalumina", "ledFrame_basic"]);
+  });
+
+  it("handles undefined config gracefully", () => {
+    const result = getAllowedOptions(catalog, undefined, "counter");
 
     expect(result.variants.map((v) => v.key)).toEqual(["counter_basic", "counter_premium"]);
   });

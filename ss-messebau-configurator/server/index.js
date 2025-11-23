@@ -4,6 +4,7 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
+import { spawn } from "child_process";
 import sharp from "sharp";
 import { OpenAI } from "openai";
 import { z } from "zod";
@@ -26,6 +27,46 @@ const upload = multer({
 });
 const uploadDir = path.resolve(process.cwd(), "uploads");
 await fs.promises.mkdir(uploadDir, { recursive: true });
+
+const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const clampDimensions = (meta, maxEdge) => {
+  const width = clampNumber(meta.width ?? maxEdge, 1, maxEdge);
+  const height = clampNumber(meta.height ?? maxEdge, 1, maxEdge);
+  const longest = Math.max(width, height, 1);
+  const scale = Math.min(1, maxEdge / longest);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+};
+
+const nearestPowerOfTwoFloor = (value, max = 4096) => {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const clamped = clampNumber(value, 1, max);
+  return 2 ** Math.floor(Math.log2(clamped));
+};
+
+const clampToPotBox = (w, h, maxEdge = 4096) => ({
+  width: nearestPowerOfTwoFloor(w, maxEdge),
+  height: nearestPowerOfTwoFloor(h, maxEdge),
+});
+
+const encodeKtx2 = async (inputPath, outputPath) => {
+  const bin = process.env.KTX2_BIN || process.env.BASISU_BIN || "basisu";
+  const args = ["-ktx2", "-uastc", "4", "-zcmp", "2", "-mipmap", "-y_flip", "-output_file", outputPath, inputPath];
+
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, { stdio: "ignore" });
+
+    child.on("error", (err) => {
+      console.warn(`KTX2 encoder not available (${bin})`, err?.message ?? err);
+      resolve(false);
+    });
+
+    child.on("exit", (code) => resolve(code === 0));
+  });
+};
 
 app.use(
   cors({
@@ -201,27 +242,48 @@ app.post("/api/upload/banner", upload.single("file"), async (req, res) => {
   }
 
   try {
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/heic", "image/heif"];
+    if (!allowedTypes.some((type) => file.mimetype === type || file.mimetype?.includes(type.split("/")[1]))) {
+      return res.status(400).json({ error: "Dateiformat wird nicht unterstuetzt (PNG/JPG/WebP/AVIF)" });
+    }
+
     const id = `banner-${Date.now()}-${Math.round(Math.random() * 1e5)}`;
     const meta = await sharp(file.buffer).metadata();
+    const sourceWidth = meta.width ?? 0;
+    const sourceHeight = meta.height ?? 0;
+    if (!sourceWidth || !sourceHeight) {
+      return res.status(400).json({ error: "Bild konnte nicht gelesen werden" });
+    }
+    if (sourceWidth < 32 || sourceHeight < 32) {
+      return res.status(400).json({ error: "Bild ist zu klein (min. 32px Kantenlaenge)" });
+    }
+    const longestEdge = Math.max(meta.width ?? 0, meta.height ?? 0);
+    const webpMaxEdge = longestEdge > 3200 ? 3072 : 2048;
+    const targetDims = clampDimensions(meta, webpMaxEdge);
+
     const baseName = `${id}.webp`;
     const basePath = path.join(uploadDir, baseName);
-    const maxDim = 4096;
+
     const base = sharp(file.buffer).resize({
-      width: Math.min(meta.width ?? maxDim, maxDim),
-      height: Math.min(meta.height ?? maxDim, maxDim),
+      width: targetDims.width,
+      height: targetDims.height,
       fit: "inside",
       withoutEnlargement: true,
     });
 
     await base.webp({ quality: 82 }).toFile(basePath);
 
+    const baseMeta = await sharp(basePath).metadata();
+    const baseStats = await fs.promises.stat(basePath);
+
+    const webpWidth = baseMeta.width ?? targetDims.width;
+    const webpHeight = baseMeta.height ?? targetDims.height;
+
     const mipmaps = [];
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
     const maxLevels = 4;
     for (let level = 1; level <= maxLevels; level++) {
-      const targetW = Math.max(1, Math.floor(width / 2 ** level));
-      const targetH = Math.max(1, Math.floor(height / 2 ** level));
+      const targetW = Math.max(1, Math.floor(webpWidth / 2 ** level));
+      const targetH = Math.max(1, Math.floor(webpHeight / 2 ** level));
       if (targetW < 64 && targetH < 64) break;
       const name = `${id}-mip${level}.webp`;
       const targetPath = path.join(uploadDir, name);
@@ -237,13 +299,43 @@ app.post("/api/upload/banner", upload.single("file"), async (req, res) => {
       mipmaps.push(`/uploads/${name}`);
     }
 
+    const potBox = clampToPotBox(webpWidth, webpHeight);
+    const shouldEncodeKtx2 = potBox.width >= 256 && potBox.height >= 256;
+    let ktx2Url;
+    if (shouldEncodeKtx2) {
+      const ktxInputPath = path.join(uploadDir, `${id}-ktx-src.png`);
+      const ktxOutputPath = path.join(uploadDir, `${id}.ktx2`);
+
+      const padded = await sharp(file.buffer)
+        .resize({
+          width: potBox.width,
+          height: potBox.height,
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+          withoutEnlargement: true,
+        })
+        .png()
+        .toBuffer();
+
+      await fs.promises.writeFile(ktxInputPath, padded);
+      const encoded = await encodeKtx2(ktxInputPath, ktxOutputPath);
+      await fs.promises.unlink(ktxInputPath).catch(() => {});
+
+      if (encoded) {
+        ktx2Url = `/uploads/${path.basename(ktxOutputPath)}`;
+      }
+    }
+
     res.json({
       url: `/uploads/${baseName}`,
+      webpUrl: `/uploads/${baseName}`,
+      ktx2Url,
       mipmaps,
-      width: meta.width,
-      height: meta.height,
-      size: file.size,
-      format: "webp",
+      width: webpWidth,
+      height: webpHeight,
+      size: baseStats.size,
+      format: ktx2Url ? "ktx2+webp" : "webp",
+      pot: ktx2Url ? potBox : undefined,
     });
   } catch (err) {
     console.error("Banner upload failed", err);

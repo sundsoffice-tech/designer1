@@ -6,7 +6,7 @@ import type {
   ModuleKind,
   ModuleBundle,
 } from "../types/modules";
-import { apiBaseUrl } from "../lib/apiBase";
+import { fetchApi } from "../lib/apiBase";
 import modulesJson from "../data/modules.json";
 
 const colliderSchema = z.union([z.literal("aabb"), z.literal("obb"), z.literal("mesh")]);
@@ -112,7 +112,7 @@ let cachedRemoteCompatibility: ModuleCompatibilityIndex | null = null;
 
 const fetchRemoteCatalog = async (): Promise<ModuleCatalog | null> => {
   try {
-    const res = await fetch(`${apiBaseUrl}/api/catalog/modules`);
+    const res = await fetchApi("/api/catalog/modules");
     if (!res.ok) return null;
     const data = await res.json();
     if (!data?.modules) return null;

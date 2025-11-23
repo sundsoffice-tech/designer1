@@ -1,11 +1,10 @@
 ﻿// src/components/SidebarControls.tsx
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useConfigStore, type DeepPartial } from "../store/configStore";
-import type { StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
+import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
 import SeatingControls from "./SeatingControls";
-import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 
 type WallSide = "back" | "left" | "right";
@@ -35,7 +34,8 @@ export default function SidebarControls({
   drawerOpen: boolean;
   onClose: () => void;
 }) {
-  const { config, price, setConfig, applyPreset, replaceConfig } = useConfigStore();
+  const { config, price, setConfig, applyPreset, replaceConfig, undo, redo, history, future } =
+    useConfigStore();
   const modules = config.modules;
   const sidebarClassName = drawerOpen
     ? "sidebar sidebar-open translate-x-0"
@@ -46,7 +46,7 @@ export default function SidebarControls({
     setConfig({ modules: mods });
 
   const buildCabinPatch = (): NonNullable<DeepPartial<StandModules>["cabin"]> => {
-    const cabin = modules.cabin ?? {};
+    const cabin = modules.cabin ?? ({} as Partial<CabinConfig>);
     const width = typeof cabin.width === "number" ? cabin.width : 1.5;
     const depth = typeof cabin.depth === "number" ? cabin.depth : 1.5;
     const height = typeof cabin.height === "number" ? cabin.height : config.height;
@@ -95,14 +95,79 @@ export default function SidebarControls({
     });
   };
 
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(voiceAssistantEnabled);
   const [customerName, setCustomerName] = useState("");
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
+  const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
+
+  const canUndo = history.length > 0;
+  const canRedo = future.length > 0;
 
   const fixedWalls =
     wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
+
+  const wallAttachmentIndex = modules.wallAttachmentIndex;
+  const hasWallMountedObjects = () => {
+    const mappedCount =
+      (wallAttachmentIndex?.byWall?.back?.length ?? 0) +
+      (wallAttachmentIndex?.byWall?.left?.length ?? 0) +
+      (wallAttachmentIndex?.byWall?.right?.length ?? 0) +
+      (wallAttachmentIndex?.floating?.length ?? 0);
+    const legacyScreens = (modules.screens ?? 0) > 0;
+    const legacyFrames = (modules.ledFrames ?? 0) > 0;
+    const detailedScreens = Array.isArray(modules.detailedScreens) && modules.detailedScreens.length > 0;
+    const detailedFrames = Array.isArray(modules.ledFramesDetailed) && modules.ledFramesDetailed.length > 0;
+    const wallLightsCount =
+      (modules.wallLightsBack ?? 0) + (modules.wallLightsLeft ?? 0) + (modules.wallLightsRight ?? 0);
+    return (
+      mappedCount > 0 ||
+      legacyScreens ||
+      legacyFrames ||
+      detailedScreens ||
+      detailedFrames ||
+      wallLightsCount > 0
+    );
+  };
+
+  const lighting = (modules.lighting ?? {}) as NonNullable<StandModules["lighting"]>;
+  const lightingDefaults = {
+    hdri: "hall",
+    background: false,
+    ambientColor: "#ffffff",
+    ambientIntensity: 0.35,
+    environmentIntensity: 1.2,
+    exposure: 1,
+    toneMapping: "agx" as NonNullable<StandModules["lighting"]>["toneMapping"],
+    bloom: false,
+    bloomIntensity: 0.35,
+    dof: false,
+    envMapIntensity: 1.2,
+  };
+  const resolvedLighting = { ...lightingDefaults, ...lighting };
+  const patchLighting = (partial: Partial<NonNullable<StandModules["lighting"]>>) =>
+    patchModules({
+      lighting: {
+        ...lighting,
+        ...partial,
+      },
+    });
+
+  const handleStandTypeChange = (nextType: StandType) => {
+    if (nextType === config.type) return;
+    const currentWalls = wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
+    const nextWalls = wallFixedMap[nextType as keyof typeof wallFixedMap] ?? 0;
+    if (currentWalls > 0 && nextWalls === 0 && hasWallMountedObjects()) {
+      const confirmRemoval = window.confirm(
+        "Wenn die letzte Wand entfernt wird, werden wandmontierte Objekte ausgeblendet und muessen spaeter neu platziert werden. Fortfahren?"
+      );
+      if (!confirmRemoval) return;
+    }
+    setConfig({ type: nextType });
+  };
 
   // Boden-Konfiguration (advanced + Fallback auf legacy raisedFloor)
   const floor = config.modules.floor;
@@ -110,6 +175,40 @@ export default function SidebarControls({
   const floorRaised = floor?.raised ?? config.modules.raisedFloor ?? false;
   const floorHeight = floorRaised ? 0.08 : 0.025;
   const counterPlacement = normalizeCounterPlacement(config.modules.countersWall);
+
+  useEffect(() => {
+    const handleHistoryHotkeys = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (isTypingTarget) return;
+
+      const key = event.key.toLowerCase();
+      const comboPressed = event.metaKey || event.ctrlKey;
+      if (!comboPressed) return;
+
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      if (key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleHistoryHotkeys);
+    return () => window.removeEventListener("keydown", handleHistoryHotkeys);
+  }, [redo, undo]);
 
   const getWallsDetail = () =>
     (modules.wallsDetail ??
@@ -146,6 +245,47 @@ export default function SidebarControls({
     patchModules({
       wallsDetail: nextWallsDetail,
     });
+  };
+
+  const handleBannerUpload = async (file: File) => {
+    if (!file) return;
+    if (!file.type?.startsWith("image/")) {
+      setBannerUploadStatus("Nur Bilddateien sind erlaubt.");
+      return;
+    }
+    const maxSize = 12 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setBannerUploadStatus("Datei zu gross (max. 12 MB).");
+      return;
+    }
+
+    setBannerUploading(true);
+    setBannerUploadStatus("Upload & WebP-Konvertierung läuft...");
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload/banner", { method: "POST", body });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.url) {
+        throw new Error(json?.error || "Upload fehlgeschlagen");
+      }
+
+      const mipmaps: string[] = Array.isArray(json.mipmaps) ? json.mipmaps : [];
+      patchModules({
+        trussBannerMipmaps: mipmaps.length ? mipmaps : [json.url],
+        trussBannerWebpUrl: json.webpUrl ?? json.url,
+        trussBannerKtx2Url: json.ktx2Url ?? undefined,
+        trussBannerImageUrl: json.url,
+      });
+      const sizeLabel =
+        json.width && json.height ? ` ${json.width}x${json.height}px` : "";
+      setBannerUploadStatus(`Fertig: WebP${sizeLabel} + ${mipmaps.length || 1} Mipmaps`);
+    } catch (err) {
+      setBannerUploadStatus(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+    } finally {
+      setBannerUploading(false);
+    }
   };
 
   const stepModule = (
@@ -292,6 +432,8 @@ export default function SidebarControls({
 
   const copyConfigToClipboard = () => {
     const area = config.width * config.depth;
+    const m = modules;
+    const mm = modules;
     const wd = modules.wallsDetail;
 
     const wallSurfaceLabel = (side: WallSide, label: string) => {
@@ -377,6 +519,7 @@ export default function SidebarControls({
     const area = config.width * config.depth;
     const m = modules;
     const wd = m.wallsDetail;
+    const mm = m;
 
     const wallSurfaceLabel = (side: WallSide, label: string) => {
       const surface = wd?.[side]?.surface ?? "system";
@@ -487,26 +630,75 @@ export default function SidebarControls({
         <small>Richtkalkulation für System- & Individualstände</small>
       </div>
 
-      {(aiAssistantEnabled || voiceAssistantEnabled) && (
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Verlauf</span>
+          <span className="section-sub">Strg+Z / Strg+Umschalt+Z</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={undo}
+            disabled={!canUndo}
+          >
+            Rückgängig
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={redo}
+            disabled={!canRedo}
+          >
+            Wiederholen
+          </button>
+        </div>
+      </div>
+
+      {aiAssistantEnabled && LazyAiAssistantPanel && (
         <div className="sidebar-section">
           <div className="sidebar-section-header">
-            <span className="section-title">AI</span>
+            <span className="section-title">AI-Assistent</span>
             <span className="section-sub">Experimentell</span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {aiAssistantEnabled && LazyAiAssistantPanel && (
-              <Suspense fallback={<div style={{ color: "#6b7280" }}>KI-Modul wird geladen...</div>}>
-                <LazyAiAssistantPanel />
-              </Suspense>
-            )}
-            {voiceAssistantEnabled && LazyVoiceAssistant && (
-              <Suspense fallback={<div style={{ color: "#6b7280" }}>Voice-Assistent wird geladen...</div>}>
-                <LazyVoiceAssistant />
-              </Suspense>
-            )}
-          </div>
+          <Suspense fallback={<div style={{ color: "#6b7280" }}>KI-Modul wird geladen...</div>}>
+            <LazyAiAssistantPanel />
+          </Suspense>
         </div>
       )}
+
+      {voiceAssistantEnabled && LazyVoiceAssistant && (
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Voice-Assistent</span>
+          <span className="section-sub">Experimentell</span>
+        </div>
+        {voiceAssistantOpen ? (
+          <Suspense fallback={<div style={{ color: "#6b7280" }}>Voice-Assistent wird geladen...</div>}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <LazyVoiceAssistant />
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ alignSelf: "flex-end" }}
+                onClick={() => setVoiceAssistantOpen(false)}
+              >
+                Voice-Assistent ausblenden
+              </button>
+            </div>
+          </Suspense>
+        ) : (
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ alignSelf: "flex-start" }}
+            onClick={() => setVoiceAssistantOpen(true)}
+          >
+            Voice-Assistent starten
+          </button>
+        )}
+      </div>
+    )}
 
       {/* Presets */}
       <div className="sidebar-section">
@@ -623,7 +815,7 @@ export default function SidebarControls({
             Standtyp
             <select
               value={config.type}
-              onChange={(e) => setConfig({ type: e.target.value as StandType })}
+              onChange={(e) => handleStandTypeChange(e.target.value as StandType)}
             >
               <option value="row">Reihenstand</option>
               <option value="corner">Eckstand</option>
@@ -645,23 +837,158 @@ export default function SidebarControls({
             </select>
           </label>
 
+      <label className="checkbox-row">
+        <input
+          type="checkbox"
+          checked={config.rush}
+          onChange={(e) => setConfig({ rush: e.target.checked })}
+        />
+        Eilauftrag (kurzfristige Umsetzung)
+      </label>
+    </div>
+  </div>
+
+      {/* Licht & Environment */}
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Licht & Environment</span>
+          <span className="section-sub">HDRI, Belichtung, Effekte</span>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            HDRI-Umgebung
+            <select
+              value={resolvedLighting.hdri}
+              onChange={(e) => patchLighting({ hdri: e.target.value as "hall" | "studio" | "outdoor" })}
+            >
+              <option value="hall">Messehalle</option>
+              <option value="studio">Studio</option>
+              <option value="outdoor">Outdoor</option>
+            </select>
+          </label>
+
           <label className="checkbox-row">
             <input
               type="checkbox"
-              checked={config.rush}
-              onChange={(e) => setConfig({ rush: e.target.checked })}
+              checked={resolvedLighting.background}
+              onChange={(e) => patchLighting({ background: e.target.checked })}
             />
-            Eilauftrag (kurzfristige Umsetzung)
+            HDRI als Hintergrund
           </label>
+
+          <label>
+            Environment-Intensität
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={resolvedLighting.environmentIntensity}
+              onChange={(e) => patchLighting({ environmentIntensity: Number(e.target.value) })}
+            />
+            <small style={{ color: "#6b7280" }}>
+              Spiegelungen & Licht ({resolvedLighting.environmentIntensity.toFixed(2)})
+            </small>
+          </label>
+
+          <label>
+            Ambient-Light
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={resolvedLighting.ambientIntensity}
+              onChange={(e) => patchLighting({ ambientIntensity: Number(e.target.value) })}
+            />
+            <small style={{ color: "#6b7280" }}>
+              Fülllicht ({resolvedLighting.ambientIntensity.toFixed(2)})
+            </small>
+          </label>
+
+          <label>
+            Belichtung
+            <input
+              type="range"
+              min={0.6}
+              max={1.6}
+              step={0.02}
+              value={resolvedLighting.exposure}
+              onChange={(e) => patchLighting({ exposure: Number(e.target.value) })}
+            />
+            <small style={{ color: "#6b7280" }}>
+              Tone-Mapping Exposure ({resolvedLighting.exposure.toFixed(2)})
+            </small>
+          </label>
+
+          <label>
+            Tone-Mapping
+            <select
+              value={resolvedLighting.toneMapping}
+              onChange={(e) =>
+                patchLighting({ toneMapping: e.target.value as "aces" | "agx" | "reinhard" | "neutral" })
+              }
+            >
+              <option value="agx">AgX (cinematic)</option>
+              <option value="aces">ACES (filmic)</option>
+              <option value="reinhard">Reinhard</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </label>
+
+          <label>
+            Reflektions-Boost (envMap)
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              value={resolvedLighting.envMapIntensity}
+              onChange={(e) => patchLighting({ envMapIntensity: Number(e.target.value) })}
+            />
+            <small style={{ color: "#6b7280" }}>
+              Glänzende Materialien ({resolvedLighting.envMapIntensity.toFixed(2)})
+            </small>
+          </label>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={resolvedLighting.bloom}
+              onChange={(e) => patchLighting({ bloom: e.target.checked })}
+            />
+            Bloom-Effekt
+          </label>
+
+          {resolvedLighting.bloom && (
+            <label>
+              Bloom-Intensität
+              <input
+                type="range"
+                min={0}
+                max={2}
+                step={0.05}
+                value={resolvedLighting.bloomIntensity}
+                onChange={(e) => patchLighting({ bloomIntensity: Number(e.target.value) })}
+              />
+            </label>
+          )}
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={resolvedLighting.dof}
+              onChange={(e) => patchLighting({ dof: e.target.checked })}
+            />
+            Depth of Field
+          </label>
+
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+            HDRI-Maps steuern Spiegelungen & Licht. Höhere envMapIntensity lässt Counter & LED-Rahmen glänzender wirken.
+          </div>
         </div>
       </div>
-
-      <CameraPanel
-        width={config.width}
-        depth={config.depth}
-        height={config.height}
-        floorHeight={floorHeight}
-      />
 
       {/* Module */}
       <div className="sidebar-section">
@@ -844,28 +1171,34 @@ export default function SidebarControls({
                   type="number"
                   min={1}
                   step={0.1}
-                  value={modules.cabin?.width ?? 1.5}
-                  onChange={(e) =>
+                value={modules.cabin?.width ?? 1.5}
+                onChange={(e) =>
+                  {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     patchModules({
-                      cabin: { width: Number(e.target.value) || 0 },
-                    })
+                      cabin: { ...baseCabin, width: Number(e.target.value) || 0 },
+                    });
                   }
-                />
-              </label>
+                }
+              />
+            </label>
               <label>
                 Kabine Tiefe (m)
                 <input
                   type="number"
                   min={1}
                   step={0.1}
-                  value={modules.cabin?.depth ?? 1.5}
-                  onChange={(e) =>
+                value={modules.cabin?.depth ?? 1.5}
+                onChange={(e) =>
+                  {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     patchModules({
-                      cabin: { depth: Number(e.target.value) || 0 },
-                    })
+                      cabin: { ...baseCabin, depth: Number(e.target.value) || 0 },
+                    });
                   }
-                />
-              </label>
+                }
+              />
+            </label>
 
               {/* Kabine – Position */}
               <label>
@@ -873,27 +1206,37 @@ export default function SidebarControls({
                 <input
                   type="number"
                   step={0.1}
-                  value={modules.cabin?.position?.x ?? 0}
-                  onChange={(e) =>
+                value={modules.cabin?.position?.x ?? 0}
+                  onChange={(e) => {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
+                    const currentPos = baseCabin.position ?? { x: 0, z: 0 };
                     patchModules({
-                      cabin: { position: { x: Number(e.target.value) } },
-                    })
-                  }
-                />
-              </label>
+                      cabin: {
+                        ...baseCabin,
+                        position: { ...currentPos, x: Number(e.target.value) },
+                      },
+                    });
+                  }}
+              />
+            </label>
               <label>
                 Kabine Z-Position (m)
                 <input
                   type="number"
                   step={0.1}
-                  value={modules.cabin?.position?.z ?? 0}
-                  onChange={(e) =>
+                value={modules.cabin?.position?.z ?? 0}
+                  onChange={(e) => {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
+                    const currentPos = baseCabin.position ?? { x: 0, z: 0 };
                     patchModules({
-                      cabin: { position: { z: Number(e.target.value) } },
-                    })
-                  }
-                />
-              </label>
+                      cabin: {
+                        ...baseCabin,
+                        position: { ...currentPos, z: Number(e.target.value) },
+                      },
+                    });
+                  }}
+              />
+            </label>
 
               <label>
                 Türposition Lagerraum
@@ -1277,17 +1620,29 @@ export default function SidebarControls({
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={bannerUploading}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = URL.createObjectURL(file);
-                    // Speichere lokale Vorschau im offiziellen Feld fuer Banner-Mipmaps
-                    patchModules({ trussBannerMipmaps: [url] });
+                    void handleBannerUpload(file);
+                    e.target.value = "";
                   }}
                 />
                 <small style={{ fontSize: 10, color: "#6b7280" }}>
-                  Bild wird lokal im Browser geladen (kein Upload zum Server).
+                  Upload wird serverseitig nach WebP konvertiert und mit Mipmaps versehen.
                 </small>
+                {bannerUploadStatus && (
+                  <small
+                    style={{
+                      fontSize: 10,
+                      color: bannerUploading ? "#2563eb" : "#374151",
+                      display: "block",
+                      marginTop: 2,
+                    }}
+                  >
+                    {bannerUploadStatus}
+                  </small>
+                )}
               </label>
             </>
           )}
@@ -1308,6 +1663,126 @@ export default function SidebarControls({
               }
             />
             Doppelboden
+          </label>
+        </div>
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Material & Licht</span>
+          <span className="section-sub">Roughness, Metalness, Ambient</span>
+        </div>
+
+        <div className="form-grid">
+          <label>
+            Ambient-Farbe
+            <input
+              type="color"
+              value={(lighting.ambientColor as string) ?? "#ffffff"}
+              onChange={(e) =>
+                patchModules({ lighting: { ambientColor: e.target.value } })
+              }
+            />
+          </label>
+          <label>
+            Ambient-Intensität
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              value={lighting.ambientIntensity ?? 0.35}
+              onChange={(e) =>
+                patchModules({
+                  lighting: { ambientIntensity: Number(e.target.value) },
+                })
+              }
+            />
+            <div className="input-inline-display">
+              {(lighting.ambientIntensity ?? 0.35).toFixed(2)}
+            </div>
+          </label>
+
+          <label>
+            Environment-Intensität
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              value={lighting.environmentIntensity ?? 1.2}
+              onChange={(e) =>
+                patchModules({
+                  lighting: { environmentIntensity: Number(e.target.value) },
+                })
+              }
+            />
+            <div className="input-inline-display">
+              {(lighting.environmentIntensity ?? 1.2).toFixed(2)}
+            </div>
+          </label>
+
+          <label>
+            Emissive-Boost
+            <input
+              type="range"
+              min={0}
+              max={4}
+              step={0.05}
+              value={lighting.emissiveIntensity ?? 1}
+              onChange={(e) =>
+                patchModules({
+                  lighting: { emissiveIntensity: Number(e.target.value) },
+                })
+              }
+            />
+            <div className="input-inline-display">
+              {(lighting.emissiveIntensity ?? 1).toFixed(2)}×
+            </div>
+          </label>
+
+          <label>
+            Roughness (global)
+            <input
+              type="range"
+              min={0.2}
+              max={1.8}
+              step={0.05}
+              value={lighting.materialRoughness ?? 1}
+              onChange={(e) =>
+                patchModules({
+                  lighting: { materialRoughness: Number(e.target.value) },
+                })
+              }
+            />
+            <div className="input-inline-display">
+              {(lighting.materialRoughness ?? 1).toFixed(2)}×
+            </div>
+            <small style={{ fontSize: 10, color: "#6b7280" }}>
+              Skaliert die Rauheit aller Standard-Materialien.
+            </small>
+          </label>
+
+          <label>
+            Metalness (global)
+            <input
+              type="range"
+              min={0.2}
+              max={1.8}
+              step={0.05}
+              value={lighting.materialMetalness ?? 1}
+              onChange={(e) =>
+                patchModules({
+                  lighting: { materialMetalness: Number(e.target.value) },
+                })
+              }
+            />
+            <div className="input-inline-display">
+              {(lighting.materialMetalness ?? 1).toFixed(2)}×
+            </div>
+            <small style={{ fontSize: 10, color: "#6b7280" }}>
+              Erhöht oder reduziert den Metallanteil der Oberflächen.
+            </small>
           </label>
         </div>
       </div>

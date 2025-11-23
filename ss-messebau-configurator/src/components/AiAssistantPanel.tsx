@@ -1,23 +1,16 @@
 import { useState } from "react";
-import {
-  AiClientError,
-  aiStandFromText,
-  aiMarketingCopy,
-  aiBannerImage,
-} from "../lib/aiClient";
-import type { StandConfig } from "../lib/pricing";
+import { aiStandFromText, aiMarketingCopy, aiBannerImage } from "../api/aiClient";
 import { useConfigStore } from "../store/configStore";
 import { aiClientConfig } from "../config/ai";
+import { toErrorMessage } from "../utils/errorMessage";
 
 export function AiAssistantPanel() {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState<null | "stand" | "text" | "image">(null);
   const [error, setError] = useState<string | null>(null);
 
-  const replaceConfig = useConfigStore((s) => s.replaceConfig);
+  const setConfig = useConfigStore((s) => s.setConfig);
   const config = useConfigStore((s) => s.config);
-  const toErrorMessage = (err: unknown, fallback: string) =>
-    err instanceof AiClientError || err instanceof Error ? err.message : fallback;
 
   async function handleGenerateStand() {
     if (!aiClientConfig.enabled) {
@@ -32,16 +25,7 @@ export function AiAssistantPanel() {
         locale: "de-DE",
       });
 
-      // aktuelle Config + Patch mergen und replaceConfig verwenden
-      const merged: StandConfig = {
-        ...config,
-        ...patch,
-        modules: {
-          ...config.modules,
-          ...(patch.modules ?? {}),
-        },
-      } as StandConfig;
-      replaceConfig(merged);
+      setConfig(patch);
     } catch (err) {
       setError(toErrorMessage(err, "Fehler bei der KI-Konfiguration"));
     } finally {
@@ -89,11 +73,7 @@ export function AiAssistantPanel() {
 
       // Beispiel: Banner-URL ins modules-Objekt schreiben
       // (euer mergeModules kann damit umgehen)
-      useConfigStore.getState().setConfig({
-        modules: {
-          trussBannerMipmaps: [imageUrl],
-        },
-      });
+      setConfig({ modules: { trussBannerMipmaps: [imageUrl] } });
     } catch (err) {
       setError(toErrorMessage(err, "Fehler bei der Bildgenerierung"));
     } finally {

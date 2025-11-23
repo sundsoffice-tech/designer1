@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { aiClientConfig } from "../config/ai";
-import { AiClientError, requestAiVoiceCommand } from "../lib/aiClient";
+import { requestAiVoiceCommand } from "../api/aiClient";
 import { useTranslation } from "../i18n";
 import { useConfigStore, type ConfigPatch } from "../store/configStore";
+import { toErrorMessage } from "../utils/errorMessage";
 
 type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
 
@@ -43,6 +44,14 @@ const localeForLanguage = (language: string) => {
   return "de-DE";
 };
 
+const hasConfigPatch = (patch: ConfigPatch | null | undefined): patch is ConfigPatch => {
+  if (!patch) return false;
+  const { modules, ...rest } = patch;
+  const hasRoot = Object.keys(rest ?? {}).length > 0;
+  const hasModules = modules ? Object.keys(modules).length > 0 : false;
+  return hasRoot || hasModules;
+};
+
 export default function VoiceAssistant() {
   const { t, language } = useTranslation();
   const config = useConfigStore((s) => s.config);
@@ -61,13 +70,25 @@ export default function VoiceAssistant() {
   const [aiRationale, setAiRationale] = useState("");
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [lastCommand, setLastCommand] = useState("");
+  const [micBlocked, setMicBlocked] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
 
   const aiLoadingRef = useRef(false);
+  const sessionActiveRef = useRef(false);
+  const listeningRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     aiLoadingRef.current = aiLoading;
   }, [aiLoading]);
+
+  useEffect(() => {
+    listeningRef.current = listening;
+  }, [listening]);
+
+  useEffect(() => {
+    sessionActiveRef.current = sessionActive;
+  }, [sessionActive]);
 
   const recognitionCtor = useMemo<SpeechRecognitionConstructorLike | undefined>(() => {
     if (typeof window === "undefined") return undefined;
@@ -78,13 +99,49 @@ export default function VoiceAssistant() {
     return w.SpeechRecognition || w.webkitSpeechRecognition;
   }, []);
 
+  const setSessionActiveFlag = useCallback((active: boolean) => {
+    setSessionActive(active);
+    sessionActiveRef.current = active;
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const nav = navigator as Navigator & { permissions?: Permissions };
+    if (!nav.permissions?.query) return;
+
+    let permissionStatus: PermissionStatus | null = null;
+    let cancelled = false;
+
+    nav.permissions
+      .query({ name: "microphone" })
+      .then((statusResult) => {
+        if (cancelled) return;
+        permissionStatus = statusResult;
+        const syncPermission = () => setMicBlocked(statusResult.state === "denied");
+        syncPermission();
+        statusResult.onchange = syncPermission;
+      })
+      .catch(() => {
+        // permissions API not available or blocked
+      });
+
+    return () => {
+      cancelled = true;
+      if (permissionStatus) {
+        permissionStatus.onchange = null;
+      }
+    };
+  }, []);
+
   const speechLocale = localeForLanguage(language);
   const speechSupported = Boolean(recognitionCtor);
-  const startDisabled = !speechSupported || !aiConfigured;
+  const startDisabled = !speechSupported || !aiConfigured || micBlocked;
   const applyDisabled =
     aiLoading || !aiConfigured || (!transcript.trim() && !interim.trim());
   const statusNote = !aiConfigured
     ? aiConfigWarning || "Sprachassistent deaktiviert."
+    : micBlocked
+    ? t("voice.permission")
     : speechSupported
     ? t("voice.hint")
     : t("voice.unsupported");
@@ -93,6 +150,11 @@ export default function VoiceAssistant() {
     async (raw: string) => {
       const clean = raw.trim();
       if (!clean) return;
+      if (!sessionActiveRef.current) {
+        setAiError(t("voice.inactive"));
+        setStatus("");
+        return;
+      }
       if (aiLoadingRef.current) {
         setStatus(t("voice.status.busy"));
         return;
@@ -100,6 +162,7 @@ export default function VoiceAssistant() {
       if (!aiConfigured) {
         setAiError("Sprachassistenz deaktiviert (KI-API nicht konfiguriert).");
         setStatus("");
+        setSessionActiveFlag(false);
         return;
       }
 
@@ -113,32 +176,28 @@ export default function VoiceAssistant() {
       try {
         const result = await requestAiVoiceCommand({
           config,
-          locale: language,
+          locale: speechLocale,
           instructions: clean,
         });
-        const patch: ConfigPatch =
-          result?.configPatch && typeof result.configPatch === "object"
-            ? (result.configPatch as ConfigPatch)
-            : {};
-        const hasPatch = patch && Object.keys(patch).length > 0;
+        const patch: ConfigPatch = result.configPatch ?? {};
+        const hasPatch = hasConfigPatch(patch);
 
         if (hasPatch) {
           setConfig(patch);
         }
 
-        setAiRationale(result?.rationale || (hasPatch ? t("voice.applied") : t("voice.noChange")));
-        setAiWarnings(result?.warnings ?? []);
+        setAiRationale(result.rationale || (hasPatch ? t("voice.applied") : t("voice.noChange")));
+        setAiWarnings(result.warnings ?? []);
       } catch (err) {
-        const msg =
-          err instanceof AiClientError || err instanceof Error ? err.message : t("voice.error");
-        setAiError(msg);
+        setAiError(toErrorMessage(err, t("voice.error")));
       } finally {
         setAiLoading(false);
         aiLoadingRef.current = false;
         setStatus("");
+        setSessionActiveFlag(listeningRef.current);
       }
     },
-    [aiConfigured, config, language, setConfig, t]
+    [aiConfigured, config, setConfig, setSessionActiveFlag, speechLocale, t]
   );
 
   useEffect(() => {
@@ -149,6 +208,8 @@ export default function VoiceAssistant() {
     recognition.interimResults = true;
 
     recognition.onstart = () => {
+      setSessionActiveFlag(true);
+      setMicBlocked(false);
       setListening(true);
       setStatus(t("voice.status.listening"));
       setInterim("");
@@ -158,12 +219,17 @@ export default function VoiceAssistant() {
 
     recognition.onend = () => {
       setListening(false);
+      setSessionActiveFlag(false);
       setStatus("");
     };
 
     recognition.onerror = (event) => {
       setListening(false);
+      setSessionActiveFlag(false);
       const blocked = event?.error === "not-allowed" || event?.error === "service-not-allowed";
+      if (blocked) {
+        setMicBlocked(true);
+      }
       setAiError(blocked ? t("voice.permission") : t("voice.error"));
     };
 
@@ -204,7 +270,11 @@ export default function VoiceAssistant() {
       }
       recognitionRef.current = null;
     };
-  }, [aiConfigured, recognitionCtor, runVoiceCommand, speechLocale, t]);
+  }, [aiConfigured, recognitionCtor, runVoiceCommand, setSessionActiveFlag, speechLocale, t]);
+
+  const isPermissionError = (err: unknown) =>
+    err instanceof DOMException &&
+    (err.name === "NotAllowedError" || err.name === "SecurityError");
 
   const startListening = () => {
     if (!aiConfigured) {
@@ -218,16 +288,22 @@ export default function VoiceAssistant() {
     setInterim("");
     setTranscript("");
     setAiError(null);
+    setSessionActiveFlag(true);
     try {
       recognitionRef.current.lang = speechLocale;
       recognitionRef.current.start();
     } catch (err) {
       const msg = err instanceof Error ? err.message : t("voice.error");
+      if (isPermissionError(err)) {
+        setMicBlocked(true);
+      }
+      setSessionActiveFlag(false);
       setAiError(msg);
     }
   };
 
   const stopListening = () => {
+    setSessionActiveFlag(false);
     try {
       recognitionRef.current?.stop();
     } catch {
@@ -242,6 +318,7 @@ export default function VoiceAssistant() {
     }
     const text = transcript.trim() || interim.trim();
     if (!text) return;
+    setSessionActiveFlag(true);
     setLastCommand(text);
     void runVoiceCommand(text);
   };
@@ -262,6 +339,9 @@ export default function VoiceAssistant() {
       {!aiConfigured && <div className="ai-alert warning">{aiConfigWarning}</div>}
       {!speechSupported && aiConfigured && (
         <div className="ai-alert warning">{t("voice.unsupported")}</div>
+      )}
+      {micBlocked && aiConfigured && (
+        <div className="ai-alert warning">{t("voice.permission")}</div>
       )}
 
       <div className="voice-actions">
