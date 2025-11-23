@@ -1,7 +1,13 @@
 import { useState } from "react";
-import { aiStandFromText, aiMarketingCopy, aiBannerImage } from "../api/aiClient";
+import {
+  AiClientError,
+  aiStandFromText,
+  aiMarketingCopy,
+  aiBannerImage,
+} from "../lib/aiClient";
 import type { StandConfig } from "../lib/pricing";
 import { useConfigStore } from "../store/configStore";
+import { aiClientConfig } from "../config/ai";
 
 export function AiAssistantPanel() {
   const [description, setDescription] = useState("");
@@ -10,8 +16,14 @@ export function AiAssistantPanel() {
 
   const replaceConfig = useConfigStore((s) => s.replaceConfig);
   const config = useConfigStore((s) => s.config);
+  const toErrorMessage = (err: unknown, fallback: string) =>
+    err instanceof AiClientError || err instanceof Error ? err.message : fallback;
 
   async function handleGenerateStand() {
+    if (!aiClientConfig.enabled) {
+      setError("KI-Assistent ist nicht konfiguriert (VITE_AI_API_BASE/VITE_AI_API_KEY).");
+      return;
+    }
     setLoading("stand");
     setError(null);
     try {
@@ -30,14 +42,18 @@ export function AiAssistantPanel() {
         },
       } as StandConfig;
       replaceConfig(merged);
-    } catch (e: any) {
-      setError(e?.message ?? "Fehler bei der KI-Konfiguration");
+    } catch (err) {
+      setError(toErrorMessage(err, "Fehler bei der KI-Konfiguration"));
     } finally {
       setLoading(null);
     }
   }
 
   async function handleGenerateTexts() {
+    if (!aiClientConfig.enabled) {
+      setError("KI-Assistent ist nicht konfiguriert (VITE_AI_API_BASE/VITE_AI_API_KEY).");
+      return;
+    }
     setLoading("text");
     setError(null);
     try {
@@ -49,14 +65,18 @@ export function AiAssistantPanel() {
       alert(
         `Headline: ${texts.headline}\n\nSubline: ${texts.subline}\n\nText: ${texts.body}`
       );
-    } catch (e: any) {
-      setError(e?.message ?? "Fehler bei der Textgenerierung");
+    } catch (err) {
+      setError(toErrorMessage(err, "Fehler bei der Textgenerierung"));
     } finally {
       setLoading(null);
     }
   }
 
   async function handleGenerateBanner() {
+    if (!aiClientConfig.enabled) {
+      setError("KI-Assistent ist nicht konfiguriert (VITE_AI_API_BASE/VITE_AI_API_KEY).");
+      return;
+    }
     setLoading("image");
     setError(null);
     try {
@@ -71,19 +91,25 @@ export function AiAssistantPanel() {
       // (euer mergeModules kann damit umgehen)
       useConfigStore.getState().setConfig({
         modules: {
-          trussBannerImageUrl: imageUrl,
-        } as any,
+          trussBannerMipmaps: [imageUrl],
+        },
       });
-    } catch (e: any) {
-      setError(e?.message ?? "Fehler bei der Bildgenerierung");
+    } catch (err) {
+      setError(toErrorMessage(err, "Fehler bei der Bildgenerierung"));
     } finally {
       setLoading(null);
     }
   }
 
+  const aiUnavailableMessage = aiClientConfig.enabled
+    ? null
+    : `KI ist deaktiviert. Bitte setze ${aiClientConfig.missing.join(" und ")}.`;
+  const actionsDisabled = loading !== null || !aiClientConfig.enabled;
+
   return (
     <div style={{ padding: "1rem", borderTop: "1px solid #eee" }}>
       <h3>KI-Assistent</h3>
+      {aiUnavailableMessage && <p className="ai-alert warning">{aiUnavailableMessage}</p>}
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -92,13 +118,13 @@ export function AiAssistantPanel() {
         style={{ width: "100%" }}
       />
       <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-        <button onClick={handleGenerateStand} disabled={loading !== null}>
+        <button onClick={handleGenerateStand} disabled={actionsDisabled}>
           {loading === "stand" ? "Konfiguriere..." : "Stand automatisch konfigurieren"}
         </button>
-        <button onClick={handleGenerateTexts} disabled={loading !== null}>
+        <button onClick={handleGenerateTexts} disabled={actionsDisabled}>
           {loading === "text" ? "Texte..." : "Werbetexte generieren"}
         </button>
-        <button onClick={handleGenerateBanner} disabled={loading !== null}>
+        <button onClick={handleGenerateBanner} disabled={actionsDisabled}>
           {loading === "image" ? "Bild..." : "Banner-Bild generieren"}
         </button>
       </div>

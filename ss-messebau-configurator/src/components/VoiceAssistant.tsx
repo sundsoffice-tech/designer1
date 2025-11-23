@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { requestAiVoiceCommand } from "../lib/aiClient";
+import { aiClientConfig } from "../config/ai";
+import { AiClientError, requestAiVoiceCommand } from "../lib/aiClient";
 import { useTranslation } from "../i18n";
-import { useConfigStore } from "../store/configStore";
+import { useConfigStore, type ConfigPatch } from "../store/configStore";
 
 type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
 
@@ -46,6 +47,10 @@ export default function VoiceAssistant() {
   const { t, language } = useTranslation();
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
+  const aiConfigured = aiClientConfig.enabled;
+  const aiConfigWarning = aiConfigured
+    ? ""
+    : `KI-API nicht konfiguriert (${aiClientConfig.missing.join(", ") || "Umgebungsvariablen fehlen"}).`;
 
   const [listening, setListening] = useState(false);
   const [status, setStatus] = useState("");
@@ -75,6 +80,14 @@ export default function VoiceAssistant() {
 
   const speechLocale = localeForLanguage(language);
   const speechSupported = Boolean(recognitionCtor);
+  const startDisabled = !speechSupported || !aiConfigured;
+  const applyDisabled =
+    aiLoading || !aiConfigured || (!transcript.trim() && !interim.trim());
+  const statusNote = !aiConfigured
+    ? aiConfigWarning || "Sprachassistent deaktiviert."
+    : speechSupported
+    ? t("voice.hint")
+    : t("voice.unsupported");
 
   const runVoiceCommand = useCallback(
     async (raw: string) => {
@@ -82,6 +95,11 @@ export default function VoiceAssistant() {
       if (!clean) return;
       if (aiLoadingRef.current) {
         setStatus(t("voice.status.busy"));
+        return;
+      }
+      if (!aiConfigured) {
+        setAiError("Sprachassistenz deaktiviert (KI-API nicht konfiguriert).");
+        setStatus("");
         return;
       }
 
@@ -93,19 +111,26 @@ export default function VoiceAssistant() {
       aiLoadingRef.current = true;
 
       try {
-        const result = await requestAiVoiceCommand(config, language, clean);
-        const patch =
-          result?.configPatch && typeof result.configPatch === "object" ? result.configPatch : {};
+        const result = await requestAiVoiceCommand({
+          config,
+          locale: language,
+          instructions: clean,
+        });
+        const patch: ConfigPatch =
+          result?.configPatch && typeof result.configPatch === "object"
+            ? (result.configPatch as ConfigPatch)
+            : {};
         const hasPatch = patch && Object.keys(patch).length > 0;
 
         if (hasPatch) {
-          setConfig(patch as any);
+          setConfig(patch);
         }
 
         setAiRationale(result?.rationale || (hasPatch ? t("voice.applied") : t("voice.noChange")));
         setAiWarnings(result?.warnings ?? []);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : t("voice.error");
+        const msg =
+          err instanceof AiClientError || err instanceof Error ? err.message : t("voice.error");
         setAiError(msg);
       } finally {
         setAiLoading(false);
@@ -113,11 +138,11 @@ export default function VoiceAssistant() {
         setStatus("");
       }
     },
-    [config, language, setConfig, t]
+    [aiConfigured, config, language, setConfig, t]
   );
 
   useEffect(() => {
-    if (!recognitionCtor) return;
+    if (!recognitionCtor || !aiConfigured) return;
     const recognition = new recognitionCtor();
     recognition.lang = speechLocale;
     recognition.continuous = false;
@@ -179,9 +204,13 @@ export default function VoiceAssistant() {
       }
       recognitionRef.current = null;
     };
-  }, [recognitionCtor, runVoiceCommand, speechLocale, t]);
+  }, [aiConfigured, recognitionCtor, runVoiceCommand, speechLocale, t]);
 
   const startListening = () => {
+    if (!aiConfigured) {
+      setAiError("Sprachassistenz deaktiviert (KI-API nicht konfiguriert).");
+      return;
+    }
     if (!recognitionRef.current) {
       setAiError(t("voice.unsupported"));
       return;
@@ -207,7 +236,12 @@ export default function VoiceAssistant() {
   };
 
   const handleManualSubmit = () => {
+    if (!aiConfigured) {
+      setAiError("Sprachassistenz deaktiviert (KI-API nicht konfiguriert).");
+      return;
+    }
     const text = transcript.trim() || interim.trim();
+    if (!text) return;
     setLastCommand(text);
     void runVoiceCommand(text);
   };
@@ -225,12 +259,17 @@ export default function VoiceAssistant() {
         </div>
       </div>
 
+      {!aiConfigured && <div className="ai-alert warning">{aiConfigWarning}</div>}
+      {!speechSupported && aiConfigured && (
+        <div className="ai-alert warning">{t("voice.unsupported")}</div>
+      )}
+
       <div className="voice-actions">
         <button
           type="button"
           className="btn-primary"
           onClick={listening ? stopListening : startListening}
-          disabled={!speechSupported}
+          disabled={startDisabled}
         >
           {listening ? t("voice.stop") : t("voice.start")}
         </button>
@@ -238,12 +277,12 @@ export default function VoiceAssistant() {
           type="button"
           className="btn-secondary"
           onClick={handleManualSubmit}
-          disabled={aiLoading || (!transcript.trim() && !interim.trim())}
+          disabled={applyDisabled}
         >
           {aiLoading ? t("voice.applying") : t("voice.apply")}
         </button>
         <div className="voice-status-note">
-          {speechSupported ? t("voice.hint") : t("voice.unsupported")}
+          {statusNote}
         </div>
       </div>
 

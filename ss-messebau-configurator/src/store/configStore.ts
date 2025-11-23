@@ -1,4 +1,4 @@
-// src/store/configStore.ts
+﻿// src/store/configStore.ts
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { calcPrice, calcPriceDetailed, type PriceBreakdown } from "../lib/pricing";
@@ -37,6 +37,7 @@ import type {
 } from "../lib/pricing";
 import { normalizeWallPanels } from "../lib/wallPanels";
 import { calculateScreenFootprint, resolveScreenSize } from "../config/objectDimensions";
+import { normalizeCounterPlacement } from "../lib/counters";
 
 const RUNTIME_API_DISABLED = import.meta.env.VITE_DISABLE_RUNTIME === "true";
 const DEFAULT_CUSTOMER_ID = import.meta.env.VITE_CUSTOMER_ID;
@@ -50,7 +51,7 @@ type BasePresetName = "small" | "medium" | "premium";
 type BundlePresetName = "starterBundle" | "proBundle" | "premiumBundle";
 type PresetName = BasePresetName | BundlePresetName;
 
-/** Rekursives Partial für verschachtelte Patches (auch Arrays) */
+/** Rekursives Partial fÃ¼r verschachtelte Patches (auch Arrays) */
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (infer U)[]
     ? DeepPartial<U>[]
@@ -73,8 +74,8 @@ type CabinWithPosition = CabinConfig & {
   position?: { x?: number; z?: number };
 };
 
-/** Wandoberflächen (UI/3D-spezifisch) */
-export type WallSurface = "system" | "wood" | "banner" | "seg" | "led";
+/** WandoberflÃ¤chen (UI/3D-spezifisch) */
+type WallSurface = "system" | "wood" | "banner" | "seg" | "led";
 
 type BundlePresetDefinition = {
   key: BundlePresetName;
@@ -99,7 +100,7 @@ type ConfigState = {
   moduleCompatibility: ModuleCompatibilityIndex;
   compatibilityIssues: string[];
 
-  /** Undo/Redo-Stacks (intern, nützlich z. B. für Buttons) */
+  /** Undo/Redo-Stacks (intern, nÃ¼tzlich z. B. fÃ¼r Buttons) */
   history: StandConfig[];
   future: StandConfig[];
   historyLimit: number;
@@ -138,7 +139,7 @@ type ConfigState = {
   redo: () => boolean;
 };
 
-// ───────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap: Record<StandType, number> = {
   row: 3,
@@ -147,7 +148,7 @@ const wallFixedMap: Record<StandType, number> = {
   island: 0,
 };
 
-export function getAllowedWalls(type: StandType): WallSide[] {
+function getAllowedWalls(type: StandType): WallSide[] {
   const fixed = wallFixedMap[type] ?? 0;
   const allowed: WallSide[] = [];
   if (fixed >= 1) allowed.push("back");
@@ -164,11 +165,9 @@ const isLedWallAllowed = (modules?: StandModules) => {
   const allowed = Array.isArray(staticModuleCompatibility?.ledFrame?.ledWall)
     ? staticModuleCompatibility.ledFrame!.ledWall!
     : [];
-  const frames = Array.isArray((modules as any)?.ledFramesDetailed)
-    ? ((modules as any).ledFramesDetailed as any[])
-    : [];
+  const frames = Array.isArray(modules.ledFramesDetailed) ? modules.ledFramesDetailed : [];
   if (frames.length) {
-    return frames.some((f: any) => allowed.includes(f?.variant));
+    return frames.some((f) => (f?.variant ? allowed.includes(f.variant) : false));
   }
   if (modules.frameVariant) return allowed.includes(modules.frameVariant);
   return false;
@@ -191,8 +190,8 @@ const screenVariantKey = (mount: string | undefined, size?: string) => {
 
 const buildModuleSelection = (modules: StandModules): ModuleSelection => {
   const frames =
-    Array.isArray((modules as any).ledFramesDetailed) && (modules as any).ledFramesDetailed.length
-      ? ((modules as any).ledFramesDetailed as any[]).map((f) => f.variant).filter(Boolean)
+    Array.isArray(modules.ledFramesDetailed) && modules.ledFramesDetailed.length
+      ? modules.ledFramesDetailed.map((f) => f.variant).filter(Boolean)
       : modules.frameVariant
       ? [modules.frameVariant]
       : [];
@@ -217,7 +216,7 @@ const buildModuleSelection = (modules: StandModules): ModuleSelection => {
   }
 
   const features: string[] = [];
-  const detail = ((modules as any).wallsDetail ?? {}) as Record<string, { surface?: string }>;
+  const detail = modules.wallsDetail ?? {};
   (["back", "left", "right"] as WallSide[]).forEach((side) => {
     if (detail?.[side]?.surface === "led") features.push("ledWall");
   });
@@ -286,7 +285,7 @@ function clampCabinPosition(
   const minZ = -standHalfZ + cabinHalfZ;
   const maxZ = standHalfZ - cabinHalfZ;
 
-  // Default: hinten links, mit 0.25 m Abstand zu den Wänden
+  // Default: hinten links, mit 0.25 m Abstand zu den WÃ¤nden
   const defaultX = -standHalfX + cabinHalfX + 0.25;
   const defaultZ = -standHalfZ + cabinHalfZ + 0.25;
 
@@ -402,7 +401,6 @@ function normalizeWallAttachments(
   const prevWalls = previousWalls ?? allowedWalls;
   const removedWalls = prevWalls.filter((w) => !allowed.has(w));
   const neutralWall = allowedWalls[0];
-  const mAny = modules as any;
   const index: WallAttachmentIndex = {
     byWall: { back: [], left: [], right: [] },
     floating: [],
@@ -417,10 +415,10 @@ function normalizeWallAttachments(
     }
   };
 
-  if (Array.isArray(mAny.detailedScreens)) {
+  if (Array.isArray(modules.detailedScreens)) {
     const capped: ScreenConfig[] = [];
     const wallCounts: Record<WallSide, number> = { back: 0, left: 0, right: 0 };
-    (mAny.detailedScreens as ScreenConfig[]).forEach((scr, idx) => {
+    modules.detailedScreens.forEach((scr, idx) => {
       const id = scr.id ?? `screen-${idx}`;
       const mount = scr.mount ?? "wall";
       if (mount !== "wall") {
@@ -429,8 +427,8 @@ function normalizeWallAttachments(
         return;
       }
 
-      const preferred = (scr as any).lastWallSide ?? scr.wallSide ?? modules.screensWall;
-      const wasFloating = Boolean((scr as any).floating);
+      const preferred = scr.lastWallSide ?? scr.wallSide ?? modules.screensWall;
+      const wasFloating = Boolean(scr.floating);
       const canUsePreferred = preferred && allowed.has(preferred as WallSide);
       const detached = preferred
         ? removedWalls.includes(preferred as WallSide) || !allowed.has(preferred as WallSide)
@@ -445,13 +443,13 @@ function normalizeWallAttachments(
 
       const pos = wallSide ? clampWallAttachmentPosition(cfg, wallSide, scr.position) : scr.position ?? { x: 0, z: 0 };
       const next: ScreenConfig = { ...scr, wallSide, position: pos, lastWallSide: preferred as WallSide | undefined };
-      if (floating) (next as any).floating = true;
-      else if ("floating" in next) delete (next as any).floating;
+      if (floating) next.floating = true;
+      else if ("floating" in next) delete next.floating;
 
       if (!floating && wallSide) {
         const cap = maxScreensForSide(wallSide);
         if (wallCounts[wallSide] >= cap) {
-          (next as any).floating = true;
+          next.floating = true;
           register(id, wallSide, true);
           capped.push(next);
           return;
@@ -465,11 +463,11 @@ function normalizeWallAttachments(
       register(id, wallSide, floating);
       capped.push(next);
     });
-    mAny.detailedScreens = clampFloorScreensToStand(cfg, capped) ?? capped;
+    modules.detailedScreens = clampFloorScreensToStand(cfg, capped) ?? capped;
   }
 
-  if (Array.isArray(mAny.ledFramesDetailed)) {
-    const nextFrames = (mAny.ledFramesDetailed as any[]).map((frame, idx) => {
+  if (Array.isArray(modules.ledFramesDetailed)) {
+    const nextFrames = modules.ledFramesDetailed.map((frame, idx) => {
       const id = frame.id ?? `led-frame-${idx}`;
       const preferred = frame.wallSide ?? frame.lastWallSide;
       const wasFloating = Boolean(frame.floating);
@@ -503,14 +501,14 @@ function normalizeWallAttachments(
       return next;
     });
 
-    mAny.ledFramesDetailed = nextFrames;
+    modules.ledFramesDetailed = nextFrames;
   }
 
   return index;
 }
 
 function sanitizeTrussBanners(cfg: StandConfig, modules: StandModules) {
-  const hasTruss = !!(modules.truss || (modules as any).trussConfig?.enabled);
+  const hasTruss = Boolean(modules.truss || modules.trussConfig?.enabled);
   const clampCount = (value: unknown, max: number) => {
     const num = Number(value);
     if (!Number.isFinite(num)) return 0;
@@ -543,16 +541,15 @@ function sanitizeTrussBanners(cfg: StandConfig, modules: StandModules) {
 
 
 function buildTrussLightsFromCounts(cfg: StandConfig, modules: StandModules): TrussLightConfig[] {
-  const anyMods = modules as any;
   const width = cfg.width;
   const depth = cfg.depth;
 
   const maxPerLength = (len: number) => Math.max(0, Math.floor(len * 1.5));
 
-  const front = Math.min(anyMods.trussLightsFront ?? 0, maxPerLength(width));
-  const back = Math.min(anyMods.trussLightsBack ?? 0, maxPerLength(width));
-  const left = Math.min(anyMods.trussLightsLeft ?? 0, maxPerLength(depth));
-  const right = Math.min(anyMods.trussLightsRight ?? 0, maxPerLength(depth));
+  const front = Math.min(modules.trussLightsFront ?? 0, maxPerLength(width));
+  const back = Math.min(modules.trussLightsBack ?? 0, maxPerLength(width));
+  const left = Math.min(modules.trussLightsLeft ?? 0, maxPerLength(depth));
+  const right = Math.min(modules.trussLightsRight ?? 0, maxPerLength(depth));
 
   const lights: TrussLightConfig[] = [];
 
@@ -599,7 +596,6 @@ function buildWallLightsFromCounts(
   hasLeft: boolean,
   hasRight: boolean
 ): WallLightConfig[] {
-  const anyMods = modules as any;
   const width = cfg.width;
   const depth = cfg.depth;
   const wallHeight = cfg.height || 2.5;
@@ -608,9 +604,9 @@ function buildWallLightsFromCounts(
   const maxPerLength = (len: number) => Math.max(0, Math.floor(len * 1.5));
 
   const counts = {
-    back: hasBack ? Math.min(anyMods.wallLightsBack ?? 0, maxPerLength(width)) : 0,
-    left: hasLeft ? Math.min(anyMods.wallLightsLeft ?? 0, maxPerLength(depth)) : 0,
-    right: hasRight ? Math.min(anyMods.wallLightsRight ?? 0, maxPerLength(depth)) : 0,
+    back: hasBack ? Math.min(modules.wallLightsBack ?? 0, maxPerLength(width)) : 0,
+    left: hasLeft ? Math.min(modules.wallLightsLeft ?? 0, maxPerLength(depth)) : 0,
+    right: hasRight ? Math.min(modules.wallLightsRight ?? 0, maxPerLength(depth)) : 0,
   };
 
   const lights: WallLightConfig[] = [];
@@ -650,7 +646,7 @@ function buildWallLightsFromCounts(
   return lights;
 }
 
-/** Sichere Deep-Merge-Funktion für Module (nimmt DeepPartial entgegen) */
+/** Sichere Deep-Merge-Funktion fÃ¼r Module (nimmt DeepPartial entgegen) */
 function mergeModules(
   base: StandModules,
   patch?: DeepPartial<StandModules>
@@ -660,10 +656,10 @@ function mergeModules(
   // Start: Kopie des aktuellen Zustands (verhindert TS2739 bei Objekt-Literal + Spread)
   const out: StandModules = { ...base };
 
-  // generisch alle Keys (auch unbekannte wie trussBannerImageUrl) übernehmen
-  Object.assign(out as any, patch as any);
+  // generisch alle Keys (auch unbekannte wie trussBannerImageUrl) Ã¼bernehmen
+  Object.assign(out, patch as Partial<StandModules>);
 
-  // 1) Flach patchen: bekannte einfachen Felder, außer verschachtelte Objekte
+  // 1) Flach patchen: bekannte einfachen Felder, auÃŸer verschachtelte Objekte
   const shallowKeys: (keyof StandModules | "trussBannerImageUrl")[] = [
     "wallsClosedSides",
     "storageRoom",
@@ -698,20 +694,22 @@ function mergeModules(
     "trussBannersRight",
     "trussBannerWidth",
     "trussBannerHeight",
+    "trussBannerMipmaps",
     // extra Feld, das typseitig evtl. nicht in StandModules steht:
     "trussBannerImageUrl",
     "raisedFloor",
   ];
 
   for (const k of shallowKeys) {
-    if (patch && k in (patch as any)) {
-      (out as any)[k] = (patch as any)[k];
+    const value = patch?.[k];
+    if (value !== undefined) {
+      out[k as keyof StandModules] = value as StandModules[keyof StandModules];
     }
   }
 
   // 2) floor deep-merge
   if (patch.floor) {
-    out.floor = { ...base.floor, ...(patch.floor as any) };
+    out.floor = { ...(base.floor ?? {}), ...patch.floor };
   }
 
   // 3) cabin deep-merge (inkl. optionaler Position)
@@ -725,7 +723,7 @@ function mergeModules(
       ...(patchCabin?.wallSurfaces ?? {}),
     };
 
-    out.cabin = {
+    const mergedCabin: CabinConfig & { position?: { x?: number; z?: number } } = {
       ...(baseCabin ?? {}),
       ...(patchCabin ?? {}),
       position: {
@@ -733,57 +731,59 @@ function mergeModules(
         ...(patchCabin?.position ?? {}),
       },
       wallSurfaces: mergedSurfaces,
-    } as any; // 'position' ist Zusatzfeld -> als any zurueck in CabinConfig
+    };
+
+    out.cabin = mergedCabin;
   }
 
   // 4) walls + wallsDetail deep-merge
   if (patch.walls) {
-    out.walls = { ...(base.walls ?? {}), ...(patch.walls as any) } as any;
+    out.walls = { ...(base.walls ?? {}), ...(patch.walls ?? {}) };
   }
   if (patch.wallsDetail) {
     out.wallsDetail = {
       ...(base.wallsDetail ?? {}),
-      ...(patch.wallsDetail as any),
-    } as any;
+      ...(patch.wallsDetail ?? {}),
+    };
   }
-  if ((patch as any).wallPanelRules) {
-    (out as any).wallPanelRules = {
-      ...(base as any).wallPanelRules,
-      ...((patch as any).wallPanelRules ?? {}),
-    } as any;
+  if (patch.wallPanelRules) {
+    out.wallPanelRules = {
+      ...(base.wallPanelRules ?? {}),
+      ...(patch.wallPanelRules ?? {}),
+    };
   }
 
   // 5) Arrays nur ersetzen, wenn explizit geliefert
   if (patch.detailedScreens !== undefined) {
-    out.detailedScreens = patch.detailedScreens as any;
+    out.detailedScreens = patch.detailedScreens;
   }
   if (patch.countersDetailed !== undefined) {
-    out.countersDetailed = patch.countersDetailed as any;
+    out.countersDetailed = patch.countersDetailed;
   }
-  if ((patch as any).chairsDetailed !== undefined) {
-    (out as any).chairsDetailed = (patch as any).chairsDetailed;
+  if (patch.chairsDetailed !== undefined) {
+    out.chairsDetailed = patch.chairsDetailed;
   }
-  if ((patch as any).trussLightsDetailed !== undefined) {
-    (out as any).trussLightsDetailed = (patch as any).trussLightsDetailed as TrussLightConfig[];
+  if (patch.trussLightsDetailed !== undefined) {
+    out.trussLightsDetailed = patch.trussLightsDetailed as TrussLightConfig[];
   }
-  if ((patch as any).wallLightsDetailed !== undefined) {
-    (out as any).wallLightsDetailed = (patch as any).wallLightsDetailed as WallLightConfig[];
+  if (patch.wallLightsDetailed !== undefined) {
+    out.wallLightsDetailed = patch.wallLightsDetailed as WallLightConfig[];
   }
-  if ((patch as any).wallPanels !== undefined) {
-    (out as any).wallPanels = (patch as any).wallPanels as any;
+  if (patch.wallPanels !== undefined) {
+    out.wallPanels = patch.wallPanels;
   }
   if (patch.roundTables !== undefined) {
-    out.roundTables = patch.roundTables as any;
+    out.roundTables = patch.roundTables;
   }
-  if ((patch as any).customObjects !== undefined) {
-    (out as any).customObjects = (patch as any).customObjects;
+  if (patch.customObjects !== undefined) {
+    out.customObjects = patch.customObjects;
   }
-  if ((patch as any).ledFramesDetailed !== undefined) {
-    (out as any).ledFramesDetailed = (patch as any).ledFramesDetailed;
+  if (patch.ledFramesDetailed !== undefined) {
+    out.ledFramesDetailed = patch.ledFramesDetailed;
   }
-  if ((patch as any).activeBundles !== undefined) {
-    const list = (patch as any).activeBundles;
-    (out as any).activeBundles = Array.isArray(list) ? Array.from(new Set(list)) : list;
+  if (patch.activeBundles !== undefined) {
+    const list = patch.activeBundles;
+    out.activeBundles = Array.isArray(list) ? Array.from(new Set(list)) : list;
   }
 
   return out;
@@ -809,9 +809,11 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     wallsClosedSides,
   };
 
+  modules.countersWall = normalizeCounterPlacement(modules.countersWall);
+
   // Rahmen-Varianten (aus modules.json) validieren / normalisieren
   const compatFrames = Array.isArray(modules.ledFramesDetailed)
-    ? [...(modules.ledFramesDetailed as any[])].filter(Boolean)
+    ? [...modules.ledFramesDetailed].filter(Boolean)
     : [];
   if (!compatFrames.length && modules.frameVariant) {
     compatFrames.push({
@@ -858,15 +860,15 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     modules.frameColor = cleanedFrames[0]?.color;
     modules.ledFrames = cleanedFrames.reduce((sum, f) => sum + (f.count ?? 1), 0);
   } else {
-    delete (modules as any).ledFramesDetailed;
+    delete modules.ledFramesDetailed;
   }
 
-  // existierende Wände
+  // existierende WÃ¤nde
   const hasBack = allowedWalls.includes("back");
   const hasLeft = allowedWalls.includes("left");
   const hasRight = allowedWalls.includes("right");
 
-  // Lagerraum nur sinnvoll, wenn Rückwand existiert
+  // Lagerraum nur sinnvoll, wenn RÃ¼ckwand existiert
   if (!hasBack) {
     modules.storageRoom = false;
     if (modules.cabin) {
@@ -884,10 +886,10 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   if (cleanedWallsDetail) {
     modules.wallsDetail = cleanedWallsDetail;
   } else if (modules.wallsDetail) {
-    delete (modules as any).wallsDetail;
+    delete modules.wallsDetail;
   }
 
-  // Screens nur auf existierenden Wänden platzieren
+  // Screens nur auf existierenden WÃ¤nden platzieren
   modules.screensWall = fixWall(modules.screensWall);
   const maxScreensForSide = (side?: WallSide) => {
     if (!side) return 0;
@@ -925,7 +927,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   if (storageDoorWall) {
     modules.storageDoorSide = storageDoorWall;
   } else if (!storageActive) {
-    delete (modules as any).storageDoorSide;
+    delete modules.storageDoorSide;
   }
 
   // --- Boden-Defaults ---
@@ -949,7 +951,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
       doorSide: storageDoorWall,
     } as CabinWithPosition;
   } else {
-    // Kabinenhöhe an Standhöhe koppeln
+    // KabinenhÃ¶he an StandhÃ¶he koppeln
     modules.cabin.height = baseHeight;
 
     const cabinDoorSide =
@@ -959,14 +961,14 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     if (cabinDoorSide) {
       modules.cabin.doorSide = cabinDoorSide;
     } else if (!storageActive) {
-      delete (modules.cabin as any).doorSide;
+      delete modules.cabin.doorSide;
     }
 
     // Lagerraum-Flag steuert, ob Kabine aktiv ist
     (modules.cabin as CabinWithPosition).enabled = storageActive;
   }
 
-  // Kabine positionieren (bewegbar, aber immer innerhalb der Standfläche)
+  // Kabine positionieren (bewegbar, aber immer innerhalb der StandflÃ¤che)
   let cabin = modules.cabin as CabinWithPosition | undefined;
   if (cabin) {
     const size = clampCabinSize(cfgClamped, cabin);
@@ -982,19 +984,19 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     } as CabinWithPosition;
   }
 
-  // --- Wände-Objekt (für Advanced-Pricing) aufbauen ---
+  // --- WÃ¤nde-Objekt (fÃ¼r Advanced-Pricing) aufbauen ---
   modules.walls = buildWalls(cfgClamped, modules, hasBack, hasLeft, hasRight);
 
-  // --- Wandpaneele automatisch aus Regeln ableiten (für segmentierte Oberflächen) ---
+  // --- Wandpaneele automatisch aus Regeln ableiten (fÃ¼r segmentierte OberflÃ¤chen) ---
   const { rules: mergedPanelRules, panels } = normalizeWallPanels(cfgClamped, modules);
   modules.wallPanelRules = mergedPanelRules;
   modules.wallPanels = panels;
 
   // LED-Wand nur wenn kompatible Rahmen-Variante gewaehlt wurde
   if (!isLedWallAllowed(modules)) {
-    const detail = ((modules as any).wallsDetail ?? {}) as Partial<
-      Record<WallSide, { surface?: string; finishId?: string }>
-    >;
+    const detail: Partial<Record<WallSide, { surface?: string; finishId?: string }>> = {
+      ...(modules.wallsDetail ?? {}),
+    };
     let changed = false;
     (["back", "left", "right"] as WallSide[]).forEach((side) => {
       if (detail?.[side]?.surface === "led") {
@@ -1003,23 +1005,22 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
       }
     });
     if (changed) {
-      (modules as any).wallsDetail = detail;
+      modules.wallsDetail = detail;
     }
   }
 
   sanitizeTrussBanners(cfgClamped, modules);
 
   // --- Lampen-Defaults ---
-  const mAny = modules as any;
-  if (mAny.trussLights == null) mAny.trussLights = 0;
-  if (mAny.wallLightsBack == null) mAny.wallLightsBack = 0;
-  if (mAny.wallLightsLeft == null) mAny.wallLightsLeft = 0;
-  if (mAny.wallLightsRight == null) mAny.wallLightsRight = 0;
+  if (modules.trussLights == null) modules.trussLights = 0;
+  if (modules.wallLightsBack == null) modules.wallLightsBack = 0;
+  if (modules.wallLightsLeft == null) modules.wallLightsLeft = 0;
+  if (modules.wallLightsRight == null) modules.wallLightsRight = 0;
 
-  if (!Array.isArray(mAny.trussLightsDetailed)) {
-    mAny.trussLightsDetailed = buildTrussLightsFromCounts(cfgClamped, modules);
+  if (!Array.isArray(modules.trussLightsDetailed)) {
+    modules.trussLightsDetailed = buildTrussLightsFromCounts(cfgClamped, modules);
   }
-  const trussDetailedAll = (mAny.trussLightsDetailed ?? []) as TrussLightConfig[];
+  const trussDetailedAll = (modules.trussLightsDetailed ?? []) as TrussLightConfig[];
   const maxTrussPerSide = {
     front: Math.max(0, Math.floor(cfgClamped.width * 1.5)),
     back: Math.max(0, Math.floor(cfgClamped.width * 1.5)),
@@ -1032,27 +1033,27 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     limitedTruss.push(...items);
   });
   const trussDetailed = limitedTruss;
-  mAny.trussLightsDetailed = trussDetailed;
+  modules.trussLightsDetailed = trussDetailed;
   const trussCounts = {
     front: trussDetailed.filter((l) => l.side === "front").length,
     back: trussDetailed.filter((l) => l.side === "back").length,
     left: trussDetailed.filter((l) => l.side === "left").length,
     right: trussDetailed.filter((l) => l.side === "right").length,
   };
-  mAny.trussLightsFront = trussCounts.front;
-  mAny.trussLightsBack = trussCounts.back;
-  mAny.trussLightsLeft = trussCounts.left;
-  mAny.trussLightsRight = trussCounts.right;
-  mAny.trussLights = trussCounts.front + trussCounts.back + trussCounts.left + trussCounts.right;
+  modules.trussLightsFront = trussCounts.front;
+  modules.trussLightsBack = trussCounts.back;
+  modules.trussLightsLeft = trussCounts.left;
+  modules.trussLightsRight = trussCounts.right;
+  modules.trussLights = trussCounts.front + trussCounts.back + trussCounts.left + trussCounts.right;
 
-  if (!Array.isArray(mAny.wallLightsDetailed)) {
-    mAny.wallLightsDetailed = buildWallLightsFromCounts(cfgClamped, modules, hasBack, hasLeft, hasRight);
+  if (!Array.isArray(modules.wallLightsDetailed)) {
+    modules.wallLightsDetailed = buildWallLightsFromCounts(cfgClamped, modules, hasBack, hasLeft, hasRight);
   }
   const allowedWallSides = new Set<WallSide>();
   if (hasBack) allowedWallSides.add("back");
   if (hasLeft) allowedWallSides.add("left");
   if (hasRight) allowedWallSides.add("right");
-  const wallCleaned = ((mAny.wallLightsDetailed ?? []) as WallLightConfig[]).filter((w) =>
+  const wallCleaned = ((modules.wallLightsDetailed ?? []) as WallLightConfig[]).filter((w) =>
     allowedWallSides.has(w.side)
   );
   const maxWallLights = {
@@ -1065,7 +1066,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
     const items = wallCleaned.filter((w) => w.side === side).slice(0, maxWallLights[side]);
     limitedWallLights.push(...items);
   });
-  mAny.wallLightsDetailed = limitedWallLights;
+  modules.wallLightsDetailed = limitedWallLights;
 
   const wallDetailed = (mAny.wallLightsDetailed ?? []) as WallLightConfig[];
   const wallCounts = {
@@ -1077,7 +1078,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   mAny.wallLightsLeft = wallCounts.left;
   mAny.wallLightsRight = wallCounts.right;
 
-  // --- Möbelanzahl an Standfläche koppeln ---
+  // --- MÃ¶belanzahl an StandflÃ¤che koppeln ---
   const area = cfgClamped.width * cfgClamped.depth;
   const maxCountersDetailed = Math.max(1, Math.floor(area / 6));
   const maxRoundTables = Math.max(1, Math.floor(area / 6));
@@ -1140,8 +1141,8 @@ const collectBundleVariantCounts = (modules: StandModules): Record<string, numbe
     counts[variant] = (counts[variant] ?? 0) + qty;
   };
 
-  const ledFrames = Array.isArray((modules as any).ledFramesDetailed)
-    ? ((modules as any).ledFramesDetailed as any[])
+  const ledFrames = Array.isArray(modules.ledFramesDetailed)
+    ? [...modules.ledFramesDetailed]
     : [];
   if (ledFrames.length === 0 && modules.frameVariant) {
     ledFrames.push({
@@ -1219,11 +1220,8 @@ const isBundleConfigMatch = (cfg: StandConfig, bundle: BundlePresetDefinition): 
 };
 
 const dropBundleMeta = (cfg: StandConfig): StandConfig => {
-  const clone = { ...cfg } as any;
-  delete clone.bundleKey;
-  delete clone.bundleLabel;
-  delete clone.bundleDiscount;
-  return clone as StandConfig;
+  const { bundleKey, bundleLabel, bundleDiscount, ...rest } = cfg;
+  return rest as StandConfig;
 };
 
 const applyBundleGuard = (cfg: StandConfig): StandConfig => {
@@ -1460,7 +1458,7 @@ const basePresetConfigs: Record<BasePresetName, StandConfig> = {
         position: { x: -2.8, z: -1.5 },
       },
       counters: 1,
-      countersWall: "island",
+      countersWall: "center",
       countersWithPower: true,
       counterVariant: "premium",
       countersDetailed: [
@@ -1720,7 +1718,7 @@ function createRuntimeSync(get: () => ConfigState, set: (partial: Partial<Config
   return run;
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Store
 export const useConfigStore = create<ConfigState>()(
   persist(
@@ -1740,7 +1738,7 @@ export const useConfigStore = create<ConfigState>()(
   const ensureCompatibilityAllowed = () => {
     const issues = get().compatibilityIssues ?? [];
     if (issues.length > 0) {
-      throw new Error(`Nicht zulässige Kombination: ${issues.join("; ")}`);
+      throw new Error(`Nicht zulÃ¤ssige Kombination: ${issues.join("; ")}`);
     }
   };
 
@@ -1777,7 +1775,7 @@ export const useConfigStore = create<ConfigState>()(
 
   applyFinalRef.current = applyFinal;
 
-  // initial Backend-Sync anstoßen
+  // initial Backend-Sync anstoÃŸen
   setTimeout(() => runtimeSync(initial.config), 0);
   void syncModuleCatalog();
 
@@ -1909,8 +1907,8 @@ export const useConfigStore = create<ConfigState>()(
         modules: {
           cabin: {
             position: pos,
-          } as any,          // ✅ nur Teil-Update, nicht komplette CabinConfig
-        } as any,
+          },          // âœ… nur Teil-Update, nicht komplette CabinConfig
+        },
       });
     },
 
@@ -1931,24 +1929,24 @@ export const useConfigStore = create<ConfigState>()(
           cabin: {
             width: clamped.width,
             depth: clamped.depth,
-          } as any, // Teil-Update
-        } as any,
+          }, // Teil-Update
+        },
       });
     },
 
 
 
-    // ---- Wände / Oberflächen ----
+    // ---- WÃ¤nde / OberflÃ¤chen ----
     setWallSurface: (side, surface) => {
       const current = get().config;
-      const prev = (current.modules as any).wallsDetail ?? {};
+      const prev = current.modules.wallsDetail ?? {};
       get().setConfig({
         modules: {
           wallsDetail: {
             ...prev,
             [side]: { ...(prev[side] ?? {}), surface },
           },
-        } as any,
+        },
       });
     },
 

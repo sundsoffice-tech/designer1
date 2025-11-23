@@ -3,19 +3,40 @@ import type { ModuleCatalog, ModuleKind, ResolvedModuleVariant } from "../types/
 
 type AllowedOptions = {
   variants: ResolvedModuleVariant[];
-  sizes?: number[];
-  colors?: string[];
+  sizes: number[];
+  colors: string[];
 };
 
-const emptyResult: AllowedOptions = {
+const createEmptyResult = (): AllowedOptions => ({
   variants: [],
   sizes: [],
   colors: [],
-};
+});
 
 const hasLedWall = (config?: StandConfig): boolean => {
   if (!config?.modules?.wallsDetail) return false;
   return Object.values(config.modules.wallsDetail).some((wall) => wall?.surface === "led");
+};
+
+const compatibilityGuards: Record<string, (config?: StandConfig) => string | null> = {
+  ledFrame: (cfg) => (hasLedWall(cfg) ? "ledWall" : null),
+  counter: (cfg) => (cfg?.modules?.countersWithPower ? "powerAddon" : null),
+};
+
+const restrictVariants = (
+  variants: ResolvedModuleVariant[],
+  allowed?: string[]
+): ResolvedModuleVariant[] => {
+  if (!allowed || allowed.length === 0) return variants;
+  return variants.filter((variant) => allowed.includes(variant.key));
+};
+
+const collectUniqueOptions = <T>(
+  variants: ResolvedModuleVariant[],
+  picker: (variant: ResolvedModuleVariant) => T[] | undefined
+): T[] => {
+  const merged = variants.flatMap((variant) => picker(variant) ?? []);
+  return merged.length ? Array.from(new Set(merged)) : [];
 };
 
 /**
@@ -27,10 +48,10 @@ export function getAllowedOptions(
   config: StandConfig | null | undefined,
   moduleKey: string
 ): AllowedOptions {
-  if (!catalog) return emptyResult;
+  if (!catalog) return createEmptyResult();
 
   const moduleDef = catalog.modules.find((mod) => mod.module === moduleKey);
-  if (!moduleDef) return emptyResult;
+  if (!moduleDef) return createEmptyResult();
 
   const variants: ResolvedModuleVariant[] = moduleDef.variants.map((variant) => ({
     ...variant,
@@ -39,29 +60,13 @@ export function getAllowedOptions(
     kind: moduleDef.kind as ModuleKind,
   }));
 
-  const compat = moduleDef.compatibleWith ?? {};
-  let filtered = variants;
-
-  if (moduleKey === "ledFrame" && hasLedWall(config ?? undefined)) {
-    const allowed = compat.ledWall ?? [];
-    if (Array.isArray(allowed) && allowed.length > 0) {
-      filtered = variants.filter((variant) => allowed.includes(variant.key));
-    }
-  }
-
-  if (moduleKey === "counter" && config?.modules?.countersWithPower) {
-    const allowed = compat.powerAddon ?? [];
-    if (Array.isArray(allowed) && allowed.length > 0) {
-      filtered = variants.filter((variant) => allowed.includes(variant.key));
-    }
-  }
-
-  const sizes = filtered.flatMap((variant) => variant.sizes ?? []);
-  const colors = filtered.flatMap((variant) => variant.colors ?? []);
+  const compatKey = compatibilityGuards[moduleKey]?.(config ?? undefined);
+  const allowedKeys = compatKey ? moduleDef.compatibleWith?.[compatKey] : undefined;
+  const filtered = restrictVariants(variants, Array.isArray(allowedKeys) ? allowedKeys : undefined);
 
   return {
     variants: filtered,
-    sizes,
-    colors,
+    sizes: collectUniqueOptions(filtered, (variant) => variant.sizes),
+    colors: collectUniqueOptions(filtered, (variant) => variant.colors),
   };
 }

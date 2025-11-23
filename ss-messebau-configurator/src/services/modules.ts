@@ -1,11 +1,9 @@
 import { z } from "zod";
 import type {
   ModuleCatalog,
-  ModuleDefinition,
   ModuleVariantMap,
   ModuleCompatibilityIndex,
   ModuleKind,
-  ResolvedModuleVariant,
   ModuleBundle,
 } from "../types/modules";
 import { apiBaseUrl } from "../lib/apiBase";
@@ -124,9 +122,6 @@ const fetchRemoteCatalog = async (): Promise<ModuleCatalog | null> => {
   }
 };
 
-export const deriveModuleVariantMap = buildVariantMap;
-export const deriveCompatibilityIndex = buildCompatibilityIndex;
-
 export const loadModuleCatalog = async (): Promise<{
   catalog: ModuleCatalog;
   variants: ModuleVariantMap;
@@ -166,28 +161,6 @@ export const loadModuleCatalog = async (): Promise<{
     bundles: moduleBundles,
   };
 };
-
-export const listModules = (kind?: ModuleKind): ModuleDefinition[] =>
-  (cachedRemote ?? moduleCatalog).modules.filter((mod) => !kind || mod.kind === kind);
-
-export const listVariants = (kind?: ModuleKind): ResolvedModuleVariant[] =>
-  Object.values(cachedRemoteVariants ?? moduleVariantsByKey).filter(
-    (variant) => !kind || variant.kind === kind
-  );
-
-export const getModuleDefinition = (key: string): ResolvedModuleVariant | undefined =>
-  (cachedRemoteVariants ?? moduleVariantsByKey)[key];
-
-export const getModuleDimensions = (
-  key: string
-): ResolvedModuleVariant["dimensions"] | undefined =>
-  (cachedRemoteVariants ?? moduleVariantsByKey)[key]?.dimensions;
-
-export const getModuleCompatibility = (module: string) =>
-  (cachedRemoteCompatibility ?? moduleCompatibilityIndex)[module] ?? {};
-
-export const listBundles = (): ModuleBundle[] =>
-  (cachedRemote ?? moduleCatalog).bundles ?? [];
 
 export type ModuleSelection = {
   frames?: string[];

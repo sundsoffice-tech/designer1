@@ -7,7 +7,7 @@ import de from "./locales/de.json";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 
-export type Language = "de" | "en" | "fr";
+type Language = "de" | "en" | "fr";
 type LanguageLabelKey = "lang.de" | "lang.en" | "lang.fr";
 
 const STORAGE_KEY = "ss-lang";

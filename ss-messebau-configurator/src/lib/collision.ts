@@ -1,6 +1,6 @@
 ﻿import type { StandConfig } from "./pricing";
 
-export type Aabb = {
+type Aabb = {
   id: string;
   label: string;
   minX: number;
@@ -11,7 +11,7 @@ export type Aabb = {
 
 export const DEFAULT_CLEARANCE = 0.2;
 
-export const intersects = (a: Aabb, b: Aabb) =>
+const intersects = (a: Aabb, b: Aabb) =>
   !(a.maxX <= b.minX || a.minX >= b.maxX || a.maxZ <= b.minZ || a.minZ >= b.maxZ);
 
 export const makeAabb = (
@@ -35,7 +35,7 @@ export const makeAabb = (
   };
 };
 
-export const findCollision = (
+const findCollision = (
   candidate: Aabb,
   boxes: Aabb[],
   ignored: Set<string> = new Set()
@@ -66,28 +66,21 @@ export function buildSceneAabbs(
   clearance: number = DEFAULT_CLEARANCE
 ): Aabb[] {
   const boxes: Aabb[] = [];
-  const modules = cfg.modules as any;
-  const mAny = modules ?? {};
+  const modules = cfg.modules;
 
   // Kabine
-  const cabin = mAny.cabin as
-    | (StandConfig["modules"]["cabin"] & { position?: { x?: number; z?: number } })
-    | undefined;
-  if (cabin && (cabin.enabled ?? mAny.storageRoom)) {
+  const cabin = modules.cabin;
+  const cabinEnabled = cabin?.enabled ?? modules.storageRoom;
+  if (cabin && cabinEnabled) {
     const x = cabin.position?.x ?? -cfg.width / 2 + (cabin.width ?? 1.5) / 2 + 0.25;
     const z = cabin.position?.z ?? -cfg.depth / 2 + (cabin.depth ?? 1.5) / 2 + 0.25;
     boxes.push(makeAabb("cabin", "Kabine", x, z, cabin.width ?? 1.5, cabin.depth ?? 1.5, clearance));
   }
 
   // Counters (detailliert)
-  const countersDetailed = (mAny.countersDetailed ?? []) as {
-    id: string;
-    variant?: "basic" | "premium" | "corner";
-    size?: { w?: number; d?: number };
-    position?: { x?: number; z?: number };
-  }[];
+  const countersDetailed = modules.countersDetailed ?? [];
   countersDetailed.forEach((ctr) => {
-    const variant = ctr.variant ?? (mAny.counterVariant ?? "basic");
+    const variant = ctr.variant ?? (modules.counterVariant ?? "basic");
     const w = ctr.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
     const d = ctr.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
     const x = ctr.position?.x ?? 0;
@@ -96,14 +89,7 @@ export function buildSceneAabbs(
   });
 
   // Screens (nur detailliert)
-  const detailedScreens = (mAny.detailedScreens ?? []) as {
-    id: string;
-    size?: { w?: number; h?: number; t?: number };
-    mount?: "wall" | "truss" | "floor";
-    wallSide?: "back" | "left" | "right";
-    position?: { x?: number; z?: number };
-    rotationY?: number;
-  }[];
+  const detailedScreens = modules.detailedScreens ?? [];
 
   detailedScreens.forEach((scr) => {
     const w = scr.size?.w ?? 0.9;
@@ -128,10 +114,10 @@ export function buildSceneAabbs(
   });
 
   // Truss-St├╝tzen (vier Eck-Pfosten)
-  if (mAny.truss) {
+  if (modules.truss) {
     const columnSize = 0.12; // etwas gr├Â├ƒer als die optischen 8 cm
-    const offsetX = mAny.trussOffset?.x ?? 0;
-    const offsetZ = mAny.trussOffset?.z ?? 0;
+    const offsetX = modules.trussOffset?.x ?? 0;
+    const offsetZ = modules.trussOffset?.z ?? 0;
 
     const positions: [string, number, number][] = [
       ["truss-col-front-left", -cfg.width / 2 + offsetX, cfg.depth / 2 + offsetZ],

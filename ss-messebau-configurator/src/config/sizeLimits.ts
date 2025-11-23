@@ -1,9 +1,9 @@
-export type SizeLimit = {
+type SizeLimit = {
   min: number;
   max: number;
 };
 
-export type SizeLimitWithDefault = SizeLimit & {
+type SizeLimitWithDefault = SizeLimit & {
   default: number;
 };
 

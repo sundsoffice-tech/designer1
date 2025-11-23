@@ -6,21 +6,21 @@ export type CameraPose = {
   fov?: number;
 };
 
-export type CameraView = {
+type CameraView = {
   id: string;
   name: string;
   pose: CameraPose;
   createdAt: number;
 };
 
-export type CameraGuide = {
+type CameraGuide = {
   id: string;
   name: string;
   description?: string;
   waypoints: CameraPose[];
 };
 
-export type CameraActionInput =
+type CameraActionInput =
   | { type: "flyTo"; pose: CameraPose; duration?: number; reason?: string }
   | { type: "playGuide"; guideId: string; duration?: number };
 

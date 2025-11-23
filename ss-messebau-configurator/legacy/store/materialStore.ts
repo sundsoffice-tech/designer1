@@ -188,10 +188,11 @@ export const useMaterialStore = create<MaterialState>()(
           const merged = get().mergePalette(parsed);
           const msg = `Palette übernommen (${merged.floors.length} Böden, ${merged.walls.length} Wand-Finishes, ${merged.counters.length} Theken-Finishes)`;
           return { success: true, message: msg };
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
           return {
             success: false,
-            message: `Konnte Datei nicht lesen: ${err?.message ?? err}`,
+            message: `Konnte Datei nicht lesen: ${message}`,
           };
         }
       },

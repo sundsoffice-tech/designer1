@@ -1,8 +1,6 @@
-import { z } from "zod";
+type ColliderType = "aabb" | "obb" | "mesh";
 
-export type ColliderType = "aabb" | "obb" | "mesh";
-
-export type Dimensions3D = {
+type Dimensions3D = {
   width?: number;
   depth?: number;
   height?: number;
@@ -11,7 +9,7 @@ export type Dimensions3D = {
 
 export type ModuleKind = "counter" | "screen" | "truss" | "wall" | "frame" | "custom" | string;
 
-export type ModuleVariant = {
+type ModuleVariant = {
   key: string;
   name: string;
   variant?: string;
@@ -38,7 +36,7 @@ export type ModuleDefinition = {
   notes?: string;
 };
 
-export type ModuleBundleItem = {
+type ModuleBundleItem = {
   variantKey: string;
   quantity?: number;
   notes?: string;
@@ -66,69 +64,3 @@ export type ResolvedModuleVariant = ModuleVariant & {
 
 export type ModuleVariantMap = Record<string, ResolvedModuleVariant>;
 export type ModuleCompatibilityIndex = Record<string, Record<string, string[]>>;
-
-/**
- * Typed representation of the simplified modules.json under src/data/data.
- * Uses zod for runtime validation plus static inference.
- */
-export const ledFrameVariantSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  sizes: z.array(z.number()),
-  colors: z.array(z.string()),
-  basePrice: z.number(),
-  supportsLedWall: z.boolean(),
-  requires: z.record(z.string(), z.boolean()).optional(),
-});
-export type LedFrameVariant = z.infer<typeof ledFrameVariantSchema>;
-
-export const counterVariantSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  width: z.number(),
-  depth: z.number(),
-  height: z.number(),
-  colors: z.array(z.string()),
-  price: z.number(),
-  withPowerOption: z.boolean().optional(),
-});
-export type CounterVariant = z.infer<typeof counterVariantSchema>;
-
-export const screenVariantSchema = z.object({
-  size: z.number(),
-  price: z.number(),
-});
-export type ScreenVariant = z.infer<typeof screenVariantSchema>;
-
-export const trussSchema = z.object({
-  heights: z.array(z.number()),
-  lightTypes: z.array(z.string()),
-  pricePerMeter: z.number(),
-});
-export type TrussModule = z.infer<typeof trussSchema>;
-
-export const moduleDataSchema = z.object({
-  ledFrame: z.object({
-    variants: z.array(ledFrameVariantSchema),
-  }),
-  counter: z.object({
-    variants: z.array(counterVariantSchema),
-  }),
-  screen: z.object({
-    variants: z.array(screenVariantSchema),
-  }),
-  truss: trussSchema,
-});
-export type ModuleData = z.infer<typeof moduleDataSchema>;
-
-const modulesJsonUrl = new URL("../data/data/modules.json", import.meta.url);
-
-/** Fetch and validate modules.json as typed ModuleData. */
-export async function loadModules(): Promise<ModuleData> {
-  const res = await fetch(modulesJsonUrl.href);
-  if (!res.ok) {
-    throw new Error(`Failed to load modules.json (${res.status} ${res.statusText})`);
-  }
-  const json = await res.json();
-  return moduleDataSchema.parse(json);
-}

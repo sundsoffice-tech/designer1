@@ -40,3 +40,8 @@ Interner React/Three-Konfigurator für Systemstände. Relevante Dateien:
 - Pricing-Daten liegen jetzt headless: `PRICING_DATA_FILE` oder `PRICING_API_URL` speisen das Modell, werden gecacht (`PRICING_CACHE_MINUTES`) und fliesen in `/api/runtime/pricing` (Modelldump) sowie `/api/catalog/modules` (Modulkatalog) ein. Optionaler Default-Kunde im Frontend: `VITE_CUSTOMER_ID`.
 - Wer das Backend nicht startet und nur die lokale Preislogik nutzen will, setzt `VITE_DISABLE_RUNTIME=true`; dann entfallen die Requests auf `:4000/api/runtime/*`.
 
+## Admin-Katalog
+- Route: `/admin/catalog` laedt eine schlanke Admin-Shell mit `ObjectCatalogAdmin`.
+- Guard: nur sichtbar in `import.meta.env.DEV` oder wenn `VITE_ENABLE_ADMIN_PANEL=true` gesetzt ist (siehe `.env.example`).
+- Nicht in der Haupt-UI verlinkt; fallback ist ein kurzer Hinweistext, wenn der Admin-Bereich deaktiviert ist.
+

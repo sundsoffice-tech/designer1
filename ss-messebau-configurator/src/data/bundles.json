@@ -150,11 +150,11 @@
       "modules": {
         "wallsClosedSides": 1,
         "storageRoom": true,
-        "storageDoorSide": "right",
-        "counters": 3,
-        "countersWall": "island",
-        "countersWithPower": true,
-        "counterVariant": "premium",
+      "storageDoorSide": "right",
+      "counters": 3,
+      "countersWall": "center",
+      "countersWithPower": true,
+      "counterVariant": "premium",
         "countersDetailed": [
           {
             "id": "premium-counter-1",

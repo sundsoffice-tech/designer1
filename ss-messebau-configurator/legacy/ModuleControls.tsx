@@ -7,6 +7,7 @@ import { useTranslation } from "../../i18n";
 import { fileToDataUrl } from "../../utils/file";
 import { uploadBannerImage } from "../../lib/uploadClient";
 import { getAllowedOptions } from "../../utils/options";
+import { normalizeCounterPlacement } from "../../lib/counters";
 import type {
   AccessibilityConfig,
   CabinDoorSide,
@@ -68,7 +69,7 @@ type CounterControlsProps = {
   counterFinishes: any[];
   patchModules: (mods: DeepPartial<StandModules>) => void;
   counters: number;
-  countersWall?: "front" | "island";
+  countersWall?: StandModules["countersWall"];
   counterVariant?: string;
   counterFinishId?: string;
   countersWithPower?: boolean;
@@ -588,15 +589,20 @@ function CounterControls(props: CounterControlsProps) {
         </div>
       </label>
 
-      {counters > 0 && (
-        <>
-          <label>
-            Counter-Position
-            <select value={countersWall ?? "front"} onChange={(e) => patchModules({ countersWall: e.target.value as any })}>
-              <option value="front">Front (Besucherkante)</option>
-              <option value="island">Insel (Mitte)</option>
-            </select>
-          </label>
+        {counters > 0 && (
+          <>
+            <label>
+              Counter-Position
+              <select
+                value={normalizeCounterPlacement(countersWall)}
+                onChange={(e) =>
+                  patchModules({ countersWall: normalizeCounterPlacement(e.target.value) })
+                }
+              >
+                <option value="front">Front (Besucherkante)</option>
+                <option value="center">Mitte (zentriert)</option>
+              </select>
+            </label>
 
           <label>
             Counter-Design
@@ -860,11 +866,12 @@ function TrussControls(props: TrussControlsProps) {
                 if (!file) return;
                 try {
                   const processed = await uploadBannerImage(file);
-                  patchModules({ trussBannerImageUrl: processed.url, trussBannerMipmaps: processed.mipmaps ?? [] } as any);
+                  const mipmaps = Array.from(new Set([processed.url, ...(processed.mipmaps ?? [])]));
+                  patchModules({ trussBannerMipmaps: mipmaps } as any);
                   setMaterialStatus(`Banner-Bild komprimiert (${file.name})`);
                 } catch (err) {
                   const dataUrl = await fileToDataUrl(file);
-                  patchModules({ trussBannerImageUrl: dataUrl, trussBannerMipmaps: [] } as any);
+                  patchModules({ trussBannerMipmaps: [dataUrl] } as any);
                   setMaterialStatus(`Upload fehlgeschlagen, lokale Vorschau genutzt (${file.name})`);
                 }
               }}
@@ -1881,7 +1888,7 @@ export function ModuleControls({ showMaterialLibrary = true }: ModuleControlsPro
             counterFinishes={counterFinishes}
             patchModules={patchModules}
             counters={config.modules.counters ?? 0}
-            countersWall={config.modules.countersWall as any}
+            countersWall={config.modules.countersWall}
             counterVariant={config.modules.counterVariant}
             counterFinishId={(config.modules as any).counterFinishId as string | undefined}
             countersWithPower={config.modules.countersWithPower}

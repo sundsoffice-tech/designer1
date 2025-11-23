@@ -16,9 +16,9 @@ export const SCREEN_DIMENSIONS: Record<ScreenSize, { w: number; h: number; t: nu
 
 export const DEFAULT_SCREEN_SIZE: ScreenSize = "55";
 /** Realistische Grundtiefe fuer einen Bodenstandfuss */
-export const FLOOR_SCREEN_BASE_DEPTH = 0.4;
+const FLOOR_SCREEN_BASE_DEPTH = 0.4;
 
-export const SEATING_DIMENSIONS: Record<
+const SEATING_DIMENSIONS: Record<
   SeatingType,
   { footprint: { w: number; d: number }; seatHeight: number; backHeight: number }
 > = {

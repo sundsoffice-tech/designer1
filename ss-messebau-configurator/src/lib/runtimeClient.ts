@@ -1,7 +1,7 @@
 import { apiBaseUrl } from "./apiBase";
 import type { StandConfig } from "./pricing";
 
-export type PriceRequestOptions = {
+type PriceRequestOptions = {
   customerId?: string;
 };
 

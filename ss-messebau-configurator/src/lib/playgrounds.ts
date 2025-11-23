@@ -80,5 +80,5 @@ export const collisionPlayground: StandConfig = {
       doorSide: "front",
       position: { x: -1.6, z: -1.2 },
     },
-  } as any,
+  },
 };

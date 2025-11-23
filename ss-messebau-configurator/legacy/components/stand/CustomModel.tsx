@@ -18,10 +18,16 @@ const derivePreviewUrl = (url: string): string | null => {
 };
 
 const disposeScene = (scene: THREE.Object3D) => {
-  scene.traverse((child: any) => {
-    if (child.geometry) child.geometry.dispose();
-    if (Array.isArray(child.material)) child.material.forEach((m: THREE.Material) => m.dispose?.());
-    else if (child.material) child.material.dispose?.();
+  scene.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+
+    const material = mesh.material;
+    if (Array.isArray(material)) {
+      material.forEach((m) => m.dispose?.());
+    } else if (material) {
+      material.dispose?.();
+    }
   });
 };
 
@@ -30,8 +36,8 @@ function ClonedScene({ url, scale = 1 }: { url: string; scale?: number }) {
   const scene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
 
   useEffect(() => {
-    scene.traverse((obj: any) => {
-      if ("frustumCulled" in obj && typeof obj.frustumCulled === "boolean") obj.frustumCulled = true;
+    scene.traverse((obj) => {
+      obj.frustumCulled = true;
     });
     invalidate();
     return () => disposeScene(scene);
@@ -59,24 +65,27 @@ export default function CustomModel({ assetUrl, scale = 1 }: CustomModelProps) {
   useEffect(() => {
     let cancelled = false;
     const candidate = derivePreviewUrl(assetUrl);
-    if (!candidate) {
-      setPreviewUrl(null);
-      return;
-    }
 
-    fetch(candidate, { method: "HEAD" })
-      .then((res) => {
-        if (cancelled) return;
-        if (res.ok) {
+    const resolvePreview = async () => {
+      if (!candidate) {
+        setPreviewUrl(null);
+        return;
+      }
+
+      try {
+        const res = await fetch(candidate, { method: "HEAD" });
+        if (!cancelled && res.ok) {
           setPreviewUrl(candidate);
           useGLTF.preload(candidate);
-        } else {
+        } else if (!cancelled) {
           setPreviewUrl(null);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setPreviewUrl(null);
-      });
+      }
+    };
+
+    void resolvePreview();
 
     return () => {
       cancelled = true;

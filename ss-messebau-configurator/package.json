@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:ai": "node -e \"process.env.VITE_ENABLE_AI_ASSISTANT='true'; process.env.VITE_ENABLE_VOICE_ASSISTANT='true'; require('vite/bin/vite.js')\"",
+    "dev:admin": "node -e \"process.env.VITE_ENABLE_ADMIN_PANEL='true'; require('vite/bin/vite.js')\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

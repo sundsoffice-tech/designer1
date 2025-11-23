@@ -37,11 +37,11 @@ async function standFromTextHandler(req, res) {
           storageRoom?: boolean;
           storageDoorSide?: "front" | "left" | "right" | "back";
           ledFrames?: number;
-          ledWall?: "back" | "left" | "right" | "front";
-          counters?: number;
-          countersWall?: "front" | "back" | "left" | "right" | "island";
-          countersWithPower?: boolean;
-          screens?: number;
+            ledWall?: "back" | "left" | "right" | "front";
+            counters?: number;
+            countersWall?: "front" | "back" | "left" | "right" | "center" | "middle" | "island";
+            countersWithPower?: boolean;
+            screens?: number;
           screensWall?: "front" | "back" | "left" | "right";
           truss?: boolean;
           raisedFloor?: boolean;

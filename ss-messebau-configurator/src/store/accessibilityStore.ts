@@ -1,8 +1,8 @@
 // Shared accessibility settings (contrast + a11y toggles)
 import { create } from "zustand";
 
-export type ContrastMode = "auto" | "standard" | "high";
-export type EffectiveContrast = "standard" | "high";
+type ContrastMode = "auto" | "standard" | "high";
+type EffectiveContrast = "standard" | "high";
 
 type AccessibilityState = {
   contrastMode: ContrastMode;

@@ -5,10 +5,10 @@
 // ======================
 
 export type StandType = "row" | "corner" | "head" | "island";
-export type Region = "NRW" | "Sued" | "Süd" | "Nord" | "Ausland";
+type Region = "NRW" | "Sued" | "Süd" | "Nord" | "Ausland";
 
 export type WallSide = "back" | "left" | "right";
-export type WallType = "plain" | "wood" | "led" | "banner" | "seg";
+type WallType = "plain" | "wood" | "led" | "banner" | "seg";
 
 export type WallConfig = {
   closed: boolean;
@@ -50,9 +50,9 @@ export type WallAttachmentIndex = {
   neutralWall?: WallSide;
 };
 
-export type FloorType = "carpet" | "laminate" | "vinyl" | "wood";
+type FloorType = "carpet" | "laminate" | "vinyl" | "wood";
 
-export type FloorConfig = {
+type FloorConfig = {
   type: FloorType;
   raised: boolean;
   /** Optionaler Verweis auf eine Material-Definition aus der Admin-Bibliothek */
@@ -63,7 +63,7 @@ export type FloorConfig = {
   textureFileName?: string;
 };
 
-export type AccessibilityConfig = {
+type AccessibilityConfig = {
   /** Markiert die Standflaeche als barrierefrei (Rampe, kontrastierte Zone) */
   barrierFree?: boolean;
   /** Ramplaenge Richtung Besucherbereich (Meter) */
@@ -71,9 +71,9 @@ export type AccessibilityConfig = {
 };
 
 // Kabine / Lagerraum
-export type CabinDoorSide = "front" | "left" | "right" | "back";
+type CabinDoorSide = "front" | "left" | "right" | "back";
 
-export type CabinDoorConfig = {
+type CabinDoorConfig = {
   side: CabinDoorSide;
   width: number; // Meter (später für große Öffnungen nutzbar)
 };
@@ -128,7 +128,7 @@ export type ScreenConfig = {
 export type SeatingType = "chair" | "barstool" | "lounge";
 export type SeatingCover = "none" | "white" | "branding";
 
-export type SeatingConfig = {
+type SeatingConfig = {
   type: SeatingType;
   count: number;
   cover: SeatingCover;
@@ -222,20 +222,22 @@ export type WallLightConfig = {
 };
 
 // Truss-Anbauteile
-export type TrussAttachmentType = "light" | "bannerFrame";
+type TrussAttachmentType = "light" | "bannerFrame";
 
-export type TrussAttachmentConfig = {
+type TrussAttachmentConfig = {
   type: TrussAttachmentType;
   count: number;
 };
 
-export type TrussConfig = {
+type TrussConfig = {
   enabled: boolean;
   lengthX: number; // Meter
   lengthZ: number; // Meter
   height: number; // Meter
   attachments: TrussAttachmentConfig[];
 };
+
+export type CounterPlacement = "front" | "center" | "middle" | "island";
 
 // Tresen / Counter (detailliert)
 export type CounterVariant = "basic" | "premium" | "corner";
@@ -274,7 +276,7 @@ export type StandModules = {
   storageDoorSide?: WallSide;
 
   counters: number;
-  countersWall?: "front" | "island";
+  countersWall?: CounterPlacement;
   countersWithPower?: boolean;
   counterVariant?: CounterVariant;
   /** Standard-Finish f�r alle Tresen (Admin-Palette) */
@@ -282,7 +284,8 @@ export type StandModules = {
 
   ledFrames?: number;
   ledFramesDetailed?: {
-    variant: string;
+    id?: string;
+    variant?: string;
     size?: number;
     color?: string;
     count?: number;
@@ -294,6 +297,8 @@ export type StandModules = {
     lastWallSide?: WallSide;
     unitPrice?: number;
   }[];
+  /** Legacy / Auswahl im UI: bevorzugte Wand f\u00fcr LED-Frames */
+  ledWall?: WallSide;
 
   screens: number;
   screensWall?: WallSide;
@@ -346,6 +351,8 @@ export type StandModules = {
   chairsDetailed?: ChairConfig[];
   roundTables?: RoundTableConfig[];
   customObjects?: CustomObjectConfig[];
+  /** Mindestabstand f\u00fcr Kollisionspr\u00fcfungen (Meter) */
+  collisionClearance?: number;
 
   // Truss-Details (optional, falls später genutzt)
   trussConfig?: TrussConfig;
@@ -358,6 +365,7 @@ export type StandModules = {
   trussBannerWidth?: number;
   trussBannerHeight?: number;
   trussBannerMipmaps?: string[];
+  trussBannerImageUrl?: string;
   trussHeightMode?: "absolute" | "offset";
   trussHeightOffset?: number;
 
@@ -400,13 +408,13 @@ export type StandConfig = {
 import pricingDefaults from "../data/pricingModel.json" assert { type: "json" };
 import { moduleVariantsByKey, moduleBundles } from "../services/modules";
 
-export type PricingCustomerProfile = {
+type PricingCustomerProfile = {
   label?: string;
   discountPercent?: number;
   multiplier?: number;
 };
 
-export type PricingModel = {
+type PricingModel = {
   base?: {
     hourlyRateOwn?: number;
     dayRate10h?: number;
@@ -447,7 +455,7 @@ export type PricingModel = {
   modules?: Record<string, unknown>;
 };
 
-export type ResolvedPricing = {
+type ResolvedPricing = {
   baseMaterialPerM2: number;
   laborHoursPerM2: number;
   hourlyRateOwn: number;
@@ -477,12 +485,12 @@ export type ResolvedPricing = {
   rentalFactor: number;
 };
 
-export type PriceOptions = {
+type PriceOptions = {
   customerId?: string;
   customerMultiplier?: number;
 };
 
-export type PriceBreakdownModules = {
+type PriceBreakdownModules = {
   legacy: {
     storage: number;
     counters: number;
@@ -544,7 +552,7 @@ export type PriceBreakdown = {
   total: number;
 };
 
-export type PriceResult = {
+type PriceResult = {
   total: number;
   purchaseTotal: number;
   rentalTotal: number;
@@ -553,17 +561,19 @@ export type PriceResult = {
 
 const DEFAULT_PRICING_MODEL: PricingModel = pricingDefaults as PricingModel;
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+type PlainObject = Record<string, unknown>;
+
+const isPlainObject = (value: unknown): value is PlainObject =>
   Boolean(value && typeof value === "object" && !Array.isArray(value));
 
-const deepMerge = <T extends object>(base: T, patch?: Partial<T>): T => {
-  const out: Record<string, unknown> = { ...(base as any) };
+const deepMerge = <T extends PlainObject>(base: T, patch?: Partial<T>): T => {
+  const out: PlainObject = { ...base };
   if (patch && isPlainObject(patch)) {
     for (const [key, value] of Object.entries(patch)) {
       if (value === undefined) continue;
       const prev = out[key];
       if (isPlainObject(prev) && isPlainObject(value)) {
-        out[key] = deepMerge(prev, value);
+        out[key] = deepMerge(prev, value as PlainObject);
       } else {
         out[key] = value;
       }
@@ -572,14 +582,21 @@ const deepMerge = <T extends object>(base: T, patch?: Partial<T>): T => {
   return out as T;
 };
 
-export const mergePricingModel = (incoming?: PricingModel): PricingModel =>
+const mergePricingModel = (incoming?: PricingModel): PricingModel =>
   deepMerge(DEFAULT_PRICING_MODEL as PricingModel, incoming ?? {});
 
-export const resolveCustomerMultiplier = (
+type CustomerMultiplier = {
+  multiplier: number;
+  source: "default" | "override" | "profile";
+  profileId?: string;
+  profileLabel?: string;
+};
+
+const resolveCustomerMultiplier = (
   model: PricingModel,
   customerId?: string,
   explicitMultiplier?: number
-) => {
+): CustomerMultiplier => {
   if (typeof explicitMultiplier === "number" && explicitMultiplier > 0) {
     return { multiplier: explicitMultiplier, source: "override" as const };
   }
@@ -778,7 +795,7 @@ const calcBundleDiscount = (
     counters: VariantCost;
   }
 ): number => {
-  const active = Array.isArray((modules as any).activeBundles) ? (modules as any).activeBundles : [];
+  const active = Array.isArray(modules.activeBundles) ? modules.activeBundles : [];
   if (!active.length) return 0;
 
   const variantBank: Record<string, { total: number; count: number }> = {
@@ -889,14 +906,9 @@ const calcAdvancedModuleBreakdown = (
     counters: counterCost,
   });
   const seating = calcSeatingCost(cfg.modules.seating, pricing);
-  const chairs = calcChairCost(
-    (cfg.modules as any).chairsDetailed as ChairConfig[] | undefined,
-    pricing
-  );
+  const chairs = calcChairCost(cfg.modules.chairsDetailed, pricing);
   const tables = calcRoundTableCost(cfg.modules.roundTables, pricing);
-  const custom = calcCustomObjectsCost(
-    (cfg.modules as any).customObjects as CustomObjectConfig[] | undefined
-  );
+  const custom = calcCustomObjectsCost(cfg.modules.customObjects);
   const trussCost = calcTrussCost(cfg, pricing);
   const wallLights = calcWallLightsCost(cfg, pricing);
   const lights = trussCost.lightCost + wallLights;
@@ -1116,9 +1128,7 @@ function calcWallLightsCost(cfg: StandConfig, pricing: ResolvedPricing): number 
 }
 
 function calcFrameCost(modules: StandModules): VariantCost {
-  const frames = Array.isArray((modules as any).ledFramesDetailed)
-    ? ((modules as any).ledFramesDetailed as any[])
-    : [];
+  const frames = Array.isArray(modules.ledFramesDetailed) ? [...modules.ledFramesDetailed] : [];
   if (frames.length === 0 && modules.frameVariant) {
     frames.push({
       variant: modules.frameVariant,
@@ -1364,8 +1374,8 @@ export function calcPriceDetailed(
       multiplier: customer.multiplier,
       adjustment: customerAdjustment,
       source: customer.source,
-      profileId: (customer as any).profileId,
-      profileLabel: (customer as any).profileLabel,
+      profileId: customer.profileId,
+      profileLabel: customer.profileLabel,
     },
     discounts: {
       bundlePercent,

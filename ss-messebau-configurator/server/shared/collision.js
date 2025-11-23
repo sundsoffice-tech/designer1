@@ -7,6 +7,9 @@ const ROT_EPSILON = 1e-3;
 const LED_FRAME_DEPTH = 0.12;
 const BANNER_THICKNESS = 0.04;
 export const DEFAULT_CLEARANCE = 0.2;
+const normalizeCounterPlacement = (placement) => {
+    return placement === "center" || placement === "middle" || placement === "island" ? "center" : "front";
+};
 const hasRotation = (rotationY) => Math.abs(rotationY ?? 0) > ROT_EPSILON;
 const rotatePoint = (x, z, rotationY) => {
     const cos = Math.cos(rotationY);
@@ -181,14 +184,14 @@ export function buildSceneAabbs(cfg, clearance = DEFAULT_CLEARANCE) {
     // Legacy-Counter (numerische Angabe) als Blocker, falls keine detaillierten existieren
     const legacyCounters = countersDetailed.length === 0 && typeof mAny.counters === "number" ? mAny.counters : 0;
     if (legacyCounters > 0) {
-        const placement = mAny.countersWall ?? "front";
+        const placement = normalizeCounterPlacement(mAny.countersWall);
         const variant = mAny.counterVariant ?? "basic";
         const resolved = resolveCounterSize(variant, undefined);
         const colliderParts = variant === "corner" ? cornerCounterColliders(resolved.w, resolved.d) : undefined;
         const spacing = cfg.width / (legacyCounters + 1 || 1);
         for (let i = 0; i < legacyCounters; i++) {
             const x = -cfg.width / 2 + spacing * (i + 1);
-            const z = placement === "island" ? 0 : cfg.depth / 2 - 0.5;
+            const z = placement === "center" ? 0 : cfg.depth / 2 - 0.5;
             boxes.push(makeAabb(`ctr-legacy-${i}`, "Counter", x, z, resolved.w, resolved.d, clearance, 0, colliderParts));
         }
     }

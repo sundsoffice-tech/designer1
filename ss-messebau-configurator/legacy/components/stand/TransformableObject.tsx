@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 import { TransformControls } from "@react-three/drei";
-import { RigidBody, type RapierRigidBody, type RigidBodyAutoCollider, type RigidBodyTypeString } from "@react-three/rapier";
+import {
+  RigidBody,
+  type RapierRigidBody,
+  type RigidBodyAutoCollider,
+  type RigidBodyProps,
+  type RigidBodyTypeString,
+} from "@react-three/rapier";
+import type { TransformControls as TransformControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { invalidate } from "@react-three/fiber";
 import { buildColliderBounds, type ColliderBounds } from "../../lib/collision3d";
@@ -76,9 +83,10 @@ export function TransformableObject({
   onBoundsChange,
   physics,
 }: TransformableObjectProps) {
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<TransformControlsImpl | null>(null);
   const groupRef = useRef<THREE.Group>(null!);
-  const rigidRef = physics?.bodyRef ?? useRef<RapierRigidBody | null>(null);
+  const internalRigidRef = useRef<RapierRigidBody | null>(null);
+  const rigidRef = physics?.bodyRef ?? internalRigidRef;
   const worldPos = useMemo(() => new THREE.Vector3(), []);
   const worldQuat = useMemo(() => new THREE.Quaternion(), []);
 
@@ -121,7 +129,7 @@ export function TransformableObject({
       onDragEnd?.(group);
       invalidate();
     };
-    const handleDraggingChanged = (e: any) => {
+    const handleDraggingChanged = (e: { value?: boolean }) => {
       if (e?.value === true) onDragStart?.();
       else onDragEnd?.(group);
       invalidate();
@@ -150,6 +158,7 @@ export function TransformableObject({
     onTransform,
     physics?.enabled,
     physics?.bodyRef,
+    rigidRef,
     worldPos,
     worldQuat,
     invalidate,
@@ -171,9 +180,9 @@ export function TransformableObject({
     groupRef.current?.getWorldQuaternion(worldQuat);
     body.setNextKinematicTranslation({ x: worldPos.x, y: worldPos.y, z: worldPos.z });
     body.setNextKinematicRotation({ x: worldQuat.x, y: worldQuat.y, z: worldQuat.z, w: worldQuat.w });
-  }, [physics?.enabled, position, rotation, scale, worldPos, worldQuat]);
+  }, [physics?.enabled, position, rotation, scale, worldPos, worldQuat, rigidRef]);
 
-  const rigidBodyProps = physics?.enabled
+  const rigidBodyProps: RigidBodyProps | undefined = physics?.enabled
     ? {
         ref: rigidRef,
         type: physics.type ?? "kinematicPosition",
@@ -204,7 +213,8 @@ export function TransformableObject({
     </group>
   );
 
-  const wrapped = physics?.enabled ? <RigidBody {...(rigidBodyProps as any)}>{content}</RigidBody> : content;
+  const wrapped =
+    physics?.enabled && rigidBodyProps ? <RigidBody {...rigidBodyProps}>{content}</RigidBody> : content;
 
   if (!enabled) {
     return wrapped;

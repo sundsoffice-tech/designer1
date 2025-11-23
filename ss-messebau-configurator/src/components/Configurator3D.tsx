@@ -8,8 +8,9 @@ import {
   useState,
   type ReactNode,
   type MutableRefObject,
+  type JSX,
 } from "react";
-import { Canvas, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   OrbitControls,
   Environment,
@@ -19,6 +20,7 @@ import {
   TransformControls,
   Html,
 } from "@react-three/drei";
+import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { useConfigStore } from "../store/configStore";
 import {
@@ -27,6 +29,9 @@ import {
   findCollisionForMany,
   makeAabb,
 } from "../lib/collision";
+import { normalizeCounterPlacement } from "../lib/counters";
+import { useCameraStore, type CameraPose } from "../store/cameraStore";
+import { useTranslation } from "../i18n";
 
 type WallSide = "back" | "left" | "right";
 type CounterVariant = "basic" | "premium" | "corner";
@@ -97,7 +102,7 @@ function useTransformKeyboard(
   return { mode, snap };
 }
 
-/** clamp X/Z in Standfl├ñche, optional mit halben Abmessungen eines Objekts */
+/** clamp X/Z in Standfl+ñche, optional mit halben Abmessungen eines Objekts */
 function clampXZ(
   x: number,
   z: number,
@@ -182,7 +187,7 @@ function ScreenPanel({ w = 0.9, h = 0.55, t = 0.02 }) {
   );
 }
 
-/** TransformControls Wrapper: sperrt Orbit w├ñhrend Interaktion */
+/** TransformControls Wrapper: sperrt Orbit w+ñhrend Interaktion */
 function Transformable({
   enabled,
   mode,
@@ -200,7 +205,7 @@ function Transformable({
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
-  const tcRef = useRef<any>(null);
+  const tcRef = useRef<TransformControlsImpl | null>(null);
   const groupRef = useRef<THREE.Group>(null!);
 
   useEffect(() => {
@@ -210,7 +215,7 @@ function Transformable({
     const handleChange = () => onChange?.(groupRef.current.position);
     const handleMouseDown = () => onDragStart?.();
     const handleMouseUp = () => onDragEnd?.();
-    const handleDraggingChanged = (e: any) => {
+    const handleDraggingChanged = (e: { value?: boolean }) => {
       if (e?.value === true) onDragStart?.();
       else onDragEnd?.();
     };
@@ -247,7 +252,7 @@ function Transformable({
   );
 }
 
-function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
+function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl | null> }) {
   const { config, setConfig } = useConfigStore();
   const { width, depth, height, modules } = config;
 
@@ -277,41 +282,53 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     countersWithPower,
     screens,
     screensWall,
-  } = modules as any;
+    ledFramesDetailed = [],
+    cabin,
+    truss,
+    trussLightType = "spot",
+    trussLightsFront = 0,
+    trussLightsBack = 0,
+    trussLightsLeft = 0,
+    trussLightsRight = 0,
+    wallLightsBack = 0,
+    wallLightsLeft = 0,
+    wallLightsRight = 0,
+    collisionClearance: collisionClearanceRaw,
+    trussBannersFront = 0,
+    trussBannersBack = 0,
+    trussBannersLeft = 0,
+    trussBannersRight = 0,
+    trussBannerWidth = 3,
+    trussBannerHeight = 1,
+    trussBannerMipmaps,
+    trussBannerImageUrl,
+    trussHeight: trussHeightRaw,
+    trussOffset,
+  } = modules;
 
-  const mAny = modules as any;
-  const cabin = mAny.cabin as CabinWithPosition | undefined;
+  const cabinWithPosition: CabinWithPosition | undefined = cabin;
 
   // Truss & Licht
-  const trussEnabled: boolean = !!mAny.truss;
-  const trussLightType: "spot" | "wash" = (mAny.trussLightType ?? "spot") as "spot" | "wash";
+  const trussEnabled: boolean = !!modules.truss;
 
-  const trussLightsFront: number = mAny.trussLightsFront ?? 0;
-  const trussLightsBack: number = mAny.trussLightsBack ?? 0;
-  const trussLightsLeft: number = mAny.trussLightsLeft ?? 0;
-  const trussLightsRight: number = mAny.trussLightsRight ?? 0;
 
-  const wallLightsBack: number = mAny.wallLightsBack ?? 0;
-  const wallLightsLeft: number = mAny.wallLightsLeft ?? 0;
-  const wallLightsRight: number = mAny.wallLightsRight ?? 0;
-
-  // Kollisionsabstand (konfigurierbar ├╝ber modules.collisionClearance)
+  // Kollisionsabstand (konfigurierbar ++ber modules.collisionClearance)
   const collisionClearance: number = Math.max(
     0,
-    typeof mAny.collisionClearance === "number" ? mAny.collisionClearance : DEFAULT_CLEARANCE
+    typeof modules.collisionClearance === "number" ? modules.collisionClearance : DEFAULT_CLEARANCE
   );
 
   // Banner / Truss
-  const bannersFront: number = mAny.trussBannersFront ?? 0;
-  const bannersBack: number = mAny.trussBannersBack ?? 0;
-  const bannersLeft: number = mAny.trussBannersLeft ?? 0;
-  const bannersRight: number = mAny.trussBannersRight ?? 0;
+  const bannersFront: number = modules.trussBannersFront ?? 0;
+  const bannersBack: number = modules.trussBannersBack ?? 0;
+  const bannersLeft: number = modules.trussBannersLeft ?? 0;
+  const bannersRight: number = modules.trussBannersRight ?? 0;
 
-  const bannerWidth: number = mAny.trussBannerWidth ?? 3;
-  const bannerHeight: number = mAny.trussBannerHeight ?? 1;
+  const bannerWidth: number = modules.trussBannerWidth ?? 3;
+  const bannerHeight: number = modules.trussBannerHeight ?? 1;
   const bannerThickness = 0.04;
 
-  // Boden/Standh├Âhen
+  // Boden/Standh+Âhen
   const floorConfig = modules.floor;
   const isRaised = floorConfig?.raised ?? modules.raisedFloor ?? false;
   const floorHeight = isRaised ? 0.08 : 0.025;
@@ -322,17 +339,19 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const defaultTrussHeight = floorHeight + wallHeight + 0.5;
   const trussHeight = Math.max(
     defaultTrussHeight,
-    typeof mAny.trussHeight === "number" ? mAny.trussHeight : defaultTrussHeight
+    typeof modules.trussHeight === "number" ? modules.trussHeight : defaultTrussHeight
   );
 
-  const trussOffsetX: number = (mAny.trussOffset?.x ?? 0) as number;
-  const trussOffsetZ: number = (mAny.trussOffset?.z ?? 0) as number;
+  const trussOffsetX: number = (modules.trussOffset?.x ?? 0) as number;
+  const trussOffsetZ: number = (modules.trussOffset?.z ?? 0) as number;
 
-  // useTexture -> Fallback 1x1 PNG (wei├ƒ)
+  // useTexture -> Fallback 1x1 PNG (wei+ƒ)
   const BLANK_PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAosBv2jz2l0AAAAASUVORK5CYII=";
-  const bannerImageUrl: string | undefined = mAny.trussBannerImageUrl;
-  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG);
+  const bannerMipmaps: string[] | undefined = modules.trussBannerMipmaps;
+  const bannerImageUrl: string | undefined =
+    (Array.isArray(bannerMipmaps) && bannerMipmaps[0]) || modules.trussBannerImageUrl;
+  const bannerTexture = useTexture(bannerImageUrl || BLANK_PNG) as THREE.Texture;
 
   const scaleX = width;
   const scaleZ = depth;
@@ -341,16 +360,18 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   const wallThickness = 0.06;
   const panelGap = 0.01;
 
-  // Innenpositionen der Wand-Frontfl├ñchen
+  // Innenpositionen der Wand-Frontfl+ñchen
   const backWallFrontZ = -depth / 2 + wallThickness + panelGap;
   const leftWallInnerX = -width / 2 + wallThickness + panelGap;
   const rightWallInnerX = width / 2 - wallThickness - panelGap;
 
-  const ledWallSide = (ledWall as WallSide) ?? "back";
+  const ledWallSide =
+    ((ledFramesDetailed[0]?.wallSide ?? ledFramesDetailed[0]?.lastWallSide ?? ledWall) as WallSide) ??
+    "back";
   const screensWallSide = (screensWall as WallSide) ?? "back";
-  const countersPlacement = (countersWall as "front" | "island") ?? "front";
+  const countersPlacement = normalizeCounterPlacement(countersWall);
 
-  // T├╝rseite der Kabine
+  // T++rseite der Kabine
   const doorSide =
     (cabin?.doorSide as "front" | "left" | "right" | "back") ??
     (storageDoorSide as "front" | "left" | "right" | "back") ??
@@ -383,9 +404,9 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     }
   })();
 
-  /** Wand-Oberfl├ñchen (system | wood | banner | seg | led) */
+  /** Wand-Oberfl+ñchen (system | wood | banner | seg | led) */
   type Surface = "system" | "wood" | "banner" | "seg" | "led";
-  const wallsDetail = (mAny.wallsDetail ?? {}) as Record<WallSide, { surface?: Surface; height?: number }>;
+  const wallsDetail = (modules.wallsDetail ?? {}) as Record<WallSide, { surface?: Surface; height?: number }>;
   const surfaceOf = (side: WallSide): Surface => (wallsDetail[side]?.surface ?? "system") as Surface;
   const wallMaterialProps = (s: Surface) => {
     switch (s) {
@@ -409,7 +430,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     }
   };
 
-  // Helper: Truss-Lichtk├Ârper je nach Typ
+  // Helper: Truss-Lichtk+Ârper je nach Typ
   const renderTrussLight = (
     key: string,
     x: number,
@@ -445,8 +466,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   };
 
   // ---- Detaillierte Objekte aus Store (optional)
-  const countersDetailed = (mAny.countersDetailed ?? []) as DetailedCounter[];
-  const screensDetailed = (mAny.detailedScreens ?? []) as DetailedScreen[];
+  const countersDetailed = (modules.countersDetailed ?? []) as DetailedCounter[];
+  const screensDetailed = (modules.detailedScreens ?? []) as DetailedScreen[];
 
   const sceneAabbs = useMemo(
     () => buildSceneAabbs(config, collisionClearance),
@@ -454,17 +475,15 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   );
 
   const [collidingKeys, setCollidingKeys] = useState<Set<string>>(new Set());
-  const [lastValidPositions, setLastValidPositions] = useState<
-    Record<string, { x: number; z: number }>
-  >({});
+  const lastValidPositions = useRef<Record<string, { x: number; z: number }>>({});
 
   const rememberValidPosition = useCallback((key: string, pos: { x: number; z: number }) => {
-    setLastValidPositions((prev) => ({ ...prev, [key]: pos }));
+    lastValidPositions.current = { ...lastValidPositions.current, [key]: pos };
   }, []);
 
   const getFallbackPosition = useCallback(
-    (key: string, fallback: { x: number; z: number }) => lastValidPositions[key] ?? fallback,
-    [lastValidPositions]
+    (key: string, fallback: { x: number; z: number }) => lastValidPositions.current[key] ?? fallback,
+    []
   );
 
   const setCollisionState = useCallback((key: string, collided: boolean) => {
@@ -490,7 +509,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     [sceneAabbs, setCollisionState]
   );
 
-  // initial g├╝ltige Positionen merken (Rollback bei Kollision)
+  // initial g++ltige Positionen merken (Rollback bei Kollision)
   useEffect(() => {
     const next: Record<string, { x: number; z: number }> = {};
 
@@ -516,7 +535,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       next.truss = { x: trussOffsetX, z: trussOffsetZ };
     }
 
-    setLastValidPositions(next);
+    lastValidPositions.current = next;
   }, [
     cabinEnabled,
     cabinPosX,
@@ -535,11 +554,11 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
     const out: DetailedCounter[] = Array.from({ length: count }).map((_, idx) => {
       const spacing = width / (count + 1 || 1);
       const xPos = -width / 2 + spacing * (idx + 1);
-      const zPos = countersPlacement === "island" ? 0 : depth / 2 - 0.5;
+      const zPos = countersPlacement === "center" ? 0 : depth / 2 - 0.5;
       return {
         id: `ctr-${Date.now()}-${idx}`,
-        variant: mAny.counterVariant ?? "basic",
-        withPower: !!mAny.countersWithPower,
+        variant: modules.counterVariant ?? "basic",
+        withPower: !!modules.countersWithPower,
         position: { x: xPos, z: zPos },
       };
     });
@@ -547,7 +566,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       modules: {
         countersDetailed: out,
         counters: 0,
-      } as any,
+      },
     });
   };
 
@@ -587,28 +606,28 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       modules: {
         detailedScreens: out,
         screens: 0,
-      } as any,
+      },
     });
   };
 
-  // ---- Selektion / G├╝ltigkeit pr├╝fen (falls Objekt weg ist -> deselect)
-  useEffect(() => {
-    if (!selectedKey) return;
+  // ---- Selektion / G++ltigkeit pr++fen (falls Objekt weg ist -> deselect)
+  const validSelectedKey = useMemo(() => {
+    if (!selectedKey) return null;
     const validKeys = new Set<string>();
     if (cabinEnabled) validKeys.add("cabin");
     if (trussEnabled) validKeys.add("truss");
     countersDetailed.forEach((c) => validKeys.add(`ctr-d-${c.id}`));
     screensDetailed.forEach((s) => validKeys.add(`scr-d-${s.id}`));
-    if (!validKeys.has(selectedKey)) setSelectedKey(null);
-  }, [selectedKey, cabinEnabled, trussEnabled, countersDetailed, screensDetailed]);
+    return validKeys.has(selectedKey) ? selectedKey : null;
+  }, [cabinEnabled, countersDetailed, screensDetailed, selectedKey, trussEnabled]);
 
-  const isSelected = (key: string) => selectedKey === key;
+  const isSelected = (key: string) => validSelectedKey === key;
 
   // ---- Render
   return (
     <group
       position={[0, 0, 0]}
-      // Klick ins Leere / auf Grundfl├ñche: Selektion aufheben
+      // Klick ins Leere / auf Grundfl+ñche: Selektion aufheben
       onPointerMissed={() => setSelectedKey(null)}
     >
       {/* Kurze HUD-Hilfe im EditÔÇæModus */}
@@ -624,7 +643,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             pointerEvents: "none",
             whiteSpace: "nowrap"
           }}>
-            <strong>Edit</strong> (E) ┬À Mode: <strong>{transformMode}</strong> (T/R/S) ┬À Snap: <strong>{snapOn ? "0,1 m" : "aus"}</strong> (G) ┬À ESC: Deselektieren
+            <strong>Edit</strong> (E) -À Mode: <strong>{transformMode}</strong> (T/R/S) -À Snap: <strong>{snapOn ? "0,1 m" : "aus"}</strong> (G) -À ESC: Deselektieren
           </div>
         </Html>
       )}
@@ -641,7 +660,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         <meshStandardMaterial color="#020617" metalness={0.2} roughness={0.8} />
       </mesh>
 
-      {/* Doppelboden-K├Ârper */}
+      {/* Doppelboden-K+Ârper */}
       {isRaised && (
         <mesh position={[0, floorHeight / 2, 0]} receiveShadow castShadow>
           <boxGeometry args={[scaleX, floorHeight, scaleZ]} />
@@ -649,7 +668,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         </mesh>
       )}
 
-      {/* Bodenfl├ñche */}
+      {/* Bodenfl+ñche */}
       <mesh position={[0, floorHeight + 0.001, 0]} rotation-x={-Math.PI / 2} receiveShadow>
         <planeGeometry args={[scaleX, scaleZ]} />
         <meshStandardMaterial
@@ -659,7 +678,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         />
       </mesh>
 
-      {/* W├ñnde */}
+      {/* W+ñnde */}
       {wallsClosedSides >= 1 && (
         <mesh
           position={[0, wallCenterY, -depth / 2 + wallThickness / 2]}
@@ -693,7 +712,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
         </mesh>
       )}
 
-      {/* Lagerraum / Kabine (Drag-f├ñhig im Edit-Modus) */}
+      {/* Lagerraum / Kabine (Drag-f+ñhig im Edit-Modus) */}
       {cabinEnabled && cabin && (
         <Transformable
           enabled={editMode && isSelected("cabin")}
@@ -719,7 +738,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 cabin: {
                   position: { x: c.x, z: c.z },
                 },
-              } as any,
+              },
             });
           }}
         >
@@ -735,7 +754,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               <meshStandardMaterial color="#d1d5db" roughness={0.9} metalness={0.05} />
             </mesh>
 
-            {/* T├╝rblatt (lokale Koordinaten) */}
+            {/* T++rblatt (lokale Koordinaten) */}
             {(() => {
               const doorThickness = 0.04;
               const doorHeight = Math.min(2.1, cabinHeight - 0.2);
@@ -813,7 +832,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       {/* Counters ÔÇô Detailed bevorzugt, sonst Legacy */}
       {countersDetailed.length > 0
         ? countersDetailed.map((ctr) => {
-            const variant: CounterVariant = ctr.variant ?? (mAny.counterVariant ?? "basic");
+            const variant: CounterVariant = ctr.variant ?? (modules.counterVariant ?? "basic");
             const w = ctr.size?.w ?? (variant === "premium" ? 1.4 : 0.9);
             const d = ctr.size?.d ?? (variant === "premium" ? 0.6 : 0.5);
             const h = ctr.size?.h ?? 1.1;
@@ -846,7 +865,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                   const next = countersDetailed.map((c0) =>
                     c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
                   );
-                  setConfig({ modules: { countersDetailed: next } as any });
+                  setConfig({ modules: { countersDetailed: next } });
                 }}
               >
                 <group
@@ -908,8 +927,8 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
           Array.from({ length: counters ?? 0 }).map((_, idx) => {
             const spacing = width / ((counters ?? 0) + 1 || 1);
             const xPos = -width / 2 + spacing * (idx + 1);
-            const zPos = countersPlacement === "island" ? 0 : depth / 2 - 0.5;
-            const variant = (modules as any).counterVariant ?? "basic";
+            const zPos = countersPlacement === "center" ? 0 : depth / 2 - 0.5;
+            const variant = modules.counterVariant ?? "basic";
             const k = `legacy-counter-${idx}`;
             return (
               <group
@@ -946,41 +965,86 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             );
           })}
 
-      {/* LED-Rahmen (Legacy ÔÇô verteilt an einer Wand) */}
-      {Array.from({ length: ledFrames ?? 0 }).map((_, idx) => {
-        const total = ledFrames || 1;
+      {/* LED-Rahmen */}
+      {(() => {
+        const rawFrames =
+          ledFramesDetailed && ledFramesDetailed.length
+            ? ledFramesDetailed
+            : Array.from({ length: ledFrames ?? 0 }).map((_, idx) => ({
+                id: `legacy-led-${idx}`,
+                wallSide: ledWallSide,
+              }));
 
-        if (ledWallSide === "back") {
-          const spacing = width / (total + 1);
-          const xPos = -width / 2 + spacing * (idx + 1);
-          return (
-            <mesh key={`led-${idx}`} position={[xPos, floorHeight + 1.5, backWallFrontZ]}>
-              <boxGeometry args={[1.2, 2.2, 0.03]} />
-              <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-            </mesh>
-          );
-        }
+        const expanded: {
+          id?: string;
+          wallSide?: WallSide;
+          lastWallSide?: WallSide;
+          position?: { x?: number; z?: number };
+          height?: number;
+          rotationY?: number;
+          count?: number;
+        }[] = [];
 
-        if (ledWallSide === "left") {
-          const spacing = depth / (total + 1);
-          const zPos = -depth / 2 + spacing * (idx + 1);
-          return (
-            <mesh key={`led-${idx}`} position={[leftWallInnerX, floorHeight + 1.5, zPos]} rotation-y={Math.PI / 2}>
-              <boxGeometry args={[1.2, 2.2, 0.03]} />
-              <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-            </mesh>
-          );
-        }
+        rawFrames.forEach((frame, idx) => {
+          const count = Math.max(1, Number(frame.count) || 1);
+          for (let i = 0; i < count; i++) {
+            expanded.push({
+              ...frame,
+              id: frame.id ?? `led-${idx}-${i}`,
+            });
+          }
+        });
 
-        const spacing = depth / (total + 1);
-        const zPos = -depth / 2 + spacing * (idx + 1);
-        return (
-          <mesh key={`led-${idx}`} position={[rightWallInnerX, floorHeight + 1.5, zPos]} rotation-y={-Math.PI / 2}>
-            <boxGeometry args={[1.2, 2.2, 0.03]} />
-            <meshStandardMaterial emissive="#38bdf8" emissiveIntensity={2.2} color="#0f172a" roughness={0.4} />
-          </mesh>
-        );
-      })}
+        const byWall: Record<WallSide, typeof expanded> = { back: [], left: [], right: [] };
+        expanded.forEach((frame) => {
+          const side = (frame.wallSide ?? frame.lastWallSide ?? ledWallSide) as WallSide;
+          byWall[side].push(frame);
+        });
+
+        const rendered: JSX.Element[] = [];
+        (["back", "left", "right"] as WallSide[]).forEach((side) => {
+          const list = byWall[side];
+          const total = list.length;
+          list.forEach((frame, idx) => {
+            const frameHeight = frame.height ?? 2.2;
+            const y = floorHeight + frameHeight / 2 + 0.4;
+
+            let x = 0;
+            let z = 0;
+            let rotY = frame.rotationY ?? 0;
+
+            if (side === "back") {
+              const spacing = total > 0 ? width / (total + 1) : width;
+              x = frame.position?.x ?? -width / 2 + spacing * (idx + 1);
+              z = frame.position?.z ?? backWallFrontZ;
+            } else if (side === "left") {
+              const spacing = total > 0 ? depth / (total + 1) : depth;
+              z = frame.position?.z ?? -depth / 2 + spacing * (idx + 1);
+              x = frame.position?.x ?? leftWallInnerX;
+              rotY = frame.rotationY ?? Math.PI / 2;
+            } else {
+              const spacing = total > 0 ? depth / (total + 1) : depth;
+              z = frame.position?.z ?? -depth / 2 + spacing * (idx + 1);
+              x = frame.position?.x ?? rightWallInnerX;
+              rotY = frame.rotationY ?? -Math.PI / 2;
+            }
+
+            rendered.push(
+              <mesh key={frame.id ?? `${side}-led-${idx}`} position={[x, y, z]} rotation-y={rotY}>
+                <boxGeometry args={[1.2, frameHeight, 0.03]} />
+                <meshStandardMaterial
+                  emissive="#38bdf8"
+                  emissiveIntensity={2.2}
+                  color="#0f172a"
+                  roughness={0.4}
+                />
+              </mesh>
+            );
+          });
+        });
+
+        return rendered;
+      })()}
 
       {/* Screens ÔÇô Detailed bevorzugt, sonst Legacy */}
       {screensDetailed.length > 0
@@ -1067,7 +1131,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                       ? { ...s0, position: { x: c.x, z: c.z } }
                       : s0
                   );
-                  setConfig({ modules: { detailedScreens: next } as any });
+                  setConfig({ modules: { detailedScreens: next } });
                 }}
               >
                 <group
@@ -1176,7 +1240,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             );
           })}
 
-      {/* Wand-Strahler R├╝ckwand */}
+      {/* Wand-Strahler R++ckwand */}
       {wallLightsBack > 0 &&
         wallsClosedSides >= 1 &&
         Array.from({ length: wallLightsBack }).map((_, i) => {
@@ -1239,7 +1303,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
       {/* Truss ÔÇô Rahmen + Lampen + Bannerrahmen (mit Offset & Drag-Griff) */}
       {trussEnabled && (
         <group position={[trussOffsetX, 0, trussOffsetZ]}>
-          {/* Drag-Griff f├╝r Truss (EditMode) */}
+          {/* Drag-Griff f++r Truss (EditMode) */}
           <Transformable
             enabled={editMode && isSelected("truss")}
             mode={transformMode}
@@ -1252,7 +1316,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
               const candidates = [
                 makeAabb(
                   "truss-col-front-left",
-                  "Truss-St├╝tze",
+                  "Truss-St++tze",
                   -width / 2 + c.x,
                   depth / 2 + c.z,
                   columnSize,
@@ -1261,7 +1325,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 ),
                 makeAabb(
                   "truss-col-front-right",
-                  "Truss-St├╝tze",
+                  "Truss-St++tze",
                   width / 2 + c.x,
                   depth / 2 + c.z,
                   columnSize,
@@ -1270,7 +1334,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 ),
                 makeAabb(
                   "truss-col-back-left",
-                  "Truss-St├╝tze",
+                  "Truss-St++tze",
                   -width / 2 + c.x,
                   -depth / 2 + c.z,
                   columnSize,
@@ -1279,7 +1343,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
                 ),
                 makeAabb(
                   "truss-col-back-right",
-                  "Truss-St├╝tze",
+                  "Truss-St++tze",
                   width / 2 + c.x,
                   -depth / 2 + c.z,
                   columnSize,
@@ -1304,7 +1368,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
 
               rememberValidPosition("truss", { x: c.x, z: c.z });
               pos.set(c.x, pos.y, c.z);
-              setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } as any });
+              setConfig({ modules: { trussOffset: { x: c.x, z: c.z } } });
             }}
           >
             <group
@@ -1401,7 +1465,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
             const banners: ReactNode[] = [];
 
             const materialProps = bannerTexture
-              ? { map: bannerTexture as any }
+              ? { map: bannerTexture }
               : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const);
 
             // Front
@@ -1472,8 +1536,207 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<any> }) {
   );
 }
 
+type CameraAnimation =
+  | {
+      kind: "fly";
+      actionId: number;
+      fromPos: THREE.Vector3;
+      toPos: THREE.Vector3;
+      fromTarget: THREE.Vector3;
+      toTarget: THREE.Vector3;
+      start: number;
+      duration: number;
+    }
+  | {
+      kind: "guide";
+      actionId: number;
+      waypoints: CameraPose[];
+      segment: number;
+      fromPos: THREE.Vector3;
+      toPos: THREE.Vector3;
+      fromTarget: THREE.Vector3;
+      toTarget: THREE.Vector3;
+      start: number;
+      duration: number;
+    };
+
+const toVector = (arr: [number, number, number]) => new THREE.Vector3(arr[0], arr[1], arr[2]);
+
+function CameraRig({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl | null> }) {
+  const { camera } = useThree();
+  const { t } = useTranslation();
+  const config = useConfigStore((s) => s.config);
+  const setCurrentPose = useCameraStore((s) => s.setCurrentPose);
+  const nextAction = useCameraStore((s) => s.nextAction);
+  const clearAction = useCameraStore((s) => s.clearAction);
+  const guides = useCameraStore((s) => s.guides);
+  const setGuides = useCameraStore((s) => s.setGuides);
+
+  const animationRef = useRef<CameraAnimation | null>(null);
+  const lastPoseRef = useRef<CameraPose | null>(null);
+
+  const floorRaised = config.modules.floor?.raised ?? config.modules.raisedFloor ?? false;
+  const floorHeight = floorRaised ? 0.08 : 0.025;
+
+  // Provide sensible defaults so the CameraPanel always has something to play.
+  useEffect(() => {
+    if (guides.length > 0) return;
+
+    const targetY = Math.min(
+      Math.max(config.height * 0.45 + floorHeight, floorHeight + 1.2),
+      floorHeight + Math.max(config.height * 0.85, 2)
+    );
+    const target: CameraPose["target"] = [0, targetY, 0];
+    const orbitPadding = Math.max(Math.max(config.width, config.depth) * 0.7, 5);
+    const heroHeight = Math.max(config.height + floorHeight + 1.2, targetY + 0.8);
+
+    setGuides([
+      {
+        id: "orbit",
+        name: t("camera.guide.orbit"),
+        description: t("camera.guide.orbitDesc"),
+        waypoints: [
+          { position: [0, heroHeight, config.depth / 2 + orbitPadding], target },
+          { position: [-config.width / 2 - orbitPadding, heroHeight, 0], target },
+          { position: [0, heroHeight, -config.depth / 2 - orbitPadding], target },
+          { position: [config.width / 2 + orbitPadding, heroHeight, 0], target },
+        ],
+      },
+      {
+        id: "hero",
+        name: t("camera.guide.hero"),
+        description: t("camera.guide.heroDesc"),
+        waypoints: [
+          { position: [orbitPadding * 0.4, heroHeight, config.depth / 2 + orbitPadding * 0.65], target },
+          { position: [-orbitPadding * 0.35, heroHeight * 0.95, config.depth / 2 + orbitPadding * 0.5], target },
+        ],
+      },
+    ]);
+  }, [config.depth, config.height, config.width, floorHeight, guides.length, setGuides, t]);
+
+  const readPose = useCallback((): CameraPose => {
+    const controls = orbitRef.current;
+    const ctrlTarget: THREE.Vector3 | undefined = controls?.target;
+    const pos = controls?.object?.position ?? camera.position;
+    const tgt = ctrlTarget ?? new THREE.Vector3(0, 1.4, 0);
+
+    return {
+      position: [pos.x, pos.y, pos.z],
+      target: [tgt.x, tgt.y, tgt.z],
+    };
+  }, [camera, orbitRef]);
+
+  const startGuideSegment = useCallback(
+    (waypoints: CameraPose[], segment: number, actionId: number, duration: number, fallbackPose?: CameraPose) => {
+      if (!waypoints[segment]) return;
+      const fromPose = segment === 0 ? fallbackPose ?? readPose() : waypoints[segment - 1];
+      const toPose = waypoints[segment];
+
+      animationRef.current = {
+        kind: "guide",
+        actionId,
+        waypoints,
+        segment,
+        fromPos: toVector(fromPose.position),
+        toPos: toVector(toPose.position),
+        fromTarget: toVector(fromPose.target ?? fallbackPose?.target ?? [0, 1.4, 0]),
+        toTarget: toVector(toPose.target ?? fromPose.target ?? [0, 1.4, 0]),
+        start: performance.now(),
+        duration,
+      };
+    },
+    [readPose]
+  );
+
+  useEffect(() => {
+    const controls = orbitRef.current;
+    if (!nextAction || !controls) return;
+
+    const currentPose = readPose();
+    const duration = Math.max(0.2, nextAction.duration ?? 0.9) * 1000;
+
+    if (nextAction.type === "flyTo") {
+      animationRef.current = {
+        kind: "fly",
+        actionId: nextAction.id,
+        fromPos: toVector(currentPose.position),
+        toPos: toVector(nextAction.pose.position),
+        fromTarget: toVector(currentPose.target),
+        toTarget: toVector(nextAction.pose.target),
+        start: performance.now(),
+        duration,
+      };
+      return;
+    }
+
+    if (nextAction.type === "playGuide") {
+      const guide = guides.find((g) => g.id === nextAction.guideId);
+      if (!guide || guide.waypoints.length === 0) {
+        clearAction(nextAction.id);
+        return;
+      }
+      startGuideSegment(guide.waypoints, 0, nextAction.id, duration, currentPose);
+    }
+  }, [clearAction, guides, nextAction, orbitRef, readPose, startGuideSegment]);
+
+  useFrame(() => {
+    const controls = orbitRef.current;
+    if (!controls) return;
+
+    const anim = animationRef.current;
+    const cameraObj: THREE.PerspectiveCamera = controls.object;
+    const target: THREE.Vector3 = controls.target;
+
+    if (anim) {
+      const now = performance.now();
+      const progress = Math.min(1, (now - anim.start) / anim.duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+
+      cameraObj.position.lerpVectors(anim.fromPos, anim.toPos, eased);
+      target.lerpVectors(anim.fromTarget, anim.toTarget, eased);
+      controls.update();
+
+      if (progress >= 1) {
+        const currentPose: CameraPose = {
+          position: [cameraObj.position.x, cameraObj.position.y, cameraObj.position.z],
+          target: [target.x, target.y, target.z],
+        };
+
+        if (anim.kind === "guide" && anim.segment < anim.waypoints.length - 1) {
+          startGuideSegment(anim.waypoints, anim.segment + 1, anim.actionId, anim.duration, currentPose);
+        } else {
+          clearAction(anim.actionId);
+          animationRef.current = null;
+        }
+      }
+    }
+
+    const pose: CameraPose = {
+      position: [cameraObj.position.x, cameraObj.position.y, cameraObj.position.z],
+      target: [target.x, target.y, target.z],
+    };
+
+    const prev = lastPoseRef.current;
+    const changed =
+      !prev ||
+      Math.abs(prev.position[0] - pose.position[0]) > 1e-3 ||
+      Math.abs(prev.position[1] - pose.position[1]) > 1e-3 ||
+      Math.abs(prev.position[2] - pose.position[2]) > 1e-3 ||
+      Math.abs(prev.target[0] - pose.target[0]) > 1e-3 ||
+      Math.abs(prev.target[1] - pose.target[1]) > 1e-3 ||
+      Math.abs(prev.target[2] - pose.target[2]) > 1e-3;
+
+    if (changed) {
+      lastPoseRef.current = pose;
+      setCurrentPose(pose);
+    }
+  });
+
+  return null;
+}
+
 export default function Configurator3D() {
-  const orbitRef = useRef<any>(null);
+  const orbitRef = useRef<OrbitControlsImpl | null>(null);
 
   return (
     <Canvas
@@ -1482,7 +1745,7 @@ export default function Configurator3D() {
       className="canvas-root"
       onPointerMissed={() => {
         // Fallback-Deselect, falls obere Ebene Events nicht bekommt
-        // (Selektion-Reset passiert prim├ñr in StandMesh)
+        // (Selektion-Reset passiert prim+ñr in StandMesh)
       }}
     >
       <color attach="background" args={["#020617"]} />
@@ -1515,6 +1778,8 @@ export default function Configurator3D() {
         {/* OrbitRef an StandMesh weitergeben, damit Drag den Orbit sperrt */}
         <StandMesh orbitRef={orbitRef} />
       </Suspense>
+
+      <CameraRig orbitRef={orbitRef} />
 
       <ContactShadows
         position={[0, 0, 0]}

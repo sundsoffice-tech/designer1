@@ -58,5 +58,3 @@ export const loadLocalShare = (id: string): StandConfig | null => {
   const found = readShares().find((entry) => entry.id === id);
   return found?.config ?? null;
 };
-
-export const isLocalShareId = (id?: string | null) => Boolean(id && id.startsWith("local-"));

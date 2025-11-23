@@ -7,19 +7,19 @@ import type {
   WallSurface,
 } from "./pricing";
 
-export const DEFAULT_PANEL_RULES: WallPanelRules = {
+const DEFAULT_PANEL_RULES: WallPanelRules = {
   baseWidth: 1,
   minWidth: 0.6,
   maxWidth: 1.5,
   defaultSurface: "system",
 };
 
-export const mergePanelRules = (rules?: Partial<WallPanelRules>): WallPanelRules => ({
+const mergePanelRules = (rules?: Partial<WallPanelRules>): WallPanelRules => ({
   ...DEFAULT_PANEL_RULES,
   ...(rules ?? {}),
 });
 
-export function buildPanelsForSide(
+function buildPanelsForSide(
   side: WallSide,
   length: number,
   rules: WallPanelRules,

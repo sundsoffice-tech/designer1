@@ -500,7 +500,7 @@ export default function ObjectCatalogAdmin() {
         modules: {
           countersDetailed: [...counters, counterCfg],
           counters: 0,
-        } as any,
+        },
       });
       return;
     }
@@ -510,7 +510,7 @@ export default function ObjectCatalogAdmin() {
         alert("Keine 3D-Datei hinterlegt. Bitte im Admin-Formular laden.");
         return;
       }
-      const customObjects = (config.modules as any).customObjects ?? [];
+      const customObjects = config.modules.customObjects ?? [];
       const radius = Math.max(0.5, Math.min(config.width, config.depth) / 3);
       const angle = customObjects.length * 1.2;
       const x = Math.cos(angle) * radius * 0.6;
@@ -520,7 +520,7 @@ export default function ObjectCatalogAdmin() {
       setConfig({
         modules: {
           customObjects: [...customObjects, customCfg],
-        } as any,
+        },
       });
       return;
     }
@@ -550,7 +550,7 @@ export default function ObjectCatalogAdmin() {
         modules: {
           detailedScreens: [...screens, screenCfg],
           screens: 0,
-        } as any,
+        },
       });
     }
   };
