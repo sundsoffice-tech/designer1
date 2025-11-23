@@ -21,6 +21,6 @@ export const COUNTER_SIZE_LIMITS: {
   width: SizeLimitWithDefault;
   depth: SizeLimitWithDefault;
 } = {
-  width: { min: 0.6, max: 2, default: 0.9 },
-  depth: { min: 0.4, max: 1, default: 0.5 },
+  width: { min: 0.6, max: 2, default: 1 },
+  depth: { min: 0.4, max: 1, default: 0.55 },
 };

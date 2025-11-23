@@ -1,0 +1,1 @@
+export const SELECTION_OUTLINE_COLOR = "#f97316";

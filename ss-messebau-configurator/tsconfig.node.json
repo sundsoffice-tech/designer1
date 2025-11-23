@@ -1,42 +1,26 @@
 {
   "compilerOptions": {
-    /* ===== Build-Info ===== */
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
 
-    /* ===== Zielplattform ===== */
+    /* Zielplattform Node (Vite-Konfig, Scripts) */
     "target": "ES2020",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2020"],
 
-    /* ===== JSX / React ===== */
-    "jsx": "react-jsx",
-    "jsxImportSource": "react",
-    "types": ["react", "react-dom", "node", "vite/client"],
-
-    /* ===== Module / Bundler ===== */
+    /* Nur Node-Typen */
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "moduleDetection": "force", 
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "noEmit": true,
-
-    /* ===== Performance ===== */
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
 
-    /* ===== Strikte Typensicherheit ===== */
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-
-    /* ===== R3F + React freundlich ===== */
-    "allowJs": false,
-    "esModuleInterop": true
+    /* Optional Striktheit – hier kann man entspannter sein */
+    "strict": true
   },
 
-  "include": ["src", "vite.config.ts"],
+  /* Hier gehören nur Node-Dateien rein */
+  "include": ["vite.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

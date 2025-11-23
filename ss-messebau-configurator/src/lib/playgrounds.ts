@@ -15,8 +15,6 @@ export const collisionPlayground: StandConfig = {
     wallsClosedSides: 2,
     storageRoom: true,
     storageDoorSide: "left",
-    ledFrames: 1,
-    ledWall: "back",
     counters: 0,
     countersWithPower: true,
     counterVariant: "premium",
