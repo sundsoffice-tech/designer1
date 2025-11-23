@@ -3561,6 +3561,89 @@ export default function Configurator3D() {
       />
     );
   }
+
+  const sceneContents = (
+    <>
+      {!lightingSettings.background && <color attach="background" args={[DEFAULT_BACKGROUND_COLOR]} />}
+      <ambientLight intensity={ambientIntensity} color={lightingSettings.ambientColor} />
+      <directionalLight
+        position={[6, 10, 4]}
+        intensity={keyLightIntensity}
+        castShadow
+        shadow-mapSize-width={shadowMapSize}
+        shadow-mapSize-height={shadowMapSize}
+      />
+      <directionalLight position={[-4, 6, -4]} intensity={rimLightIntensity} />
+      <Environment
+        key={lightingSettings.hdri}
+        preset={envPreset.preset}
+        background={lightingSettings.background}
+        environmentIntensity={environmentIntensity}
+        blur={envPreset.blur}
+      />
+      <ToneMappingController toneMapping={lightingSettings.toneMapping} exposure={lightingSettings.exposure} />
+      <Grid
+        renderOrder={-1}
+        position={[0, 0, 0]}
+        infiniteGrid
+        cellSize={0.5}
+        sectionSize={2}
+        fadeDistance={18}
+        fadeStrength={2}
+        cellThickness={0.5}
+        sectionThickness={1.2}
+      />
+      <Physics gravity={[0, -9.81, 0]} colliders="hull">
+        <Suspense fallback={null}>
+          {/* OrbitRef an StandMesh weitergeben, damit Drag den Orbit sperrt */}
+          <StandMesh orbitRef={orbitRef} lighting={lightingSettings} onFrameAll={frameAll} />
+        </Suspense>
+      </Physics>
+      <CameraRig
+        orbitRef={orbitRef}
+        dprScale={canvasDpr}
+        fallbackQuality={fallbackQuality}
+        isCameraMoving={isCameraMoving}
+        onMoveStateChange={handleMovementChange}
+      />
+      {contactShadowSettings.enabled && (
+        <ContactShadows
+          position={[0, 0, 0]}
+          opacity={contactShadowSettings.opacity}
+          width={20}
+          height={20}
+          blur={contactShadowSettings.blur}
+          far={15}
+          resolution={contactShadowSettings.resolution}
+          color="#000000"
+        />
+      )}
+      {postProcessingEnabled && composerPasses.length > 0 && <EffectComposer>{composerPasses}</EffectComposer>}
+      <DreiCameraControls
+        ref={orbitRef}
+        makeDefault
+        minPolarAngle={MIN_PITCH_RAD}
+        maxPolarAngle={MAX_PITCH_RAD}
+        dollyToCursor
+        smoothTime={0.82}
+        draggingSmoothTime={0.22}
+        mouseButtons={{
+          left: CameraControls.ACTION.ROTATE,
+          middle: CameraControls.ACTION.TRUCK,
+          right: CameraControls.ACTION.NONE,
+          wheel: CameraControls.ACTION.DOLLY,
+        }}
+        touches={{
+          one: CameraControls.ACTION.TOUCH_ROTATE,
+          two: CameraControls.ACTION.TOUCH_DOLLY_TRUCK,
+          three: CameraControls.ACTION.NONE,
+        }}
+        onStart={() => handleMovementChange(true)}
+        onEnd={() => handleMovementChange(false)}
+        onRest={() => handleMovementChange(false)}
+      />
+    </>
+  );
   return (
     <div className="viewport-shell">
       <Canvas
@@ -3578,92 +3661,14 @@ export default function Configurator3D() {
           }
         }}
       >
+        {/* PerformanceMonitor muss ein direktes Canvas-Kind bleiben, damit die R3F-Hooks einen gültigen Kontext finden. */}
         <PerformanceMonitor
           flipflops={6}
           onDecline={handlePerfDecline}
           onIncline={handlePerfIncline}
           onFallback={handlePerfFallback}
         />
-        {!lightingSettings.background && <color attach="background" args={[DEFAULT_BACKGROUND_COLOR]} />}
-        <ambientLight intensity={ambientIntensity} color={lightingSettings.ambientColor} />
-        <directionalLight
-          position={[6, 10, 4]}
-          intensity={keyLightIntensity}
-          castShadow
-          shadow-mapSize-width={shadowMapSize}
-          shadow-mapSize-height={shadowMapSize}
-        />
-        <directionalLight position={[-4, 6, -4]} intensity={rimLightIntensity} />
-        <Environment
-          key={lightingSettings.hdri}
-          preset={envPreset.preset}
-          background={lightingSettings.background}
-          environmentIntensity={environmentIntensity}
-          blur={envPreset.blur}
-        />
-        <ToneMappingController toneMapping={lightingSettings.toneMapping} exposure={lightingSettings.exposure} />
-        <Grid
-          renderOrder={-1}
-          position={[0, 0, 0]}
-          infiniteGrid
-          cellSize={0.5}
-          sectionSize={2}
-          fadeDistance={18}
-          fadeStrength={2}
-          cellThickness={0.5}
-          sectionThickness={1.2}
-        />
-        <Physics gravity={[0, -9.81, 0]} colliders="hull">
-          <Suspense fallback={null}>
-            {/* OrbitRef an StandMesh weitergeben, damit Drag den Orbit sperrt */}
-            <StandMesh orbitRef={orbitRef} lighting={lightingSettings} onFrameAll={frameAll} />
-          </Suspense>
-        </Physics>
-        <CameraRig
-          orbitRef={orbitRef}
-          dprScale={canvasDpr}
-          fallbackQuality={fallbackQuality}
-          isCameraMoving={isCameraMoving}
-          onMoveStateChange={handleMovementChange}
-        />
-        {contactShadowSettings.enabled && (
-          <ContactShadows
-            position={[0, 0, 0]}
-            opacity={contactShadowSettings.opacity}
-            width={20}
-            height={20}
-            blur={contactShadowSettings.blur}
-            far={15}
-            resolution={contactShadowSettings.resolution}
-            color="#000000"
-          />
-        )}
-        {postProcessingEnabled && composerPasses.length > 0 && (
-          <EffectComposer>{composerPasses}</EffectComposer>
-        )}
-        <DreiCameraControls
-          ref={orbitRef}
-          makeDefault
-          minPolarAngle={MIN_PITCH_RAD}
-          maxPolarAngle={MAX_PITCH_RAD}
-          dollyToCursor
-          smoothTime={0.82}
-          draggingSmoothTime={0.22}
-          mouseButtons={{
-            left: CameraControls.ACTION.ROTATE,
-            middle: CameraControls.ACTION.TRUCK,
-            right: CameraControls.ACTION.NONE,
-            wheel: CameraControls.ACTION.DOLLY,
-          }}
-          touches={{
-            one: CameraControls.ACTION.TOUCH_ROTATE,
-            two: CameraControls.ACTION.TOUCH_DOLLY_TRUCK,
-            three: CameraControls.ACTION.NONE,
-          }}
-          onStart={() => handleMovementChange(true)}
-          onEnd={() => handleMovementChange(false)}
-          onRest={() => handleMovementChange(false)}
-        />
+        {sceneContents}
       </Canvas>
       <div className="hud-controls">
         <div style={{ fontWeight: 700, fontSize: 13 }}>{t("camera.quick.overview")}</div>
