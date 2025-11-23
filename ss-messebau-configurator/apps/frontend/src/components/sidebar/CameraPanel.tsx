@@ -18,6 +18,7 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
   const currentPose = useCameraStore((s) => s.currentPose);
   const queueAction = useCameraStore((s) => s.queueAction);
   const saveCurrentView = useCameraStore((s) => s.saveCurrentView);
+  const renameView = useCameraStore((s) => s.renameView);
   const deleteView = useCameraStore((s) => s.deleteView);
   const loadView = useCameraStore((s) => s.loadView);
   const createGuideFromViews = useCameraStore((s) => s.createGuideFromViews);
@@ -153,6 +154,17 @@ export function CameraPanel({ width, depth, height, floorHeight }: CameraPanelPr
                     {new Date(view.createdAt).toLocaleTimeString()}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const nextName = window.prompt(t("camera.renameView"), view.name)?.trim();
+                    if (!nextName) return;
+                    renameView(view.id, nextName);
+                  }}
+                >
+                  {t("camera.rename")}
+                </button>
                 <button type="button" className="btn-secondary" onClick={() => loadView(view.id)}>
                   {t("camera.load")}
                 </button>

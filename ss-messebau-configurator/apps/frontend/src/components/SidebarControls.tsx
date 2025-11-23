@@ -6,6 +6,7 @@ import { isValidEmail, type ContactRequest } from "@ss/shared";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
 import SeatingControls from "./SeatingControls";
+import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 
 type WallSide = "back" | "left" | "right";
@@ -1781,8 +1782,15 @@ export default function SidebarControls({
               Erhöht oder reduziert den Metallanteil der Oberflächen.
             </small>
           </label>
-        </div>
       </div>
+    </div>
+
+      <CameraPanel
+        width={config.width}
+        depth={config.depth}
+        height={config.height}
+        floorHeight={floorHeight}
+      />
 
       {/* Seating */}
       <div className="sidebar-section">
