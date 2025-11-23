@@ -56,15 +56,6 @@ type DetailedScreen = {
   rotationY?: number;
 };
 
-type CabinWithPosition = {
-  enabled: boolean;
-  width: number;
-  depth: number;
-  height: number;
-  doorSide: "front" | "left" | "right" | "back";
-  position?: { x?: number; z?: number };
-};
-
 /** EditÔÇæModus Toggle (Taste 'E') */
 function useEditModeHotkey(): boolean {
   const [edit, setEdit] = useState<boolean>(false);
@@ -220,15 +211,23 @@ function Transformable({
       else onDragEnd?.();
     };
 
+    // @ts-expect-error - TransformControls has custom events not in Object3DEventMap
     tc.addEventListener("objectChange", handleChange);
+    // @ts-expect-error
     tc.addEventListener("mouseDown", handleMouseDown);
+    // @ts-expect-error
     tc.addEventListener("mouseUp", handleMouseUp);
+    // @ts-expect-error
     tc.addEventListener("dragging-changed", handleDraggingChanged);
 
     return () => {
+      // @ts-expect-error
       tc.removeEventListener("objectChange", handleChange);
+      // @ts-expect-error
       tc.removeEventListener("mouseDown", handleMouseDown);
+      // @ts-expect-error
       tc.removeEventListener("mouseUp", handleMouseUp);
+      // @ts-expect-error
       tc.removeEventListener("dragging-changed", handleDraggingChanged);
     };
   }, [onChange, onDragEnd, onDragStart]);
@@ -284,7 +283,6 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
     screensWall,
     ledFramesDetailed = [],
     cabin,
-    truss,
     trussLightType = "spot",
     trussLightsFront = 0,
     trussLightsBack = 0,
@@ -293,20 +291,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
     wallLightsBack = 0,
     wallLightsLeft = 0,
     wallLightsRight = 0,
-    collisionClearance: collisionClearanceRaw,
-    trussBannersFront = 0,
-    trussBannersBack = 0,
-    trussBannersLeft = 0,
-    trussBannersRight = 0,
-    trussBannerWidth = 3,
-    trussBannerHeight = 1,
-    trussBannerMipmaps,
-    trussBannerImageUrl,
-    trussHeight: trussHeightRaw,
-    trussOffset,
   } = modules;
-
-  const cabinWithPosition: CabinWithPosition | undefined = cabin;
 
   // Truss & Licht
   const trussEnabled: boolean = !!modules.truss;
@@ -551,20 +536,21 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
   const convertLegacyCountersToDetailed = () => {
     if ((counters ?? 0) <= 0) return;
     const count = counters!;
+    const defaultVariant = modules.counterVariant ?? "basic";
     const out: DetailedCounter[] = Array.from({ length: count }).map((_, idx) => {
       const spacing = width / (count + 1 || 1);
       const xPos = -width / 2 + spacing * (idx + 1);
       const zPos = countersPlacement === "center" ? 0 : depth / 2 - 0.5;
       return {
         id: `ctr-${Date.now()}-${idx}`,
-        variant: modules.counterVariant ?? "basic",
+        variant: defaultVariant,
         withPower: !!modules.countersWithPower,
         position: { x: xPos, z: zPos },
       };
     });
     setConfig({
       modules: {
-        countersDetailed: out,
+        countersDetailed: out as any, // Type assertion to match CounterConfig[]
         counters: 0,
       },
     });
@@ -577,7 +563,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
       const total = count || 1;
       let x = 0;
       let z = 0;
-      let wall: WallSide = (screensWallSide as WallSide) ?? "back";
+      const wall: WallSide = (screensWallSide as WallSide) ?? "back";
       if (wall === "back") {
         const spacing = width / (total + 1);
         x = -width / 2 + spacing * (idx + 1);
@@ -737,7 +723,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
               modules: {
                 cabin: {
                   position: { x: c.x, z: c.z },
-                },
+                } as any,
               },
             });
           }}
@@ -865,7 +851,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
                   const next = countersDetailed.map((c0) =>
                     c0.id === ctr.id ? { ...c0, position: { ...c0.position, x: c.x, z: c.z } } : c0
                   );
-                  setConfig({ modules: { countersDetailed: next } });
+                  setConfig({ modules: { countersDetailed: next as any } });
                 }}
               >
                 <group
@@ -986,7 +972,7 @@ function StandMesh({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
         }[] = [];
 
         rawFrames.forEach((frame, idx) => {
-          const count = Math.max(1, Number(frame.count) || 1);
+          const count = Math.max(1, Number((frame as any).count) || 1);
           for (let i = 0; i < count; i++) {
             expanded.push({
               ...frame,
@@ -1684,7 +1670,7 @@ function CameraRig({ orbitRef }: { orbitRef: MutableRefObject<OrbitControlsImpl 
     if (!controls) return;
 
     const anim = animationRef.current;
-    const cameraObj: THREE.PerspectiveCamera = controls.object;
+    const cameraObj = controls.object as THREE.PerspectiveCamera;
     const target: THREE.Vector3 = controls.target;
 
     if (anim) {

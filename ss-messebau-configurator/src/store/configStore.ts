@@ -1,7 +1,7 @@
 ﻿// src/store/configStore.ts
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { calcPrice, calcPriceDetailed, type PriceBreakdown } from "../lib/pricing";
+import { calcPrice, calcPriceDetailed, type PriceBreakdown, type WallDetailConfig } from "../lib/pricing";
 import {
   fetchRuntimePrice,
   loadRuntimeConfig,
@@ -191,7 +191,7 @@ const screenVariantKey = (mount: string | undefined, size?: string) => {
 const buildModuleSelection = (modules: StandModules): ModuleSelection => {
   const frames =
     Array.isArray(modules.ledFramesDetailed) && modules.ledFramesDetailed.length
-      ? modules.ledFramesDetailed.map((f) => f.variant).filter(Boolean)
+      ? modules.ledFramesDetailed.map((f) => f.variant).filter((v): v is string => Boolean(v))
       : modules.frameVariant
       ? [modules.frameVariant]
       : [];
@@ -703,7 +703,7 @@ function mergeModules(
   for (const k of shallowKeys) {
     const value = patch?.[k];
     if (value !== undefined) {
-      out[k as keyof StandModules] = value as StandModules[keyof StandModules];
+      (out as any)[k] = value;
     }
   }
 
@@ -724,6 +724,10 @@ function mergeModules(
     };
 
     const mergedCabin: CabinConfig & { position?: { x?: number; z?: number } } = {
+      enabled: true,
+      width: 1.5,
+      depth: 1.5,
+      height: 2.5,
       ...(baseCabin ?? {}),
       ...(patchCabin ?? {}),
       position: {
@@ -731,7 +735,7 @@ function mergeModules(
         ...(patchCabin?.position ?? {}),
       },
       wallSurfaces: mergedSurfaces,
-    };
+    } as CabinConfig & { position?: { x?: number; z?: number } };
 
     out.cabin = mergedCabin;
   }
@@ -804,7 +808,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   const fixedWalls = clampNumber(wallFixedMap[cfgClamped.type] ?? rawWallsClosed ?? 0, 0, 3);
   const wallsClosedSides = clampNumber(fixedWalls ?? rawWallsClosed ?? 0, 0, maxWalls);
 
-  let modules: StandModules = {
+  const modules: StandModules = {
     ...cfgClamped.modules,
     wallsClosedSides,
   };
@@ -994,18 +998,18 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
   // LED-Wand nur wenn kompatible Rahmen-Variante gewaehlt wurde
   if (!isLedWallAllowed(modules)) {
-    const detail: Partial<Record<WallSide, { surface?: string; finishId?: string }>> = {
+    const detail: Partial<Record<WallSide, WallDetailConfig>> = {
       ...(modules.wallsDetail ?? {}),
     };
     let changed = false;
     (["back", "left", "right"] as WallSide[]).forEach((side) => {
       if (detail?.[side]?.surface === "led") {
-        detail[side] = { ...(detail[side] ?? {}), surface: "seg", finishId: undefined };
+        detail[side] = { ...(detail[side] ?? {}), surface: "seg" as WallSurface, finishId: undefined };
         changed = true;
       }
     });
     if (changed) {
-      modules.wallsDetail = detail;
+      modules.wallsDetail = detail as Partial<Record<WallSide, WallDetailConfig>>;
     }
   }
 
@@ -1068,15 +1072,15 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   });
   modules.wallLightsDetailed = limitedWallLights;
 
-  const wallDetailed = (mAny.wallLightsDetailed ?? []) as WallLightConfig[];
+  const wallDetailed = (modules.wallLightsDetailed ?? []) as WallLightConfig[];
   const wallCounts = {
     back: wallDetailed.filter((l) => l.side === "back").length,
     left: wallDetailed.filter((l) => l.side === "left").length,
     right: wallDetailed.filter((l) => l.side === "right").length,
   };
-  mAny.wallLightsBack = wallCounts.back;
-  mAny.wallLightsLeft = wallCounts.left;
-  mAny.wallLightsRight = wallCounts.right;
+  modules.wallLightsBack = wallCounts.back;
+  modules.wallLightsLeft = wallCounts.left;
+  modules.wallLightsRight = wallCounts.right;
 
   // --- MÃ¶belanzahl an StandflÃ¤che koppeln ---
   const area = cfgClamped.width * cfgClamped.depth;
@@ -1084,14 +1088,14 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   const maxRoundTables = Math.max(1, Math.floor(area / 6));
   const maxChairs = Math.max(2, Math.floor(area));
 
-  if (Array.isArray(mAny.countersDetailed)) {
-    mAny.countersDetailed = (mAny.countersDetailed as CounterConfig[]).slice(0, maxCountersDetailed);
+  if (Array.isArray(modules.countersDetailed)) {
+    modules.countersDetailed = (modules.countersDetailed as CounterConfig[]).slice(0, maxCountersDetailed);
   }
-  if (Array.isArray(mAny.roundTables)) {
-    mAny.roundTables = (mAny.roundTables as RoundTableConfig[]).slice(0, maxRoundTables);
+  if (Array.isArray(modules.roundTables)) {
+    modules.roundTables = (modules.roundTables as RoundTableConfig[]).slice(0, maxRoundTables);
   }
-  if (Array.isArray(mAny.chairsDetailed)) {
-    mAny.chairsDetailed = (mAny.chairsDetailed as ChairConfig[]).slice(0, maxChairs);
+  if (Array.isArray(modules.chairsDetailed)) {
+    modules.chairsDetailed = (modules.chairsDetailed as ChairConfig[]).slice(0, maxChairs);
   }
 
   return { ...cfgClamped, modules };
@@ -1907,7 +1911,7 @@ export const useConfigStore = create<ConfigState>()(
         modules: {
           cabin: {
             position: pos,
-          },          // âœ… nur Teil-Update, nicht komplette CabinConfig
+          } as any,          // Type assertion needed for partial update
         },
       });
     },
@@ -1929,7 +1933,7 @@ export const useConfigStore = create<ConfigState>()(
           cabin: {
             width: clamped.width,
             depth: clamped.depth,
-          }, // Teil-Update
+          } as any, // Type assertion needed for partial update
         },
       });
     },

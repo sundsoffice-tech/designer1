@@ -1,7 +1,7 @@
 ﻿// src/components/SidebarControls.tsx
 import { Suspense, lazy, useState } from "react";
 import { useConfigStore, type DeepPartial } from "../store/configStore";
-import type { StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
+import type { StandModules, WallDetailConfig, StandType, Region, CabinConfig } from "../lib/pricing";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
 import SeatingControls from "./SeatingControls";
@@ -46,7 +46,7 @@ export default function SidebarControls({
     setConfig({ modules: mods });
 
   const buildCabinPatch = (): NonNullable<DeepPartial<StandModules>["cabin"]> => {
-    const cabin = modules.cabin ?? {};
+    const cabin = modules.cabin ?? {} as Partial<CabinConfig>;
     const width = typeof cabin.width === "number" ? cabin.width : 1.5;
     const depth = typeof cabin.depth === "number" ? cabin.depth : 1.5;
     const height = typeof cabin.height === "number" ? cabin.height : config.height;
@@ -292,6 +292,7 @@ export default function SidebarControls({
 
   const copyConfigToClipboard = () => {
     const area = config.width * config.depth;
+    const m = modules;
     const wd = modules.wallsDetail;
 
     const wallSurfaceLabel = (side: WallSide, label: string) => {
@@ -319,20 +320,20 @@ export default function SidebarControls({
 
     const floorLbl = floorTypeLabel(m.floor?.type);
 
-    const lightsFront = mm.trussLightsFront ?? 0;
-    const lightsBack = mm.trussLightsBack ?? 0;
-    const lightsLeft = mm.trussLightsLeft ?? 0;
-    const lightsRight = mm.trussLightsRight ?? 0;
-    const wallBack = mm.wallLightsBack ?? 0;
-    const wallLeft = mm.wallLightsLeft ?? 0;
-    const wallRight = mm.wallLightsRight ?? 0;
+    const lightsFront = m.trussLightsFront ?? 0;
+    const lightsBack = m.trussLightsBack ?? 0;
+    const lightsLeft = m.trussLightsLeft ?? 0;
+    const lightsRight = m.trussLightsRight ?? 0;
+    const wallBack = m.wallLightsBack ?? 0;
+    const wallLeft = m.wallLightsLeft ?? 0;
+    const wallRight = m.wallLightsRight ?? 0;
 
-    const bannerW = mm.trussBannerWidth ?? 0;
-    const bannerH = mm.trussBannerHeight ?? 0;
-    const bFront = mm.trussBannersFront ?? 0;
-    const bBack = mm.trussBannersBack ?? 0;
-    const bLeft = mm.trussBannersLeft ?? 0;
-    const bRight = mm.trussBannersRight ?? 0;
+    const bannerW = m.trussBannerWidth ?? 0;
+    const bannerH = m.trussBannerHeight ?? 0;
+    const bFront = m.trussBannersFront ?? 0;
+    const bBack = m.trussBannersBack ?? 0;
+    const bLeft = m.trussBannersLeft ?? 0;
+    const bRight = m.trussBannersRight ?? 0;
     const ledInfo = summarizeLedFrames();
     const ledLabel = ledInfo.total > 0 ? formatLedWallLabel(ledInfo.counts) : "";
 
@@ -360,7 +361,7 @@ export default function SidebarControls({
       }, Strom: ${m.countersWithPower ? "Ja" : "Nein"})`,
       `- Screens: ${m.screens} (Wand: ${m.screensWall ?? "back"})`,
       `- Truss: ${m.truss ? "Ja" : "Nein"}`,
-      `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
+      `- Truss-Lampen (Typ ${m.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
       `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
       "",
@@ -403,20 +404,20 @@ export default function SidebarControls({
 
     const floorLbl = floorTypeLabel(m.floor?.type);
 
-    const lightsFront = mm.trussLightsFront ?? 0;
-    const lightsBack = mm.trussLightsBack ?? 0;
-    const lightsLeft = mm.trussLightsLeft ?? 0;
-    const lightsRight = mm.trussLightsRight ?? 0;
-    const wallBack = mm.wallLightsBack ?? 0;
-    const wallLeft = mm.wallLightsLeft ?? 0;
-    const wallRight = mm.wallLightsRight ?? 0;
+    const lightsFront = m.trussLightsFront ?? 0;
+    const lightsBack = m.trussLightsBack ?? 0;
+    const lightsLeft = m.trussLightsLeft ?? 0;
+    const lightsRight = m.trussLightsRight ?? 0;
+    const wallBack = m.wallLightsBack ?? 0;
+    const wallLeft = m.wallLightsLeft ?? 0;
+    const wallRight = m.wallLightsRight ?? 0;
 
-    const bannerW = mm.trussBannerWidth ?? 0;
-    const bannerH = mm.trussBannerHeight ?? 0;
-    const bFront = mm.trussBannersFront ?? 0;
-    const bBack = mm.trussBannersBack ?? 0;
-    const bLeft = mm.trussBannersLeft ?? 0;
-    const bRight = mm.trussBannersRight ?? 0;
+    const bannerW = m.trussBannerWidth ?? 0;
+    const bannerH = m.trussBannerHeight ?? 0;
+    const bFront = m.trussBannersFront ?? 0;
+    const bBack = m.trussBannersBack ?? 0;
+    const bLeft = m.trussBannersLeft ?? 0;
+    const bRight = m.trussBannersRight ?? 0;
     const ledInfo = summarizeLedFrames();
     const ledLabel = ledInfo.total > 0 ? formatLedWallLabel(ledInfo.counts) : "";
 
@@ -446,7 +447,7 @@ export default function SidebarControls({
       }, Strom: ${m.countersWithPower ? "Ja" : "Nein"})`,
       `- Screens: ${m.screens} (Wand: ${m.screensWall ?? "back"})`,
       `- Truss: ${m.truss ? "Ja" : "Nein"}`,
-      `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
+      `- Truss-Lampen (Typ ${m.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
       `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${
         bannerH || "?"
@@ -847,7 +848,7 @@ export default function SidebarControls({
                   value={modules.cabin?.width ?? 1.5}
                   onChange={(e) =>
                     patchModules({
-                      cabin: { width: Number(e.target.value) || 0 },
+                      cabin: { ...buildCabinPatch(), width: Number(e.target.value) || 0 },
                     })
                   }
                 />
@@ -861,7 +862,7 @@ export default function SidebarControls({
                   value={modules.cabin?.depth ?? 1.5}
                   onChange={(e) =>
                     patchModules({
-                      cabin: { depth: Number(e.target.value) || 0 },
+                      cabin: { ...buildCabinPatch(), depth: Number(e.target.value) || 0 },
                     })
                   }
                 />
@@ -876,7 +877,13 @@ export default function SidebarControls({
                   value={modules.cabin?.position?.x ?? 0}
                   onChange={(e) =>
                     patchModules({
-                      cabin: { position: { x: Number(e.target.value) } },
+                      cabin: { 
+                        ...buildCabinPatch(), 
+                        position: { 
+                          x: Number(e.target.value),
+                          z: modules.cabin?.position?.z ?? buildCabinPatch().position?.z ?? 0
+                        } 
+                      },
                     })
                   }
                 />
@@ -889,7 +896,13 @@ export default function SidebarControls({
                   value={modules.cabin?.position?.z ?? 0}
                   onChange={(e) =>
                     patchModules({
-                      cabin: { position: { z: Number(e.target.value) } },
+                      cabin: { 
+                        ...buildCabinPatch(), 
+                        position: { 
+                          x: modules.cabin?.position?.x ?? buildCabinPatch().position?.x ?? 0,
+                          z: Number(e.target.value)
+                        } 
+                      },
                     })
                   }
                 />
