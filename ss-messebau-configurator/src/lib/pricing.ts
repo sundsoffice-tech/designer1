@@ -307,7 +307,7 @@ export type StandModules = {
     lastWallSide?: WallSide;
     unitPrice?: number;
   }[];
-  /** Legacy / Auswahl im UI: bevorzugte Wand f\u00fcr LED-Frames */
+  /** Legacy / Auswahl im UI: bevorzugte Wand für LED-Frames */
   ledWall?: WallSide;
 
   screens: number;
