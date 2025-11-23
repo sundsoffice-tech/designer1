@@ -1224,6 +1224,7 @@ const isBundleConfigMatch = (cfg: StandConfig, bundle: BundlePresetDefinition): 
 };
 
 const dropBundleMeta = (cfg: StandConfig): StandConfig => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { bundleKey, bundleLabel, bundleDiscount, ...rest } = cfg;
   return rest as StandConfig;
 };
