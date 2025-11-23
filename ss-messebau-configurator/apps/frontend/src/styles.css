@@ -1118,6 +1118,33 @@ button {
   gap: 6px;
 }
 
+.contact-form {
+  gap: 12px;
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.form-error {
+  color: #b91c1c;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.form-helper {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.full-width {
+  width: 100%;
+}
+
 .toggle-line {
   display: flex;
   align-items: flex-start;

@@ -1,7 +1,8 @@
 ﻿// src/components/SidebarControls.tsx
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useConfigStore, type DeepPartial } from "../store/configStore";
 import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
+import { isValidEmail, type ContactRequest } from "@ss/shared";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
 import SeatingControls from "./SeatingControls";
@@ -111,6 +112,7 @@ export default function SidebarControls({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
+  const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
 
@@ -441,10 +443,7 @@ export default function SidebarControls({
     }
   };
 
-  const copyConfigToClipboard = () => {
-    const area = config.width * config.depth;
-    const m = modules;
-    const mm = modules;
+  const buildWallLines = useCallback(() => {
     const wd = modules.wallsDetail;
 
     const wallSurfaceLabel = (side: WallSide, label: string) => {
@@ -463,61 +462,91 @@ export default function SidebarControls({
     };
 
     const wallLines: string[] = [];
-    if (m.wallsClosedSides >= 1)
+    if (modules.wallsClosedSides >= 1)
       wallLines.push("  • " + wallSurfaceLabel("back", "Rückwand"));
-    if (m.wallsClosedSides >= 2)
+    if (modules.wallsClosedSides >= 2)
       wallLines.push("  • " + wallSurfaceLabel("left", "Linke Wand"));
-    if (m.wallsClosedSides >= 3)
+    if (modules.wallsClosedSides >= 3)
       wallLines.push("  • " + wallSurfaceLabel("right", "Rechte Wand"));
 
-    const floorLbl = floorTypeLabel(m.floor?.type);
+    return wallLines;
+  }, [modules]);
 
-    const lightsFront = mm.trussLightsFront ?? 0;
-    const lightsBack = mm.trussLightsBack ?? 0;
-    const lightsLeft = mm.trussLightsLeft ?? 0;
-    const lightsRight = mm.trussLightsRight ?? 0;
-    const wallBack = mm.wallLightsBack ?? 0;
-    const wallLeft = mm.wallLightsLeft ?? 0;
-    const wallRight = mm.wallLightsRight ?? 0;
+  const buildModuleLines = useCallback(() => {
+    const lightsFront = modules.trussLightsFront ?? 0;
+    const lightsBack = modules.trussLightsBack ?? 0;
+    const lightsLeft = modules.trussLightsLeft ?? 0;
+    const lightsRight = modules.trussLightsRight ?? 0;
+    const wallBack = modules.wallLightsBack ?? 0;
+    const wallLeft = modules.wallLightsLeft ?? 0;
+    const wallRight = modules.wallLightsRight ?? 0;
 
-    const bannerW = mm.trussBannerWidth ?? 0;
-    const bannerH = mm.trussBannerHeight ?? 0;
-    const bFront = mm.trussBannersFront ?? 0;
-    const bBack = mm.trussBannersBack ?? 0;
-    const bLeft = mm.trussBannersLeft ?? 0;
-    const bRight = mm.trussBannersRight ?? 0;
+    const bannerW = modules.trussBannerWidth ?? 0;
+    const bannerH = modules.trussBannerHeight ?? 0;
+    const bFront = modules.trussBannersFront ?? 0;
+    const bBack = modules.trussBannersBack ?? 0;
+    const bLeft = modules.trussBannersLeft ?? 0;
+    const bRight = modules.trussBannersRight ?? 0;
+    const wallLines = buildWallLines();
     const ledInfo = summarizeLedFrames();
     const ledLabel = ledInfo.total > 0 ? formatLedWallLabel(ledInfo.counts) : "";
 
+    return [
+      `- Boden: ${floorTypeLabel(modules.floor?.type)}`,
+      `- Doppelboden: ${(modules.floor?.raised ?? modules.raisedFloor) ? "Ja" : "Nein"}`,
+      ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
+      `- Geschlossene Seiten: ${modules.wallsClosedSides}`,
+      `- Lagerraum: ${modules.storageRoom ? "Ja" : "Nein"}${
+        modules.storageRoom ? ` (Tür: ${modules.storageDoorSide ?? "front"})` : ""
+      }`,
+      `- LED-Rahmen: ${ledInfo.total}${ledLabel ? ` (${ledLabel})` : ""}`,
+      `- Counters: ${modules.counters} (Position: ${
+        normalizeCounterPlacement(modules.countersWall)
+      }, Strom: ${modules.countersWithPower ? "Ja" : "Nein"})`,
+      `- Screens: ${modules.screens} (Wand: ${modules.screensWall ?? "back"})`,
+      `- Truss: ${modules.truss ? "Ja" : "Nein"}`,
+      `- Truss-Lampen (Typ ${modules.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
+      `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
+      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
+    ];
+  }, [buildWallLines, formatLedWallLabel, modules, normalizeCounterPlacement, summarizeLedFrames]);
+
+  const buildStandSummary = useCallback(
+    (options: { includeFair?: boolean; includePrice?: boolean } = {}) => {
+      const area = config.width * config.depth;
+
+      return [
+        ...(options.includeFair ? [`Messe / Event: ${fair || "-"}`] : []),
+        `Fläche: ${config.width} x ${config.depth} m (${area} m²)`,
+        `Standtyp: ${config.type}`,
+        `Region: ${config.region}`,
+        `Eilauftrag: ${config.rush ? "Ja" : "Nein"}`,
+        "",
+        "Module:",
+        ...buildModuleLines(),
+        "",
+        ...(options.includePrice ? [`Richtpreis (brutto / Richtwert): ${price.toLocaleString("de-DE")} €`] : []),
+      ];
+    },
+    [buildModuleLines, config.depth, config.region, config.rush, config.type, config.width, fair, price]
+  );
+
+  const buildContactSection = useCallback((contact: ContactRequest) => {
+    return [
+      "=== Kontaktdaten Kunde ===",
+      `Name: ${contact.name || "-"}`,
+      `Firma: ${contact.company || "-"}`,
+      `E-Mail: ${contact.email || "-"}`,
+      `Telefon: ${contact.phone || "-"}`,
+      contact.fair ? `Messe / Event: ${contact.fair}` : undefined,
+    ].filter(Boolean) as string[];
+  }, []);
+
+  const copyConfigToClipboard = () => {
     const text = [
       "Neue Standanfrage über den 3D-Konfigurator:",
       "",
-      `Fläche: ${config.width} x ${config.depth} m (${area} m²)`,
-      `Standtyp: ${config.type}`,
-      `Region: ${config.region}`,
-      `Eilauftrag: ${config.rush ? "Ja" : "Nein"}`,
-      "",
-      "Module:",
-      `- Boden: ${floorLbl}`,
-      `- Doppelboden: ${
-        (m.floor?.raised ?? m.raisedFloor) ? "Ja" : "Nein"
-      }`,
-      ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
-      `- Geschlossene Seiten: ${m.wallsClosedSides}`,
-      `- Lagerraum: ${m.storageRoom ? "Ja" : "Nein"}${
-        m.storageRoom ? ` (Tür: ${m.storageDoorSide ?? "front"})` : ""
-      }`,
-      `- LED-Rahmen: ${ledInfo.total}${ledLabel ? ` (${ledLabel})` : ""}`,
-      `- Counters: ${m.counters} (Position: ${
-        normalizeCounterPlacement(m.countersWall)
-      }, Strom: ${m.countersWithPower ? "Ja" : "Nein"})`,
-      `- Screens: ${m.screens} (Wand: ${m.screensWall ?? "back"})`,
-      `- Truss: ${m.truss ? "Ja" : "Nein"}`,
-      `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
-      `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
-      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
-      "",
-      `Richtpreis: ${price.toLocaleString("de-DE")} €`,
+      ...buildStandSummary({ includePrice: true }),
     ].join("\n");
 
     navigator.clipboard
@@ -526,102 +555,59 @@ export default function SidebarControls({
     alert("Konfiguration wurde in die Zwischenablage kopiert.");
   };
 
-  const sendEmailRequest = () => {
-    const area = config.width * config.depth;
-    const m = modules;
-    const wd = m.wallsDetail;
-    const mm = m;
-
-    const wallSurfaceLabel = (side: WallSide, label: string) => {
-      const surface = wd?.[side]?.surface ?? "system";
-      const nice =
-        surface === "wood"
-          ? "Holzwand"
-          : surface === "banner"
-          ? "Bannerfläche"
-          : surface === "seg"
-          ? "Textil / SEG"
-          : surface === "led"
-          ? "LED-Wand"
-          : "Systemwand";
-      return `${label}: ${nice}`;
-    };
-
-    const wallLines: string[] = [];
-    if (m.wallsClosedSides >= 1)
-      wallLines.push("  • " + wallSurfaceLabel("back", "Rückwand"));
-    if (m.wallsClosedSides >= 2)
-      wallLines.push("  • " + wallSurfaceLabel("left", "Linke Wand"));
-    if (m.wallsClosedSides >= 3)
-      wallLines.push("  • " + wallSurfaceLabel("right", "Rechte Wand"));
-
-    const floorLbl = floorTypeLabel(m.floor?.type);
-
-    const lightsFront = mm.trussLightsFront ?? 0;
-    const lightsBack = mm.trussLightsBack ?? 0;
-    const lightsLeft = mm.trussLightsLeft ?? 0;
-    const lightsRight = mm.trussLightsRight ?? 0;
-    const wallBack = mm.wallLightsBack ?? 0;
-    const wallLeft = mm.wallLightsLeft ?? 0;
-    const wallRight = mm.wallLightsRight ?? 0;
-
-    const bannerW = mm.trussBannerWidth ?? 0;
-    const bannerH = mm.trussBannerHeight ?? 0;
-    const bFront = mm.trussBannersFront ?? 0;
-    const bBack = mm.trussBannersBack ?? 0;
-    const bLeft = mm.trussBannersLeft ?? 0;
-    const bRight = mm.trussBannersRight ?? 0;
-    const ledInfo = summarizeLedFrames();
-    const ledLabel = ledInfo.total > 0 ? formatLedWallLabel(ledInfo.counts) : "";
-
+  const sendEmailRequest = (contact: ContactRequest) => {
     const lines = [
       "Neue Standanfrage über den 3D-Konfigurator:",
       "",
       "=== Standdaten ===",
-      `Messe / Event: ${fair || "-"}`,
-      `Fläche: ${config.width} x ${config.depth} m (${area} m²)`,
-      `Standtyp: ${config.type}`,
-      `Region: ${config.region}`,
-      `Eilauftrag: ${config.rush ? "Ja" : "Nein"}`,
+      ...buildStandSummary({ includeFair: true, includePrice: true }),
       "",
-      "Module:",
-      `- Boden: ${floorLbl}`,
-      `- Doppelboden: ${
-        (m.floor?.raised ?? m.raisedFloor) ? "Ja" : "Nein"
-      }`,
-      ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
-      `- Geschlossene Seiten: ${m.wallsClosedSides}`,
-      `- Lagerraum: ${m.storageRoom ? "Ja" : "Nein"}${
-        m.storageRoom ? ` (Tür: ${m.storageDoorSide ?? "front"})` : ""
-      }`,
-      `- LED-Rahmen: ${ledInfo.total}${ledLabel ? ` (${ledLabel})` : ""}`,
-      `- Counters: ${m.counters} (Position: ${
-        normalizeCounterPlacement(m.countersWall)
-      }, Strom: ${m.countersWithPower ? "Ja" : "Nein"})`,
-      `- Screens: ${m.screens} (Wand: ${m.screensWall ?? "back"})`,
-      `- Truss: ${m.truss ? "Ja" : "Nein"}`,
-      `- Truss-Lampen (Typ ${mm.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
-      `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
-      `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${
-        bannerH || "?"
-      } m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
-      "",
-      `Richtpreis (brutto / Richtwert): ${price.toLocaleString("de-DE")} €`,
-      "",
-      "=== Kontaktdaten Kunde ===",
-      `Name: ${customerName || "-"}`,
-      `Firma: ${company || "-"}`,
-      `E-Mail: ${email || "-"}`,
-      `Telefon: ${phone || "-"}`,
+      ...buildContactSection(contact),
     ];
 
     const subject = encodeURIComponent(
-      `Standanfrage Konfigurator - ${company || customerName || "Unbekannt"}`
+      `Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`
     );
     const body = encodeURIComponent(lines.join("\n"));
     // Keep this on one line to avoid breaking the email address
     const mailto = `mailto:sunds-messebau@gmx.de?subject=${subject}&body=${body}`;
     window.location.href = mailto;
+  };
+
+  const validateContact = useCallback((contact: ContactRequest) => {
+    const errors: Partial<Record<keyof ContactRequest, string>> = {};
+
+    if (!contact.name?.trim()) {
+      errors.name = "Name ist ein Pflichtfeld.";
+    }
+    if (!contact.email?.trim()) {
+      errors.email = "E-Mail ist erforderlich.";
+    } else if (!isValidEmail(contact.email)) {
+      errors.email = "Bitte eine gültige E-Mail-Adresse angeben.";
+    }
+
+    return errors;
+  }, []);
+
+  const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const contact: ContactRequest = {
+      name: customerName.trim(),
+      company: company.trim() || undefined,
+      email: email.trim(),
+      phone: phone.trim() || undefined,
+      fair: fair.trim() || undefined,
+    };
+
+    const errors = validateContact(contact);
+    if (Object.keys(errors).length) {
+      setContactErrors(errors);
+      return;
+    }
+
+    setContactErrors({});
+    sendEmailRequest(contact);
   };
 
   return (
@@ -1833,46 +1819,67 @@ export default function SidebarControls({
           <span className="section-sub">Direkt an S&S Messebau</span>
         </div>
 
-        <div className="form-grid">
-          <label>
+        <form className="form-grid contact-form" onSubmit={handleContactSubmit} noValidate>
+          <label htmlFor="contact-name">
             Name
             <input
+              id="contact-name"
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Max Mustermann"
+              aria-invalid={Boolean(contactErrors.name)}
+              aria-describedby={contactErrors.name ? "contact-name-error" : undefined}
+              required
             />
+            {contactErrors.name ? (
+              <p className="form-error" role="alert" id="contact-name-error">
+                {contactErrors.name}
+              </p>
+            ) : null}
           </label>
-          <label>
+          <label htmlFor="contact-company">
             Firma
             <input
+              id="contact-company"
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="Firma / Organisation"
             />
           </label>
-          <label>
+          <label htmlFor="contact-email">
             E-Mail
             <input
+              id="contact-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="mail@unternehmen.de"
+              aria-invalid={Boolean(contactErrors.email)}
+              aria-describedby={contactErrors.email ? "contact-email-error" : undefined}
+              required
             />
+            {contactErrors.email ? (
+              <p className="form-error" role="alert" id="contact-email-error">
+                {contactErrors.email}
+              </p>
+            ) : null}
           </label>
-          <label>
+          <label htmlFor="contact-phone">
             Telefon
             <input
+              id="contact-phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+49 ..."
             />
           </label>
-          <label>
+          <label htmlFor="contact-fair">
             Messe / Event / Ort
             <input
+              id="contact-fair"
               type="text"
               value={fair}
               onChange={(e) => setFair(e.target.value)}
@@ -1880,14 +1887,15 @@ export default function SidebarControls({
             />
           </label>
 
-          <button
-            className="btn-primary"
-            style={{ width: "100%" }}
-            onClick={sendEmailRequest}
-          >
-            Anfrage per E-Mail erstellen
-          </button>
-        </div>
+          <div className="form-actions">
+            <button className="btn-primary full-width" type="submit">
+              Anfrage per E-Mail erstellen
+            </button>
+            <p className="form-helper" aria-live="polite">
+              Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.
+            </p>
+          </div>
+        </form>
       </div>
     </aside>
   );
