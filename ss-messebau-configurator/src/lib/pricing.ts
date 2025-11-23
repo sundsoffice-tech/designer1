@@ -7,7 +7,7 @@
 export type StandType = "row" | "corner" | "head" | "island";
 export type Region = "NRW" | "Sued" | "S\u00fcd" | "Nord" | "Ausland";
 
-export type WallSide = "back" | "left" | "right";
+export type WallSide = "back" | "left" | "right" | "front";
 export type WallType = "plain" | "wood" | "led" | "banner" | "seg";
 
 export type WallConfig = {
