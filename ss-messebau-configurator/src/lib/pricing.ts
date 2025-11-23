@@ -5,7 +5,7 @@
 // ======================
 
 export type StandType = "row" | "corner" | "head" | "island";
-type Region = "NRW" | "Sued" | "Süd" | "Nord" | "Ausland";
+export type Region = "NRW" | "Sued" | "Süd" | "Nord" | "Ausland";
 
 export type WallSide = "back" | "left" | "right";
 type WallType = "plain" | "wood" | "led" | "banner" | "seg";
@@ -1141,6 +1141,7 @@ function calcFrameCost(modules: StandModules): VariantCost {
   const result: VariantCost = { total: 0, perVariant: {} };
 
   frames.forEach((frame) => {
+    if (!frame.variant) return;
     const def = moduleVariantsByKey[frame.variant];
     if (!def) return;
     const count = Math.max(1, Number(frame.count) || 1);
