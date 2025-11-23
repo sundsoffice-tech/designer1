@@ -112,13 +112,14 @@ export default function SidebarControls({
 
   const wallAttachmentIndex = modules.wallAttachmentIndex;
   const hasWallMountedObjects = () => {
+    const ledFramesCount = modules.ledFrames ?? 0;
     const mappedCount =
       (wallAttachmentIndex?.byWall?.back?.length ?? 0) +
       (wallAttachmentIndex?.byWall?.left?.length ?? 0) +
       (wallAttachmentIndex?.byWall?.right?.length ?? 0) +
       (wallAttachmentIndex?.floating?.length ?? 0);
     const legacyScreens = (modules.screens ?? 0) > 0;
-    const legacyFrames = (modules.ledFrames ?? 0) > 0;
+    const legacyFrames = ledFramesCount > 0;
     const detailedScreens = Array.isArray(modules.detailedScreens) && modules.detailedScreens.length > 0;
     const detailedFrames = Array.isArray(modules.ledFramesDetailed) && modules.ledFramesDetailed.length > 0;
     const wallLightsCount =
