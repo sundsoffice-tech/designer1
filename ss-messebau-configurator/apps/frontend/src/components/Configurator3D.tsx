@@ -3638,6 +3638,7 @@ export default function Configurator3D() {
   const bloomActive = lightingSettings.bloom && !fallbackQuality;
   const dofActive = lightingSettings.dof && !fallbackQuality && !isCameraMoving;
   const bloomIntensity = isCameraMoving ? lightingSettings.bloomIntensity * 0.6 : lightingSettings.bloomIntensity;
+  const cappedBloomIntensity = Math.min(bloomIntensity, 1.25);
   const postProcessingEnabled = bloomActive || dofActive;
   const canvasDpr = fallbackQuality ? Math.min(clampDprValue(baseDpr), 0.75) : baseDpr;
   const ambientIntensity = fallbackQuality ? lightingSettings.ambientIntensity * 0.9 : lightingSettings.ambientIntensity;
@@ -3646,29 +3647,6 @@ export default function Configurator3D() {
     : lightingSettings.environmentIntensity;
   const keyLightIntensity = fallbackQuality ? 1.1 : isCameraMoving ? 1.25 : 1.4;
   const rimLightIntensity = fallbackQuality ? 0.3 : 0.4;
-  const composerPasses: JSX.Element[] = [];
-  if (bloomActive) {
-    composerPasses.push(
-      <Bloom
-        key="bloom"
-        mipmapBlur
-        luminanceThreshold={0.18}
-        intensity={bloomIntensity}
-      />
-    );
-  }
-  if (dofActive) {
-    composerPasses.push(
-      <DepthOfField
-        key="dof"
-        focusDistance={lightingSettings.dofFocus}
-        focalLength={0.02}
-        bokehScale={lightingSettings.dofBokehScale}
-        height={480}
-      />
-    );
-  }
-
   const sceneContents = (
     <>
       {!lightingSettings.background && <color attach="background" args={[DEFAULT_BACKGROUND_COLOR]} />}
@@ -3725,7 +3703,26 @@ export default function Configurator3D() {
           color="#000000"
         />
       )}
-      {postProcessingEnabled && composerPasses.length > 0 && <EffectComposer>{composerPasses}</EffectComposer>}
+      {postProcessingEnabled && (
+        <EffectComposer>
+          {/* SSAO intentionally omitted unless a NormalPass gets added; see three.js examples if reintroducing. */}
+          {bloomActive && (
+            <Bloom
+              mipmapBlur
+              luminanceThreshold={0.18}
+              intensity={cappedBloomIntensity}
+            />
+          )}
+          {dofActive && (
+            <DepthOfField
+              focusDistance={lightingSettings.dofFocus}
+              focalLength={0.02}
+              bokehScale={lightingSettings.dofBokehScale}
+              height={480}
+            />
+          )}
+        </EffectComposer>
+      )}
       <DreiCameraControls
         ref={orbitRef}
         makeDefault
