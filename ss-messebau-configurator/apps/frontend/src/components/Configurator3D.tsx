@@ -95,7 +95,7 @@ const HDRI_PRESETS: Record<
 };
 const DEFAULT_BACKGROUND_COLOR = "#020617";
 const LazyTrussBanners = lazy(() => import("./TrussBanners"));
-const clampDprValue = (value: number) => Math.min(2, Math.max(0.5, value));
+const clampDprValue = (value: number) => Math.min(1.5, Math.max(0.5, value));
 const MIN_PITCH_RAD = THREE.MathUtils.degToRad(15);
 const MAX_PITCH_RAD = THREE.MathUtils.degToRad(75);
 const DEFAULT_MOUSE_BUTTONS = {
@@ -696,6 +696,7 @@ function StandMesh({
     [lightingConfig]
   );
   const envMapIntensity = resolvedLighting.envMapIntensity ?? DEFAULT_LIGHTING.envMapIntensity;
+  const lodScale = useCameraStore((s) => s.lodScale);
   // ---- Lokale Edit-/UI-State
   const editMode = useEditModeHotkey();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -2969,84 +2970,208 @@ function StandMesh({
               )}
             </group>
           </Transformable>
-          {/* Truss-Rahmen */}
-          <mesh position={[0, trussHeight, depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial
-              {...pbr({
-                color: "#9ca3af",
-                metalness: 0.8,
-                roughness: 0.3,
-                envMapIntensity,
-              })}
-            />
-          </mesh>
-          <mesh position={[0, trussHeight, -depth / 2]} castShadow>
-            <boxGeometry args={[width, 0.08, 0.08]} />
-            <meshStandardMaterial
-              {...pbr({
-                color: "#9ca3af",
-                metalness: 0.8,
-                roughness: 0.3,
-                envMapIntensity,
-              })}
-            />
-          </mesh>
-          <mesh position={[-width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial
-              {...pbr({
-                color: "#9ca3af",
-                metalness: 0.8,
-                roughness: 0.3,
-                envMapIntensity,
-              })}
-            />
-          </mesh>
-          <mesh position={[width / 2, trussHeight, 0]} castShadow>
-            <boxGeometry args={[0.08, 0.08, depth]} />
-            <meshStandardMaterial
-              {...pbr({
-                color: "#9ca3af",
-                metalness: 0.8,
-                roughness: 0.3,
-                envMapIntensity,
-              })}
-            />
-          </mesh>
-          {/* Truss-Lampen */}
-          {trussLightsFront > 0 &&
-            Array.from({ length: trussLightsFront }).map((_, i) => {
-              const spacing = width / (trussLightsFront + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = depth / 2 - 0.04;
-              return renderTrussLight(`truss-front-${i}`, x, y, z, x, y - 0.15, z - 0.25);
-            })}
-          {trussLightsBack > 0 &&
-            Array.from({ length: trussLightsBack }).map((_, i) => {
-              const spacing = width / (trussLightsBack + 1);
-              const x = -width / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const z = -depth / 2 + 0.04;
-              return renderTrussLight(`truss-back-${i}`, x, y, z, x, y - 0.15, z + 0.25);
-            })}
-          {trussLightsLeft > 0 &&
-            Array.from({ length: trussLightsLeft }).map((_, i) => {
-              const spacing = depth / (trussLightsLeft + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = -width / 2 + 0.04;
-              return renderTrussLight(`truss-left-${i}`, x, y, z, x + 0.25, y - 0.15, z);
-            })}
-          {trussLightsRight > 0 &&
-            Array.from({ length: trussLightsRight }).map((_, i) => {
-              const spacing = depth / (trussLightsRight + 1);
-              const z = -depth / 2 + spacing * (i + 1);
-              const y = trussHeight - 0.05;
-              const x = width / 2 - 0.04;
-              return renderTrussLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
-            })}
+          {(() => {
+            const trussLodDistances = [8, 16].map((d) => d * lodScale);
+            const frameHighDetail = (
+              <>
+                <mesh position={[0, trussHeight, depth / 2]} castShadow>
+                  <boxGeometry args={[width, 0.08, 0.08]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#9ca3af",
+                      metalness: 0.8,
+                      roughness: 0.3,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[0, trussHeight, -depth / 2]} castShadow>
+                  <boxGeometry args={[width, 0.08, 0.08]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#9ca3af",
+                      metalness: 0.8,
+                      roughness: 0.3,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[-width / 2, trussHeight, 0]} castShadow>
+                  <boxGeometry args={[0.08, 0.08, depth]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#9ca3af",
+                      metalness: 0.8,
+                      roughness: 0.3,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[width / 2, trussHeight, 0]} castShadow>
+                  <boxGeometry args={[0.08, 0.08, depth]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#9ca3af",
+                      metalness: 0.8,
+                      roughness: 0.3,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+              </>
+            );
+            const frameMediumDetail = (
+              <>
+                <mesh position={[0, trussHeight, depth / 2]} castShadow={false}>
+                  <boxGeometry args={[width, 0.09, 0.09]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#a3a3a3",
+                      metalness: 0.65,
+                      roughness: 0.4,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[0, trussHeight, -depth / 2]} castShadow={false}>
+                  <boxGeometry args={[width, 0.09, 0.09]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#a3a3a3",
+                      metalness: 0.65,
+                      roughness: 0.4,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[-width / 2, trussHeight, 0]} castShadow={false}>
+                  <boxGeometry args={[0.09, 0.09, depth]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#a3a3a3",
+                      metalness: 0.65,
+                      roughness: 0.4,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+                <mesh position={[width / 2, trussHeight, 0]} castShadow={false}>
+                  <boxGeometry args={[0.09, 0.09, depth]} />
+                  <meshStandardMaterial
+                    {...pbr({
+                      color: "#a3a3a3",
+                      metalness: 0.65,
+                      roughness: 0.4,
+                      envMapIntensity,
+                    })}
+                  />
+                </mesh>
+              </>
+            );
+            const frameLowDetail = (
+              <mesh position={[0, trussHeight, 0]} castShadow>
+                <boxGeometry args={[width + 0.12, 0.12, depth + 0.12]} />
+                <meshStandardMaterial
+                  {...pbr({ color: "#9ca3af", metalness: 0.6, roughness: 0.35, envMapIntensity: envMapIntensity * 0.8 })}
+                />
+              </mesh>
+            );
+
+            const trussLights: Array<{
+              key: string;
+              position: [number, number, number];
+              lightPos: [number, number, number];
+            }> = [];
+            const addLight = (
+              key: string,
+              x: number,
+              y: number,
+              z: number,
+              lx: number,
+              ly: number,
+              lz: number
+            ) => {
+              trussLights.push({ key, position: [x, y, z], lightPos: [lx, ly, lz] });
+            };
+
+            if (trussLightsFront > 0) {
+              Array.from({ length: trussLightsFront }).forEach((_, i) => {
+                const spacing = width / (trussLightsFront + 1);
+                const x = -width / 2 + spacing * (i + 1);
+                const y = trussHeight - 0.05;
+                const z = depth / 2 - 0.04;
+                addLight(`truss-front-${i}`, x, y, z, x, y - 0.15, z - 0.25);
+              });
+            }
+            if (trussLightsBack > 0) {
+              Array.from({ length: trussLightsBack }).forEach((_, i) => {
+                const spacing = width / (trussLightsBack + 1);
+                const x = -width / 2 + spacing * (i + 1);
+                const y = trussHeight - 0.05;
+                const z = -depth / 2 + 0.04;
+                addLight(`truss-back-${i}`, x, y, z, x, y - 0.15, z + 0.25);
+              });
+            }
+            if (trussLightsLeft > 0) {
+              Array.from({ length: trussLightsLeft }).forEach((_, i) => {
+                const spacing = depth / (trussLightsLeft + 1);
+                const z = -depth / 2 + spacing * (i + 1);
+                const y = trussHeight - 0.05;
+                const x = -width / 2 + 0.04;
+                addLight(`truss-left-${i}`, x, y, z, x + 0.25, y - 0.15, z);
+              });
+            }
+            if (trussLightsRight > 0) {
+              Array.from({ length: trussLightsRight }).forEach((_, i) => {
+                const spacing = depth / (trussLightsRight + 1);
+                const z = -depth / 2 + spacing * (i + 1);
+                const y = trussHeight - 0.05;
+                const x = width / 2 - 0.04;
+                addLight(`truss-right-${i}`, x, y, z, x - 0.25, y - 0.15, z);
+              });
+            }
+
+            const lightsHigh = trussLights.map((light) =>
+              renderTrussLight(light.key, light.position[0], light.position[1], light.position[2], ...light.lightPos)
+            );
+            const lightsMedium = trussLights.map((light) => (
+              <mesh key={`${light.key}-medium`} position={light.position} castShadow={false}>
+                <boxGeometry args={[0.14, 0.08, 0.1]} />
+                <meshStandardMaterial
+                  {...pbr({
+                    color: "#fde68a",
+                    emissive: "#f59e0b",
+                    emissiveIntensity: 0.75,
+                    roughness: 0.4,
+                    metalness: 0.2,
+                  })}
+                />
+              </mesh>
+            ));
+            const lightsLow = trussLights.map((light) => (
+              <mesh key={`${light.key}-low`} position={light.position} castShadow={false}>
+                <boxGeometry args={[0.12, 0.06, 0.12]} />
+                <meshBasicMaterial color="#facc15" />
+              </mesh>
+            ));
+
+            return (
+              <>
+                <Detailed distances={trussLodDistances}>
+                  <group>{frameHighDetail}</group>
+                  <group>{frameMediumDetail}</group>
+                  {frameLowDetail}
+                </Detailed>
+                {trussLights.length > 0 && (
+                  <Detailed distances={trussLodDistances}>
+                    <group>{lightsHigh}</group>
+                    <group>{lightsMedium}</group>
+                    <group>{lightsLow}</group>
+                  </Detailed>
+                )}
+              </>
+            );
+          })()}
           {/* Bannerrahmen */}
           {hasTrussBanners && (
             <Suspense fallback={null}>
