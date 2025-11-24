@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import SidebarControls from "./SidebarControls";
 import Configurator3D from "./Configurator3D";
 import { ErrorBoundary } from "./ErrorBoundary";
+import SidebarControls from "./SidebarControls";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useTranslation } from "../i18n";
 
@@ -10,10 +10,10 @@ const adminEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_PA
 export default function AdminShell() {
   const { t } = useTranslation();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(isDesktop);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(isDesktop);
 
   useEffect(() => {
-    setIsSidebarOpen(isDesktop);
+    setSidebarOpen(isDesktop);
   }, [isDesktop]);
 
   if (!adminEnabled) {
@@ -44,42 +44,61 @@ export default function AdminShell() {
 
   const toggleSidebar = () => {
     if (isDesktop) {
-      setIsSidebarOpen(true);
+      setSidebarOpen(true);
       return;
     }
-    setIsSidebarOpen((prev) => !prev);
+    setSidebarOpen((prev) => !prev);
   };
 
   const closeSidebar = () => {
     if (isDesktop) return;
-    setIsSidebarOpen(false);
+    setSidebarOpen(false);
   };
 
   const isMobile = !isDesktop;
 
   return (
     <div className="app-root">
-      {isMobile && isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
-      {isMobile && (
-        <button
-          type="button"
-          className="mobile-sidebar-toggle"
-          onClick={toggleSidebar}
-          aria-expanded={isSidebarOpen}
-          aria-controls="app-sidebar"
-        >
-          {isSidebarOpen ? t("app.menu.close") : t("app.menu.open")}
-        </button>
-      )}
+      {isMobile && sidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
       <div className="app-shell">
-        <aside className="app-sidebar" id="app-sidebar">
+        <aside
+          className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-hidden"}`}
+          id="app-sidebar"
+        >
           <ErrorBoundary
-            fallback={<div className="sidebar-fallback">Sidebar konnte nicht geladen werden</div>}
+            fallback={
+              <div
+                className="sidebar-fallback"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  fontWeight: 700,
+                  border: "1px solid #fecdd3",
+                  boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
+                }}
+              >
+                Sidebar konnte nicht geladen werden
+              </div>
+            }
           >
-            <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
+            <SidebarControls drawerOpen={sidebarOpen} onClose={closeSidebar} />
           </ErrorBoundary>
         </aside>
-        <main className="app-main">
+        <main className="main-viewport">
+          <button
+            type="button"
+            className="sidebar-toggle mobile-sidebar-toggle"
+            onClick={toggleSidebar}
+            aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
+          >
+            {t("app.menu.open", { defaultValue: "Menü & Einstellungen" })}
+          </button>
           <Configurator3D />
         </main>
       </div>
