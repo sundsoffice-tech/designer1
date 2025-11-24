@@ -3638,7 +3638,8 @@ export default function Configurator3D() {
   const bloomActive = lightingSettings.bloom && !fallbackQuality;
   const dofActive = lightingSettings.dof && !fallbackQuality && !isCameraMoving;
   const bloomIntensity = isCameraMoving ? lightingSettings.bloomIntensity * 0.6 : lightingSettings.bloomIntensity;
-  const cappedBloomIntensity = Math.min(bloomIntensity, 1.25);
+  // Keep bloom subtle to maintain a clean "high-end" look without overpowering the scene.
+  const cappedBloomIntensity = Math.min(bloomIntensity, 1);
   const postProcessingEnabled = bloomActive || dofActive;
   const canvasDpr = fallbackQuality ? Math.min(clampDprValue(baseDpr), 0.75) : baseDpr;
   const ambientIntensity = fallbackQuality ? lightingSettings.ambientIntensity * 0.9 : lightingSettings.ambientIntensity;
