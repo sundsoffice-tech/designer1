@@ -388,7 +388,7 @@ export const DEFAULT_LIGHTING = {
   background: false,
   exposure: 1,
   toneMapping: "agx" as NonNullable<StandModules["lighting"]>["toneMapping"],
-  bloom: false,
+  bloom: true,
   bloomIntensity: 0.35,
   dof: false,
   dofFocus: 0.02,
