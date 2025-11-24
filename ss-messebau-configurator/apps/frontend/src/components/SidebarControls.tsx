@@ -47,7 +47,23 @@ export default function SidebarControls({
     history,
     future,
   } = useConfigStore();
+
+  if (!config || !config.modules) {
+    return (
+      <div style={{ padding: 12, fontSize: 12 }}>
+        Konfiguration nicht verfügbar.
+      </div>
+    );
+  }
+
   const modules = config.modules;
+  const wallsClosedSides = modules.wallsClosedSides ?? 0;
+  const counters = modules.counters ?? 0;
+  const screens = modules.screens ?? 0;
+  const storageRoomEnabled = modules.storageRoom ?? false;
+  const trussEnabled = modules.truss ?? false;
+  const raisedFloor = modules.floor?.raised ?? modules.raisedFloor ?? false;
+  const countersWithPower = modules.countersWithPower ?? false;
 
   const sidebarClassName = drawerOpen
     ? "sidebar sidebar-open translate-x-0"
@@ -208,9 +224,12 @@ export default function SidebarControls({
     const currentWalls = wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
     const nextWalls = wallFixedMap[nextType as keyof typeof wallFixedMap] ?? 0;
     if (currentWalls > 0 && nextWalls === 0 && hasWallMountedObjects()) {
-      const confirmRemoval = window.confirm(
-        "Wenn die letzte Wand entfernt wird, werden wandmontierte Objekte ausgeblendet und muessen spaeter neu platziert werden. Fortfahren?"
-      );
+      const confirmRemoval =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(
+              "Wenn die letzte Wand entfernt wird, werden wandmontierte Objekte ausgeblendet und muessen spaeter neu platziert werden. Fortfahren?"
+            );
       if (!confirmRemoval) return;
     }
     setConfig({ type: nextType });
@@ -219,7 +238,7 @@ export default function SidebarControls({
   // Boden-Konfiguration (advanced + Fallback auf legacy raisedFloor)
   const floor = config.modules.floor;
   const floorType = floor?.type ?? "carpet";
-  const floorRaised = floor?.raised ?? config.modules.raisedFloor ?? false;
+  const floorRaised = floor?.raised ?? raisedFloor;
   const counterPlacement = normalizeCounterPlacement(config.modules.countersWall);
 
   useEffect(() => {
@@ -252,8 +271,12 @@ export default function SidebarControls({
       }
     };
 
-    window.addEventListener("keydown", handleHistoryHotkeys);
-    return () => window.removeEventListener("keydown", handleHistoryHotkeys);
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", handleHistoryHotkeys);
+      return () => window.removeEventListener("keydown", handleHistoryHotkeys);
+    }
+
+    return () => {};
   }, [redo, undo]);
 
   const getWallsDetail = () =>
@@ -495,11 +518,11 @@ export default function SidebarControls({
     };
 
     const wallLines: string[] = [];
-    if (modules.wallsClosedSides >= 1)
+    if (wallsClosedSides >= 1)
       wallLines.push("  • " + wallSurfaceLabel("back", "Rückwand"));
-    if (modules.wallsClosedSides >= 2)
+    if (wallsClosedSides >= 2)
       wallLines.push("  • " + wallSurfaceLabel("left", "Linke Wand"));
-    if (modules.wallsClosedSides >= 3)
+    if (wallsClosedSides >= 3)
       wallLines.push("  • " + wallSurfaceLabel("right", "Rechte Wand"));
 
     return wallLines;
@@ -526,18 +549,18 @@ export default function SidebarControls({
 
     return [
       `- Boden: ${floorTypeLabel(modules.floor?.type)}`,
-      `- Doppelboden: ${(modules.floor?.raised ?? modules.raisedFloor) ? "Ja" : "Nein"}`,
+      `- Doppelboden: ${raisedFloor ? "Ja" : "Nein"}`,
       ...(wallLines.length ? ["- Wände:", ...wallLines] : []),
-      `- Geschlossene Seiten: ${modules.wallsClosedSides}`,
-      `- Lagerraum: ${modules.storageRoom ? "Ja" : "Nein"}${
-        modules.storageRoom ? ` (Tür: ${modules.storageDoorSide ?? "front"})` : ""
+      `- Geschlossene Seiten: ${wallsClosedSides}`,
+      `- Lagerraum: ${storageRoomEnabled ? "Ja" : "Nein"}${
+        storageRoomEnabled ? ` (Tür: ${modules.storageDoorSide ?? "front"})` : ""
       }`,
       `- LED-Rahmen: ${ledInfo.total}${ledLabel ? ` (${ledLabel})` : ""}`,
-      `- Counters: ${modules.counters} (Position: ${
+      `- Counters: ${counters} (Position: ${
         normalizeCounterPlacement(modules.countersWall)
-      }, Strom: ${modules.countersWithPower ? "Ja" : "Nein"})`,
-      `- Screens: ${modules.screens} (Wand: ${modules.screensWall ?? "back"})`,
-      `- Truss: ${modules.truss ? "Ja" : "Nein"}`,
+      }, Strom: ${countersWithPower ? "Ja" : "Nein"})`,
+      `- Screens: ${screens} (Wand: ${modules.screensWall ?? "back"})`,
+      `- Truss: ${trussEnabled ? "Ja" : "Nein"}`,
       `- Truss-Lampen (Typ ${modules.trussLightType ?? "spot"}): Front ${lightsFront}, Back ${lightsBack}, Links ${lightsLeft}, Rechts ${lightsRight}`,
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
       `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
@@ -582,10 +605,17 @@ export default function SidebarControls({
       ...buildStandSummary({ includePrice: true }),
     ].join("\n");
 
-    navigator.clipboard
-      .writeText(text)
-      .catch(() => console.log("Kopieren nicht möglich."));
-    alert("Konfiguration wurde in die Zwischenablage kopiert.");
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(text)
+        .catch(() => console.log("Kopieren nicht möglich."));
+    } else {
+      console.log("Zwischenablage nicht verfügbar.");
+    }
+
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+      window.alert("Konfiguration wurde in die Zwischenablage kopiert.");
+    }
   };
 
   const sendEmailRequest = (contact: ContactRequest) => {
@@ -604,7 +634,9 @@ export default function SidebarControls({
     const body = encodeURIComponent(lines.join("\n"));
     // Keep this on one line to avoid breaking the email address
     const mailto = `mailto:sunds-messebau@gmx.de?subject=${subject}&body=${body}`;
-    window.location.href = mailto;
+    if (typeof window !== "undefined" && typeof window.location !== "undefined") {
+      window.location.href = mailto;
+    }
   };
 
   const validateContact = useCallback((contact: ContactRequest) => {
@@ -1074,7 +1106,7 @@ export default function SidebarControls({
           </label>
 
           {/* Wand-Design + Wandstrahler */}
-          {config.modules.wallsClosedSides >= 1 && (
+          {wallsClosedSides >= 1 && (
             <>
               <label>
                 Wanddesign Rückwand
@@ -1110,7 +1142,7 @@ export default function SidebarControls({
             </>
           )}
 
-          {config.modules.wallsClosedSides >= 2 && (
+          {wallsClosedSides >= 2 && (
             <>
               <label>
                 Wanddesign linke Wand
@@ -1146,7 +1178,7 @@ export default function SidebarControls({
             </>
           )}
 
-          {config.modules.wallsClosedSides >= 3 && (
+          {wallsClosedSides >= 3 && (
             <>
               <label>
                 Wanddesign rechte Wand
@@ -1186,13 +1218,13 @@ export default function SidebarControls({
           <label className="checkbox-row">
             <input
               type="checkbox"
-              checked={config.modules.storageRoom}
+              checked={storageRoomEnabled}
               onChange={(e) => toggleStorageRoom(e.target.checked)}
             />
             Lagerraum / Kabine
           </label>
 
-          {config.modules.storageRoom && (
+          {storageRoomEnabled && (
             <>
               {/* Kabine – Maße */}
               <label>
@@ -1341,7 +1373,7 @@ export default function SidebarControls({
                 <input
                   type="number"
                   min={0}
-                  value={config.modules.counters}
+                value={counters}
                   onChange={(e) =>
                     patchModules({ counters: Number(e.target.value) || 0 })
                   }
@@ -1366,7 +1398,7 @@ export default function SidebarControls({
             </div>
           </label>
 
-          {config.modules.counters > 0 && (
+          {counters > 0 && (
             <>
               <label>
                 Counter-Position
@@ -1402,7 +1434,7 @@ export default function SidebarControls({
               <label className="checkbox-row">
                 <input
                   type="checkbox"
-                  checked={config.modules.countersWithPower ?? false}
+                  checked={countersWithPower}
                   onChange={(e) =>
                     patchModules({ countersWithPower: e.target.checked })
                   }
@@ -1420,7 +1452,7 @@ export default function SidebarControls({
                 <input
                   type="number"
                   min={0}
-                  value={config.modules.screens}
+                value={screens}
                   onChange={(e) =>
                     patchModules({ screens: Number(e.target.value) || 0 })
                   }
@@ -1445,7 +1477,7 @@ export default function SidebarControls({
             </div>
           </label>
 
-          {config.modules.screens > 0 && (
+          {screens > 0 && (
             <label>
               Screens an Wand
               <select
@@ -1467,13 +1499,13 @@ export default function SidebarControls({
           <label className="checkbox-row">
             <input
               type="checkbox"
-              checked={config.modules.truss ?? false}
+              checked={trussEnabled}
               onChange={(e) => patchModules({ truss: e.target.checked })}
             />
             Traversen-Hängepunkte (Truss)
           </label>
 
-          {config.modules.truss && (
+          {trussEnabled && (
             <>
               <label>
                 Lampentyp Truss
