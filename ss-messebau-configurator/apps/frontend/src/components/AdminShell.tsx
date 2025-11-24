@@ -1,8 +1,21 @@
-import ObjectCatalogAdmin from "./ObjectCatalogAdmin";
+import { useEffect, useState } from "react";
+import SidebarControls from "./SidebarControls";
+import Configurator3D from "./Configurator3D";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useTranslation } from "../i18n";
 
 const adminEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_PANEL === "true";
 
 export default function AdminShell() {
+  const { t } = useTranslation();
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(isDesktop);
+
+  useEffect(() => {
+    setIsSidebarOpen(isDesktop);
+  }, [isDesktop]);
+
   if (!adminEnabled) {
     return (
       <div className="app-root" style={{ flexDirection: "column" }}>
@@ -29,38 +42,47 @@ export default function AdminShell() {
     );
   }
 
+  const toggleSidebar = () => {
+    if (isDesktop) {
+      setIsSidebarOpen(true);
+      return;
+    }
+    setIsSidebarOpen((prev) => !prev);
+  };
+
+  const closeSidebar = () => {
+    if (isDesktop) return;
+    setIsSidebarOpen(false);
+  };
+
+  const isMobile = !isDesktop;
+
   return (
-    <div className="app-root admin-shell" style={{ flexDirection: "column" }}>
-      <header className="sidebar-section" style={{ maxWidth: 1100, margin: "16px auto 10px", width: "100%" }}>
-        <div className="sidebar-section-header">
-          <span className="section-title">Objekt-Katalog (Admin)</span>
-          <span className="section-sub">Interner Bereich</span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
+    <div className="app-root">
+      {isMobile && isSidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
+      {isMobile && (
+        <button
+          type="button"
+          className="mobile-sidebar-toggle"
+          onClick={toggleSidebar}
+          aria-expanded={isSidebarOpen}
+          aria-controls="app-sidebar"
         >
-          <p style={{ margin: 0, lineHeight: 1.4 }}>
-            Diese Shell rendert nur den Objekt-Katalog. Aktiv im Dev-Modus oder wenn VITE_ENABLE_ADMIN_PANEL=true.
-          </p>
-          <a className="btn-secondary" href="/">
-            Zurueck zur Haupt-UI
-          </a>
-        </div>
-      </header>
-      <main
-        className="main-viewport"
-        style={{ padding: "0 16px 16px", overflowY: "auto", height: "auto", minHeight: "0" }}
-      >
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <ObjectCatalogAdmin />
-        </div>
-      </main>
+          {isSidebarOpen ? t("app.menu.close") : t("app.menu.open")}
+        </button>
+      )}
+      <div className="app-shell">
+        <aside className="app-sidebar" id="app-sidebar">
+          <ErrorBoundary
+            fallback={<div className="sidebar-fallback">Sidebar konnte nicht geladen werden</div>}
+          >
+            <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
+          </ErrorBoundary>
+        </aside>
+        <main className="app-main">
+          <Configurator3D />
+        </main>
+      </div>
     </div>
   );
 }
