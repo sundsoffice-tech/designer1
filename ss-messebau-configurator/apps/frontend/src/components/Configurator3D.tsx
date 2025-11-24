@@ -29,6 +29,8 @@ import {
   CuboidCollider,
   type RapierRigidBody,
   type RigidBodyAutoCollider,
+  type CollisionEnterPayload,
+  type CollisionExitPayload,
   type RigidBodyTypeString,
 } from "@react-three/rapier";
 import CameraControls from "camera-controls";
@@ -543,10 +545,18 @@ function Transformable({
   const rigidRef = useRef<RapierRigidBody | null>(null);
   const tmpVec = useMemo(() => new THREE.Vector3(), []);
   const tmpQuat = useMemo(() => new THREE.Quaternion(), []);
+  const collisionCountRef = useRef(0);
   const invalidateFrame = useThree((state) => state.invalidate);
   useAutoDispose(groupRef as MutableRefObject<THREE.Object3D | null>);
   const [collisionFlash, setCollisionFlash] = useState<boolean>(false);
   const collisionTimerRef = useRef<number | null>(null);
+  const shouldHandleCollision = useCallback(
+    (payload?: CollisionEnterPayload | CollisionExitPayload) => {
+      const otherKind = payload?.other?.rigidBodyObject?.userData?.kind;
+      return otherKind !== "floor" && otherKind !== "wall";
+    },
+    []
+  );
   const syncRigidBodyFromObject = useCallback(
     (target?: THREE.Object3D | null) => {
       if (!physics?.enabled) return;
@@ -586,6 +596,24 @@ function Transformable({
       }
     },
     [physics]
+  );
+  const handleCollisionEnter = useCallback(
+    (payload: CollisionEnterPayload) => {
+      if (!shouldHandleCollision(payload)) return;
+      collisionCountRef.current += 1;
+      handleCollisionChange(true);
+    },
+    [handleCollisionChange, shouldHandleCollision]
+  );
+  const handleCollisionExit = useCallback(
+    (payload: CollisionExitPayload) => {
+      if (!shouldHandleCollision(payload)) return;
+      collisionCountRef.current = Math.max(0, collisionCountRef.current - 1);
+      if (collisionCountRef.current === 0) {
+        handleCollisionChange(false);
+      }
+    },
+    [handleCollisionChange, shouldHandleCollision]
   );
   useEffect(() => {
     syncRigidBodyFromObject();
@@ -673,8 +701,8 @@ function Transformable({
       enabledTranslations={physics.enabledTranslations ?? ([true, true, true] as [boolean, boolean, boolean])}
       enabledRotations={physics.enabledRotations ?? ([false, true, false] as [boolean, boolean, boolean])}
       userData={physics.userData}
-      onCollisionEnter={() => handleCollisionChange(true)}
-      onCollisionExit={() => handleCollisionChange(false)}
+      onCollisionEnter={handleCollisionEnter}
+      onCollisionExit={handleCollisionExit}
     >
       {content}
     </RigidBody>
