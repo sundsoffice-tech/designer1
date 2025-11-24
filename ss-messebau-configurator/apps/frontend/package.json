@@ -34,7 +34,7 @@
     "sat": "^0.9.0",
     "three": "^0.181.1",
     "zod": "^4.1.12",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
     "three-stdlib": "^2.27.2"
   },
   "devDependencies": {
