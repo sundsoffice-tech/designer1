@@ -115,14 +115,16 @@ export default function App() {
         </button>
       )}
       <LanguageSwitcher />
-      <ErrorBoundary fallback={<div className="sidebar-error" role="alert">Sidebar konnte nicht geladen werden.</div>}>
-        <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
-      </ErrorBoundary>
-      <main className="main-viewport">
-        <ErrorBoundary fallback={<div className="viewport-error" role="alert">3D-Ansicht konnte nicht geladen werden.</div>}>
-          <Configurator3D />
+      <div className="app-shell">
+        <ErrorBoundary fallback={<div className="sidebar-error" role="alert">Sidebar konnte nicht geladen werden.</div>}>
+          <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
         </ErrorBoundary>
-      </main>
+        <main className="main-viewport">
+          <ErrorBoundary fallback={<div className="viewport-error" role="alert">3D-Ansicht konnte nicht geladen werden.</div>}>
+            <Configurator3D />
+          </ErrorBoundary>
+        </main>
+      </div>
       <ContextMenuRoot />
     </div>
   );

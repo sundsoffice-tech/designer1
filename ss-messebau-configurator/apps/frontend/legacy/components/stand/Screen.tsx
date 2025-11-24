@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Detailed, Html, useVideoTexture } from "@react-three/drei";
 import { type ThreeEvent, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -50,7 +50,7 @@ function useScreenVideoTexture(src: string | undefined, shouldPlay: boolean, mut
     crossOrigin: "anonymous",
     muted,
     loop: true,
-    start: true,
+    start: false,
     preload: "auto",
   });
 
@@ -65,10 +65,9 @@ function useScreenVideoTexture(src: string | undefined, shouldPlay: boolean, mut
     };
   }, [videoTexture]);
 
-  useEffect(() => {
+  const syncPlayback = useCallback(() => {
     const videoEl = (videoTexture as any)?.image as HTMLVideoElement | undefined;
-    if (!videoEl) return;
-
+    if (!videoEl) return Promise.resolve();
     videoEl.muted = muted;
     videoEl.volume = muted ? 0 : volume;
     videoEl.loop = true;
@@ -77,33 +76,37 @@ function useScreenVideoTexture(src: string | undefined, shouldPlay: boolean, mut
 
     if (!shouldPlay) {
       videoEl.pause();
-      return;
+      return Promise.resolve();
     }
 
-    const ensurePlay = () => {
-      const playPromise = videoEl.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {
-          // Autoplay with sound might be blocked; retry muted to keep the video running.
-          if (!videoEl.muted) {
-            videoEl.muted = true;
-            videoEl.volume = 0;
-            videoEl.play().catch(() => null);
-          }
-        });
-      }
-    };
+    return videoEl.play();
+  }, [muted, shouldPlay, videoTexture, volume]);
 
-    ensurePlay();
-    videoEl.addEventListener("loadeddata", ensurePlay);
-    videoEl.addEventListener("pause", ensurePlay);
+  useEffect(() => {
+    let cancelled = false;
+    syncPlayback().catch(() => {
+      if (cancelled) return;
+      // User interaction required; playback will be started via explicit button.
+    });
     return () => {
-      videoEl.removeEventListener("loadeddata", ensurePlay);
-      videoEl.removeEventListener("pause", ensurePlay);
+      cancelled = true;
+      const videoEl = (videoTexture as any)?.image as HTMLVideoElement | undefined;
+      if (videoEl) videoEl.pause();
     };
-  }, [muted, resolvedSrc, shouldPlay, videoTexture, volume]);
+  }, [syncPlayback, videoTexture]);
 
-  return videoTexture;
+  const requestPlay = useCallback(() => {
+    const videoEl = (videoTexture as any)?.image as HTMLVideoElement | undefined;
+    if (!videoEl) return Promise.resolve();
+    videoEl.muted = muted;
+    videoEl.volume = muted ? 0 : volume;
+    videoEl.loop = true;
+    videoEl.playsInline = true;
+    videoEl.preload = "auto";
+    return videoEl.play();
+  }, [muted, videoTexture, volume]);
+
+  return { videoTexture, requestPlay };
 }
 
 const ScreenPanel = ({
@@ -212,36 +215,63 @@ const ScreenLod = ({
   videoSrc?: string;
 }) => {
   const lodRef = useRef<THREE.LOD | null>(null);
-  const [videoActive, setVideoActive] = useState(true);
-  const lastActiveRef = useRef<boolean>(true);
+  const [videoActive, setVideoActive] = useState(false);
+  const [userStarted, setUserStarted] = useState(false);
+  const [playError, setPlayError] = useState(false);
+  const lastActiveRef = useRef<boolean>(false);
   const volume = DEFAULT_VOLUME;
-  const playing = videoActive;
-  const videoTexture = useScreenVideoTexture(videoSrc, playing, false, volume);
+  const shouldPlay = userStarted && videoActive;
+  const { videoTexture, requestPlay } = useScreenVideoTexture(videoSrc, shouldPlay, false, volume);
+
+  const handlePlayRequest = useCallback(() => {
+    setPlayError(false);
+    requestPlay()
+      .then(() => {
+        setUserStarted(true);
+      })
+      .catch(() => setPlayError(true));
+  }, [requestPlay]);
 
   useFrame(() => {
     const lod = lodRef.current;
     if (!lod) return;
     const currentLevel = lod.getCurrentLevel();
-    const shouldPlay = currentLevel <= VIDEO_MAX_LOD_LEVEL;
-    if (lastActiveRef.current !== shouldPlay) {
-      lastActiveRef.current = shouldPlay;
-      setVideoActive(shouldPlay);
+    const shouldPlayAtLod = currentLevel <= VIDEO_MAX_LOD_LEVEL;
+    if (lastActiveRef.current !== shouldPlayAtLod) {
+      lastActiveRef.current = shouldPlayAtLod;
+      setVideoActive(shouldPlayAtLod);
     }
   });
+
+  const playOverlay = !userStarted ? (
+    <Html center position={[0, 0, t / 2 + 0.04]}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+        <button type="button" className="btn-secondary" onClick={handlePlayRequest}>
+          Video abspielen
+        </button>
+        {playError && (
+          <span style={{ color: "#dc2626", fontSize: 12 }}>Interaktion erforderlich – Bitte erneut versuchen.</span>
+        )}
+      </div>
+    </Html>
+  ) : null;
 
   return (
     <Detailed ref={lodRef} distances={[...DEFAULT_LOD_DISTANCES]}>
       <group>
         {mount === "floor" && <FloorBase w={w} h={h} heightFromFloor={heightFromFloor} detail="high" />}
         <ScreenPanel w={w} h={h} t={t} videoTexture={videoTexture} detail="high" />
+        {playOverlay}
       </group>
       <group>
         {mount === "floor" && <FloorBase w={w} h={h} heightFromFloor={heightFromFloor} detail="medium" />}
         <ScreenPanel w={w} h={h} t={t} videoTexture={videoTexture} detail="medium" />
+        {playOverlay}
       </group>
       <group>
         {mount === "floor" && <FloorBase w={w} h={h} heightFromFloor={heightFromFloor} detail="low" />}
         <ScreenPanel w={w} h={h} t={t} videoTexture={videoTexture} detail="low" />
+        {playOverlay}
       </group>
     </Detailed>
   );
