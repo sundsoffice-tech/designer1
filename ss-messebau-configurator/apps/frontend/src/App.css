@@ -82,7 +82,7 @@ body,
   position: absolute;
   right: 16px;
   top: 16px;
-  width: 320px;
+  width: 360px;
   max-height: 80vh;
   overflow-y: auto;
   padding: 10px 12px;
@@ -90,4 +90,116 @@ body,
   color: #e5e7eb;
   border-radius: 10px;
   font-size: 12px;
+}
+
+.debug-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.debug-title {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.debug-subtitle {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.debug-close {
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #e5e7eb;
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.debug-section {
+  border-top: 1px solid #1f2937;
+  padding-top: 6px;
+  margin-top: 8px;
+}
+
+.debug-label {
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 4px;
+}
+
+.debug-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.debug-row code {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  color: #e5e7eb;
+  padding: 2px 6px;
+}
+
+.debug-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.debug-event {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.debug-event-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.debug-event-title {
+  color: #f8fafc;
+}
+
+.debug-event-time {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.debug-event-details {
+  margin-top: 2px;
+  color: #cbd5e1;
+}
+
+.debug-event-meta {
+  margin-top: 4px;
+  background: #020617;
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 11px;
+  overflow: auto;
+}
+
+.debug-muted {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.debug-event.debug-warn {
+  border-color: #f59e0b;
+}
+
+.debug-event.debug-error {
+  border-color: #ef4444;
 }
