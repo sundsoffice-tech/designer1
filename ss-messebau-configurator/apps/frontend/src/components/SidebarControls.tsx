@@ -36,6 +36,9 @@ export default function SidebarControls({
   drawerOpen: boolean;
   onClose: () => void;
 }) {
+  const sidebarClassName = drawerOpen
+    ? "sidebar sidebar-open translate-x-0"
+    : "sidebar sidebar-hidden -translate-x-full";
   const {
     config,
     price,
@@ -50,9 +53,14 @@ export default function SidebarControls({
 
   if (!config || !config.modules) {
     return (
-      <div style={{ padding: 12, fontSize: 12 }}>
-        Konfiguration nicht verfügbar.
-      </div>
+      <aside className={sidebarClassName} id="app-sidebar" aria-hidden={!drawerOpen}>
+        <button type="button" className="sidebar-close" onClick={onClose}>
+          Schließen
+        </button>
+        <div className="sidebar-fallback" role="status">
+          Konfiguration nicht verfügbar.
+        </div>
+      </aside>
     );
   }
 
@@ -64,10 +72,6 @@ export default function SidebarControls({
   const trussEnabled = modules.truss ?? false;
   const raisedFloor = modules.floor?.raised ?? modules.raisedFloor ?? false;
   const countersWithPower = modules.countersWithPower ?? false;
-
-  const sidebarClassName = drawerOpen
-    ? "sidebar sidebar-open translate-x-0"
-    : "sidebar sidebar-hidden -translate-x-full";
 
   // Helper: DeepPartial-Patch für modules (typsicher)
   const patchModules = (mods: DeepPartial<StandModules>) =>
