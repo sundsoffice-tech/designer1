@@ -1,4 +1,5 @@
 // src/components/Configurator3D.tsx
+/* eslint-disable react-hooks/refs */
 import {
   Suspense,
   lazy,
@@ -1499,8 +1500,6 @@ function StandMesh({
     };
     window.addEventListener("keydown", handleFrameShortcut);
     return () => window.removeEventListener("keydown", handleFrameShortcut);
-    // validSelectedKey included to re-evaluate frame shortcut target when selection changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameSelection, onFrameAll, validSelectedKey]);
   const clearSelectionState = useCallback(
     (removedKey?: string) => {
@@ -1602,6 +1601,7 @@ function StandMesh({
       countersDetailed,
       screensDetailed,
       selectedKey,
+      validSelectedKey,
       setConfig,
     ]
   );
@@ -1665,13 +1665,13 @@ function StandMesh({
         return framed ? { status: "ok" } : { status: "noop" };
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clearInteractionSelection,
     deleteSelection,
     duplicateSelectionByKey,
     firstSelectableKey,
     frameSelection,
+    queueCameraAction,
     resetTransformByKey,
     selectionCenterOf,
     setInteractionSelection,
@@ -1686,8 +1686,6 @@ function StandMesh({
     } else {
       clearInteractionSelection();
     }
-    // validSelectedKey intentionally included to keep selection state in sync
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInteractionSelection, setInteractionSelection, validSelectedKey]);
   useEffect(() => {
     if (validSelectedKey) {
@@ -1698,8 +1696,6 @@ function StandMesh({
       }
     }
     setInteractionSelectionCenter(undefined);
-    // validSelectedKey intentionally included to keep selection center updated
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionCenterOf, setInteractionSelectionCenter, validSelectedKey]);
   // ---- Render
   return (
@@ -3657,7 +3653,10 @@ export default function Configurator3D() {
   }, []);
   useEffect(() => {
     if (!debugOpen) return;
-    logDebugEvent({ title: "Debug HUD opened", details: "Capturing 3D diagnostics" });
+    const frame = requestAnimationFrame(() =>
+      logDebugEvent({ title: "Debug HUD opened", details: "Capturing 3D diagnostics" })
+    );
+    return () => cancelAnimationFrame(frame);
   }, [debugOpen, logDebugEvent]);
   const orbitRef = useRef<CameraControlsImpl | null>(null);
   const [baseDpr, setBaseDpr] = useState(() =>

@@ -14,6 +14,7 @@ export default function App() {
   const { t } = useTranslation();
   const [isOffline, setIsOffline] = useState<boolean>(() => typeof navigator !== "undefined" && !navigator.onLine);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const isMobile = !isDesktop;
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(isDesktop);
   const loadRemoteConfig = useConfigStore((s) => s.loadRemoteConfig);
   const contrastMode = useAccessibilityStore((s) => s.contrastMode);
@@ -66,6 +67,16 @@ export default function App() {
   }, [isDesktop]);
 
   useEffect(() => {
+    const body = document.body;
+    if (isMobile && isSidebarOpen) {
+      body.classList.add("body-lock");
+    } else {
+      body.classList.remove("body-lock");
+    }
+    return () => body.classList.remove("body-lock");
+  }, [isMobile, isSidebarOpen]);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeContextMenu();
@@ -93,7 +104,6 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
-  const isMobile = !isDesktop;
   const sidebarClassName = isSidebarOpen
     ? "sidebar sidebar-open translate-x-0"
     : "sidebar sidebar-hidden -translate-x-full";
@@ -128,11 +138,11 @@ export default function App() {
         </button>
       )}
       <LanguageSwitcher />
-      <div className="app-shell">
+      <div className={`app-shell ${isMobile ? "app-shell-mobile" : ""}`}>
         <ErrorBoundary fallback={sidebarFallback}>
           <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
         </ErrorBoundary>
-        <main className="main-viewport">
+        <main className={`main-viewport ${isMobile ? "is-mobile" : ""}`}>
           <ErrorBoundary fallback={<div className="viewport-error" role="alert">3D-Ansicht konnte nicht geladen werden.</div>}>
             <Configurator3D />
           </ErrorBoundary>
