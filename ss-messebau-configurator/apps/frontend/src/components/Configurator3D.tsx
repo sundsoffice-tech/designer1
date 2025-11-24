@@ -1745,13 +1745,15 @@ function StandMesh({
           onContextMenu={handleGroundContextMenu}
         >
           <planeGeometry args={[scaleX + 0.4, scaleZ + 0.4]} />
-          <meshStandardMaterial {...pbr({ color: "#020617", metalness: 0.2, roughness: 0.8 })} />
+          <meshStandardMaterial
+            {...pbr({ color: "#0b1220", metalness: 0.2, roughness: 0.82, opacity: 0.94, transparent: true })}
+          />
         </mesh>
         {/* Doppelboden-Körper */}
         {isRaised && (
           <mesh position={[0, floorHeight / 2, 0]} receiveShadow castShadow>
             <boxGeometry args={[scaleX, floorHeight, scaleZ]} />
-            <meshStandardMaterial {...pbr({ color: "#020617", roughness: 0.6, metalness: 0.2 })} />
+            <meshStandardMaterial {...pbr({ color: "#0b1220", roughness: 0.6, metalness: 0.22 })} />
           </mesh>
         )}
         {/* Bodenfläche */}
@@ -2862,7 +2864,7 @@ function StandMesh({
           {registerBounds(
             "truss",
             new THREE.Box3(
-              new THREE.Vector3(trussOffsetX - width / 2, 0, trussOffsetZ - depth / 2),
+              new THREE.Vector3(trussOffsetX - width / 2, floorHeight, trussOffsetZ - depth / 2),
               new THREE.Vector3(trussOffsetX + width / 2, trussHeight + 0.6, trussOffsetZ + depth / 2)
             )
           ) && null}
@@ -2972,10 +2974,39 @@ function StandMesh({
           </Transformable>
           {(() => {
             const trussLodDistances = [8, 16].map((d) => d * lodScale);
+            const columnSize = 0.12;
+            const columnHeight = Math.max(0.1, trussHeight - floorHeight);
+            const columnY = floorHeight + columnHeight / 2;
+            const frameThickness = 0.08;
+            const frameLengthX = Math.max(0.1, width - columnSize);
+            const frameLengthZ = Math.max(0.1, depth - columnSize);
+            const columnPositions: [number, number, number][] = [
+              [-width / 2, columnY, depth / 2],
+              [width / 2, columnY, depth / 2],
+              [-width / 2, columnY, -depth / 2],
+              [width / 2, columnY, -depth / 2],
+            ];
+            const highColumns = columnPositions.map((pos, idx) => (
+              <mesh key={`truss-col-high-${idx}`} position={pos} castShadow>
+                <boxGeometry args={[columnSize, columnHeight, columnSize]} />
+                <meshStandardMaterial
+                  {...pbr({ color: "#9ca3af", metalness: 0.8, roughness: 0.32, envMapIntensity })}
+                />
+              </mesh>
+            ));
+            const mediumColumns = columnPositions.map((pos, idx) => (
+              <mesh key={`truss-col-medium-${idx}`} position={pos} castShadow={false}>
+                <boxGeometry args={[columnSize * 0.95, columnHeight, columnSize * 0.95]} />
+                <meshStandardMaterial
+                  {...pbr({ color: "#a3a3a3", metalness: 0.65, roughness: 0.4, envMapIntensity })}
+                />
+              </mesh>
+            ));
             const frameHighDetail = (
               <>
+                {highColumns}
                 <mesh position={[0, trussHeight, depth / 2]} castShadow>
-                  <boxGeometry args={[width, 0.08, 0.08]} />
+                  <boxGeometry args={[frameLengthX, frameThickness, frameThickness]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#9ca3af",
@@ -2986,7 +3017,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[0, trussHeight, -depth / 2]} castShadow>
-                  <boxGeometry args={[width, 0.08, 0.08]} />
+                  <boxGeometry args={[frameLengthX, frameThickness, frameThickness]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#9ca3af",
@@ -2997,7 +3028,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[-width / 2, trussHeight, 0]} castShadow>
-                  <boxGeometry args={[0.08, 0.08, depth]} />
+                  <boxGeometry args={[frameThickness, frameThickness, frameLengthZ]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#9ca3af",
@@ -3008,7 +3039,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[width / 2, trussHeight, 0]} castShadow>
-                  <boxGeometry args={[0.08, 0.08, depth]} />
+                  <boxGeometry args={[frameThickness, frameThickness, frameLengthZ]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#9ca3af",
@@ -3022,8 +3053,9 @@ function StandMesh({
             );
             const frameMediumDetail = (
               <>
+                {mediumColumns}
                 <mesh position={[0, trussHeight, depth / 2]} castShadow={false}>
-                  <boxGeometry args={[width, 0.09, 0.09]} />
+                  <boxGeometry args={[frameLengthX, frameThickness * 1.125, frameThickness * 1.125]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#a3a3a3",
@@ -3034,7 +3066,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[0, trussHeight, -depth / 2]} castShadow={false}>
-                  <boxGeometry args={[width, 0.09, 0.09]} />
+                  <boxGeometry args={[frameLengthX, frameThickness * 1.125, frameThickness * 1.125]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#a3a3a3",
@@ -3045,7 +3077,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[-width / 2, trussHeight, 0]} castShadow={false}>
-                  <boxGeometry args={[0.09, 0.09, depth]} />
+                  <boxGeometry args={[frameThickness * 1.125, frameThickness * 1.125, frameLengthZ]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#a3a3a3",
@@ -3056,7 +3088,7 @@ function StandMesh({
                   />
                 </mesh>
                 <mesh position={[width / 2, trussHeight, 0]} castShadow={false}>
-                  <boxGeometry args={[0.09, 0.09, depth]} />
+                  <boxGeometry args={[frameThickness * 1.125, frameThickness * 1.125, frameLengthZ]} />
                   <meshStandardMaterial
                     {...pbr({
                       color: "#a3a3a3",
@@ -3069,12 +3101,22 @@ function StandMesh({
               </>
             );
             const frameLowDetail = (
-              <mesh position={[0, trussHeight, 0]} castShadow>
-                <boxGeometry args={[width + 0.12, 0.12, depth + 0.12]} />
-                <meshStandardMaterial
-                  {...pbr({ color: "#9ca3af", metalness: 0.6, roughness: 0.35, envMapIntensity: envMapIntensity * 0.8 })}
-                />
-              </mesh>
+              <>
+                {columnPositions.map((pos, idx) => (
+                  <mesh key={`truss-col-low-${idx}`} position={pos} castShadow>
+                    <boxGeometry args={[columnSize, columnHeight, columnSize]} />
+                    <meshStandardMaterial
+                      {...pbr({ color: "#9ca3af", metalness: 0.6, roughness: 0.4, envMapIntensity: envMapIntensity * 0.8 })}
+                    />
+                  </mesh>
+                ))}
+                <mesh position={[0, trussHeight, 0]} castShadow>
+                  <boxGeometry args={[frameLengthX + frameThickness, frameThickness * 1.2, frameLengthZ + frameThickness]} />
+                  <meshStandardMaterial
+                    {...pbr({ color: "#9ca3af", metalness: 0.6, roughness: 0.35, envMapIntensity: envMapIntensity * 0.8 })}
+                  />
+                </mesh>
+              </>
             );
 
             const trussLights: Array<{
