@@ -119,6 +119,18 @@ type DebugEvent = {
 };
 type DebugEventInput = Omit<DebugEvent, "id" | "timestamp">;
 
+type RendererStats = {
+  fps: number;
+  frameMs: number;
+  drawCalls: number;
+  triangles: number;
+  lines: number;
+  points: number;
+  geometries: number;
+  textures: number;
+  programs: number;
+};
+
 function useAutoDispose(ref: MutableRefObject<THREE.Object3D | null>) {
   useEffect(() => {
     const root = ref.current;
@@ -3627,6 +3639,47 @@ function ToneMappingController({
   return null;
 }
 
+function RendererStatsCollector({ onStats }: { onStats: (stats: RendererStats) => void }) {
+  const { gl } = useThree();
+  const frameCounter = useRef(0);
+  const lastSnapshot = useRef<number>(0);
+
+  useFrame(() => {
+    frameCounter.current += 1;
+
+    if (lastSnapshot.current === 0) {
+      lastSnapshot.current = performance.now();
+      return;
+    }
+
+    const now = performance.now();
+    const elapsed = now - lastSnapshot.current;
+
+    if (elapsed < 400) return;
+
+    const info = gl.info;
+    const fps = (frameCounter.current * 1000) / elapsed;
+    const frameMs = elapsed / Math.max(frameCounter.current, 1);
+
+    onStats({
+      fps: Number.isFinite(fps) ? fps : 0,
+      frameMs: Number.isFinite(frameMs) ? frameMs : 0,
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      lines: info.render.lines,
+      points: info.render.points,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      programs: Array.isArray(info.programs) ? info.programs.length : 0,
+    });
+
+    frameCounter.current = 0;
+    lastSnapshot.current = now;
+  });
+
+  return null;
+}
+
 
 export default function Configurator3D() {
   const [debugOpen, setDebugOpen] = useState<boolean>(() => {
@@ -3635,6 +3688,7 @@ export default function Configurator3D() {
     return params.has("debug3d");
   });
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
+  const [rendererStats, setRendererStats] = useState<RendererStats | null>(null);
   const logDebugEvent = useCallback((event: DebugEventInput) => {
     setDebugEvents((prev) => {
       const nextEvent: DebugEvent = {
@@ -3657,8 +3711,29 @@ export default function Configurator3D() {
   }, []);
   useEffect(() => {
     if (!debugOpen) return;
-    logDebugEvent({ title: "Debug HUD opened", details: "Capturing 3D diagnostics" });
+    queueMicrotask(() => logDebugEvent({ title: "Debug HUD opened", details: "Capturing 3D diagnostics" }));
   }, [debugOpen, logDebugEvent]);
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      logDebugEvent({
+        title: "Runtime error",
+        details: event.message,
+        level: "error",
+        meta: { source: event.filename, line: event.lineno, column: event.colno },
+      });
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
+      logDebugEvent({ title: "Unhandled rejection", details: reason, level: "error" });
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
+  }, [logDebugEvent]);
   const orbitRef = useRef<CameraControlsImpl | null>(null);
   const [baseDpr, setBaseDpr] = useState(() =>
     clampDprValue(Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 1.5))
@@ -3678,6 +3753,7 @@ export default function Configurator3D() {
         : { enabled: true, resolution: 1024, blur: 1.8, opacity: 0.5 },
     [fallbackQuality, isCameraMoving]
   );
+  const updateRendererStats = useCallback((stats: RendererStats) => setRendererStats(stats), []);
   const handleMovementChange = useCallback((moving: boolean) => {
     setIsCameraMoving(moving);
   }, []);
@@ -3713,6 +3789,7 @@ export default function Configurator3D() {
     });
   }, [logDebugEvent]);
   const { t } = useTranslation();
+  const editMode = useEditModeHotkey();
   const config = useConfigStore((s) => s.config);
   const modules = config.modules;
   const queueAction = useCameraStore((s) => s.queueAction);
@@ -3722,6 +3799,38 @@ export default function Configurator3D() {
   const selectionType = useSceneInteractionStore((s) => s.selectionType);
   const selectionCenter = useSceneInteractionStore((s) => s.selectionCenter);
   const collisionState = useSceneInteractionStore((s) => s.collision);
+  const lastSelectionRef = useRef<string[]>([]);
+  const lastCollisionRef = useRef<typeof collisionState>(undefined);
+  useEffect(() => {
+    const previous = lastSelectionRef.current.join(",");
+    const next = selectionIds.join(",");
+    if (previous === next) return;
+    lastSelectionRef.current = selectionIds;
+
+    queueMicrotask(() =>
+      logDebugEvent({
+        title: selectionIds.length > 0 ? "Selection changed" : "Selection cleared",
+        details: selectionIds.length > 0 ? selectionIds.join(", ") : "No active selection",
+        meta: selectionCenter ? { center: selectionCenter, type: selectionType } : { type: selectionType },
+      })
+    );
+  }, [logDebugEvent, selectionCenter, selectionIds, selectionType]);
+  useEffect(() => {
+    if (collisionState === lastCollisionRef.current) return;
+    lastCollisionRef.current = collisionState;
+    if (collisionState === undefined) return;
+
+    const label =
+      collisionState === true ? "hard" : collisionState === false ? "none" : (collisionState as string);
+
+    queueMicrotask(() =>
+      logDebugEvent({
+        title: collisionState ? "Collision active" : "Collision cleared",
+        details: label,
+        level: collisionState ? "warn" : "info",
+      })
+    );
+  }, [collisionState, logDebugEvent]);
   const formatVec = useCallback((vec?: [number, number, number]) => (vec ? vec.map((v) => v.toFixed(2)).join(" · ") : "–"), []);
   const moduleSummary = useMemo(
     () => ({
@@ -3897,6 +4006,7 @@ export default function Configurator3D() {
         isCameraMoving={isCameraMoving}
         onMoveStateChange={handleMovementChange}
       />
+      <RendererStatsCollector onStats={updateRendererStats} />
       {contactShadowSettings.enabled && (
         <ContactShadows
           position={[0, 0, 0]}
@@ -4027,6 +4137,64 @@ export default function Configurator3D() {
             </button>
           </div>
           <div className="debug-section">
+            <div className="debug-label">Renderer & Performance</div>
+            <div className="debug-row">
+              <span>FPS / Frame</span>
+              <code>
+                {rendererStats
+                  ? `${rendererStats.fps.toFixed(1)} · ${rendererStats.frameMs.toFixed(2)} ms`
+                  : "…"}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Draws</span>
+              <code>
+                {rendererStats
+                  ? `${rendererStats.drawCalls} calls · ${rendererStats.triangles} tris · ${rendererStats.lines} lines · ${rendererStats.points} pts`
+                  : "…"}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Assets</span>
+              <code>
+                {rendererStats
+                  ? `${rendererStats.geometries} geo · ${rendererStats.textures} tex · ${rendererStats.programs} prog`
+                  : "…"}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>DPR</span>
+              <code>{`${baseDpr.toFixed(2)} → ${canvasDpr.toFixed(2)} ${fallbackQuality ? "(low)" : ""}`}</code>
+            </div>
+          </div>
+          <div className="debug-section">
+            <div className="debug-label">Qualität & Effekte</div>
+            <div className="debug-row">
+              <span>Fallback</span>
+              <code>{fallbackQuality ? "aktiv" : "aus"}</code>
+            </div>
+            <div className="debug-row">
+              <span>PostFX</span>
+              <code>
+                {postProcessingEnabled
+                  ? `Bloom ${bloomActive ? "an" : "aus"} · DoF ${dofActive ? "an" : "aus"}`
+                  : "deaktiviert"}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>HDRI</span>
+              <code>
+                {`${lightingSettings.hdri} · exp ${lightingSettings.exposure.toFixed(2)} · env ${lightingSettings.environmentIntensity.toFixed(2)}`}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Shadows</span>
+              <code>
+                {`${shadowMapSize}px map · Contact ${contactShadowSettings.enabled ? "an" : "aus"} (${contactShadowSettings.resolution}px)`}
+              </code>
+            </div>
+          </div>
+          <div className="debug-section">
             <div className="debug-label">Kamera</div>
             <div className="debug-row">
               <span>Pos</span>
@@ -4080,6 +4248,10 @@ export default function Configurator3D() {
             <div className="debug-row">
               <span>Center</span>
               <code>{formatVec(selectionCenter)}</code>
+            </div>
+            <div className="debug-row">
+              <span>Modus</span>
+              <code>{editMode ? "Edit aktiv" : "gesperrt"}</code>
             </div>
           </div>
           <div className="debug-section">
