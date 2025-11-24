@@ -42,17 +42,14 @@ export const ContextMenuRoot = () => {
   useLayoutEffect(() => {
     if (!isOpen) return;
     const el = menuRef.current;
-    if (!el) {
-      setRenderPosition(position);
-      return;
-    }
+    if (!el) return;
     const { innerWidth, innerHeight } = window;
     const rect = el.getBoundingClientRect();
     const margin = contextMenuConfig.foldMargin + MENU_PADDING;
     const nextX = Math.min(Math.max(position.x, margin), innerWidth - rect.width - margin);
     const nextY = Math.min(Math.max(position.y, margin), innerHeight - rect.height - margin);
     setRenderPosition({ x: nextX, y: nextY });
-  }, [context, isOpen, menuRef, position]);
+  }, [isOpen, menuRef, position]);
 
   useEffect(() => {
     if (!isOpen) return;

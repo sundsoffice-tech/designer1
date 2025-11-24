@@ -187,7 +187,6 @@ export default function SidebarControls({
   const floor = config.modules.floor;
   const floorType = floor?.type ?? "carpet";
   const floorRaised = floor?.raised ?? config.modules.raisedFloor ?? false;
-  const floorHeight = floorRaised ? 0.08 : 0.025;
   const counterPlacement = normalizeCounterPlacement(config.modules.countersWall);
 
   useEffect(() => {
@@ -396,7 +395,7 @@ export default function SidebarControls({
     syncLedFramesDetailed(Math.max(1, baseCount), side);
   };
 
-  const summarizeLedFrames = () => {
+  const summarizeLedFrames = useCallback(() => {
     const counts: Record<WallSide, number> = { back: 0, left: 0, right: 0 };
     let total = 0;
 
@@ -417,9 +416,9 @@ export default function SidebarControls({
     }
 
     return { total, counts };
-  };
+  }, [config.modules.ledFrames, ledFramesDetailed, modules.ledWall]);
 
-  const formatLedWallLabel = (counts: Record<WallSide, number>) => {
+  const formatLedWallLabel = useCallback((counts: Record<WallSide, number>) => {
     const label = (side: WallSide) =>
       side === "back" ? "Rückwand" : side === "left" ? "Linke Wand" : "Rechte Wand";
     const parts: string[] = [];
@@ -428,7 +427,7 @@ export default function SidebarControls({
       if (c > 0) parts.push(`${label(side)} ${c}×`);
     });
     return parts.join(", ");
-  };
+  }, []);
 
   const floorTypeLabel = (type: string | undefined) => {
     switch (type) {
@@ -510,7 +509,7 @@ export default function SidebarControls({
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
       `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
     ];
-  }, [buildWallLines, formatLedWallLabel, modules, normalizeCounterPlacement, summarizeLedFrames]);
+  }, [buildWallLines, formatLedWallLabel, modules, summarizeLedFrames]);
 
   const buildStandSummary = useCallback(
     (options: { includeFair?: boolean; includePrice?: boolean } = {}) => {
