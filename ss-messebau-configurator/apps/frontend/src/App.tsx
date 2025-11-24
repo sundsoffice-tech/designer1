@@ -94,6 +94,19 @@ export default function App() {
   };
 
   const isMobile = !isDesktop;
+  const sidebarClassName = isSidebarOpen
+    ? "sidebar sidebar-open translate-x-0"
+    : "sidebar sidebar-hidden -translate-x-full";
+  const sidebarFallback = (
+    <aside className={sidebarClassName} id="app-sidebar" aria-hidden={!isSidebarOpen}>
+      <button type="button" className="sidebar-close" onClick={closeSidebar}>
+        {t("app.menu.close")}
+      </button>
+      <div className="sidebar-fallback" role="alert">
+        Sidebar konnte nicht geladen werden.
+      </div>
+    </aside>
+  );
 
   return (
     <div className="app-root">
@@ -116,7 +129,7 @@ export default function App() {
       )}
       <LanguageSwitcher />
       <div className="app-shell">
-        <ErrorBoundary fallback={<div className="sidebar-error" role="alert">Sidebar konnte nicht geladen werden.</div>}>
+        <ErrorBoundary fallback={sidebarFallback}>
           <SidebarControls drawerOpen={isSidebarOpen} onClose={closeSidebar} />
         </ErrorBoundary>
         <main className="main-viewport">
