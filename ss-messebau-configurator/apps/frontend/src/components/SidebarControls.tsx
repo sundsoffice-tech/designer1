@@ -1,6 +1,6 @@
 ﻿// src/components/SidebarControls.tsx
 import { Suspense, lazy, useCallback, useEffect, useState, type FormEvent } from "react";
-import { useConfigStore, type DeepPartial } from "../store/configStore";
+import { DEFAULT_LIGHTING, useConfigStore, type DeepPartial } from "../store/configStore";
 import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
 import { isValidEmail, type ContactRequest } from "@ss/shared";
 import { collisionPlayground } from "../lib/playgrounds";
@@ -148,27 +148,60 @@ export default function SidebarControls({
   };
 
   const lighting = (modules.lighting ?? {}) as NonNullable<StandModules["lighting"]>;
-  const lightingDefaults = {
-    hdri: "hall",
-    background: false,
-    ambientColor: "#ffffff",
-    ambientIntensity: 0.35,
-    environmentIntensity: 1.2,
-    exposure: 1,
-    toneMapping: "agx" as NonNullable<StandModules["lighting"]>["toneMapping"],
-    bloom: false,
-    bloomIntensity: 0.35,
-    dof: false,
-    envMapIntensity: 1.2,
-  };
+  const lightingDefaults = { ...DEFAULT_LIGHTING } satisfies NonNullable<StandModules["lighting"]>;
   const resolvedLighting = { ...lightingDefaults, ...lighting };
-  const patchLighting = (partial: Partial<NonNullable<StandModules["lighting"]>>) =>
+  const clampLightingValue = (value: unknown, min: number, max: number, fallback: number) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(max, Math.max(min, num));
+  };
+
+  const patchLighting = (partial: Partial<NonNullable<StandModules["lighting"]>>) => {
+    const normalized: Partial<NonNullable<StandModules["lighting"]>> = { ...partial };
+
+    if ("ambientIntensity" in partial)
+      normalized.ambientIntensity = clampLightingValue(partial.ambientIntensity, 0, 5, resolvedLighting.ambientIntensity);
+    if ("environmentIntensity" in partial)
+      normalized.environmentIntensity = clampLightingValue(
+        partial.environmentIntensity,
+        0,
+        5,
+        resolvedLighting.environmentIntensity
+      );
+    if ("emissiveIntensity" in partial)
+      normalized.emissiveIntensity = clampLightingValue(partial.emissiveIntensity, 0, 8, resolvedLighting.emissiveIntensity);
+    if ("materialRoughness" in partial)
+      normalized.materialRoughness = clampLightingValue(
+        partial.materialRoughness,
+        0.2,
+        1.8,
+        resolvedLighting.materialRoughness
+      );
+    if ("materialMetalness" in partial)
+      normalized.materialMetalness = clampLightingValue(
+        partial.materialMetalness,
+        0.2,
+        1.8,
+        resolvedLighting.materialMetalness
+      );
+    if ("exposure" in partial)
+      normalized.exposure = clampLightingValue(partial.exposure, 0.1, 3, resolvedLighting.exposure);
+    if ("bloomIntensity" in partial)
+      normalized.bloomIntensity = clampLightingValue(partial.bloomIntensity, 0, 5, resolvedLighting.bloomIntensity);
+    if ("dofFocus" in partial)
+      normalized.dofFocus = clampLightingValue(partial.dofFocus, 0.001, 1, resolvedLighting.dofFocus ?? 0.02);
+    if ("dofBokehScale" in partial)
+      normalized.dofBokehScale = clampLightingValue(partial.dofBokehScale, 0, 10, resolvedLighting.dofBokehScale ?? 2);
+    if ("envMapIntensity" in partial)
+      normalized.envMapIntensity = clampLightingValue(partial.envMapIntensity, 0, 5, resolvedLighting.envMapIntensity ?? 1.2);
+
     patchModules({
       lighting: {
         ...lighting,
-        ...partial,
+        ...normalized,
       },
     });
+  };
 
   const handleStandTypeChange = (nextType: StandType) => {
     if (nextType === config.type) return;
@@ -1676,9 +1709,7 @@ export default function SidebarControls({
             <input
               type="color"
               value={(lighting.ambientColor as string) ?? "#ffffff"}
-              onChange={(e) =>
-                patchModules({ lighting: { ambientColor: e.target.value } })
-              }
+              onChange={(e) => patchLighting({ ambientColor: e.target.value })}
             />
           </label>
           <label>
@@ -1689,11 +1720,7 @@ export default function SidebarControls({
               max={3}
               step={0.05}
               value={lighting.ambientIntensity ?? 0.35}
-              onChange={(e) =>
-                patchModules({
-                  lighting: { ambientIntensity: Number(e.target.value) },
-                })
-              }
+              onChange={(e) => patchLighting({ ambientIntensity: Number(e.target.value) })}
             />
             <div className="input-inline-display">
               {(lighting.ambientIntensity ?? 0.35).toFixed(2)}
@@ -1708,11 +1735,7 @@ export default function SidebarControls({
               max={3}
               step={0.05}
               value={lighting.environmentIntensity ?? 1.2}
-              onChange={(e) =>
-                patchModules({
-                  lighting: { environmentIntensity: Number(e.target.value) },
-                })
-              }
+              onChange={(e) => patchLighting({ environmentIntensity: Number(e.target.value) })}
             />
             <div className="input-inline-display">
               {(lighting.environmentIntensity ?? 1.2).toFixed(2)}
@@ -1727,11 +1750,7 @@ export default function SidebarControls({
               max={4}
               step={0.05}
               value={lighting.emissiveIntensity ?? 1}
-              onChange={(e) =>
-                patchModules({
-                  lighting: { emissiveIntensity: Number(e.target.value) },
-                })
-              }
+              onChange={(e) => patchLighting({ emissiveIntensity: Number(e.target.value) })}
             />
             <div className="input-inline-display">
               {(lighting.emissiveIntensity ?? 1).toFixed(2)}×
@@ -1746,11 +1765,7 @@ export default function SidebarControls({
               max={1.8}
               step={0.05}
               value={lighting.materialRoughness ?? 1}
-              onChange={(e) =>
-                patchModules({
-                  lighting: { materialRoughness: Number(e.target.value) },
-                })
-              }
+              onChange={(e) => patchLighting({ materialRoughness: Number(e.target.value) })}
             />
             <div className="input-inline-display">
               {(lighting.materialRoughness ?? 1).toFixed(2)}×
@@ -1768,11 +1783,7 @@ export default function SidebarControls({
               max={1.8}
               step={0.05}
               value={lighting.materialMetalness ?? 1}
-              onChange={(e) =>
-                patchModules({
-                  lighting: { materialMetalness: Number(e.target.value) },
-                })
-              }
+              onChange={(e) => patchLighting({ materialMetalness: Number(e.target.value) })}
             />
             <div className="input-inline-display">
               {(lighting.materialMetalness ?? 1).toFixed(2)}×
