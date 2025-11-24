@@ -108,6 +108,17 @@ const DEFAULT_MOUSE_BUTTONS = {
 type DetailedCounter = CounterConfig;
 type DetailedScreen = ScreenConfig;
 
+type DebugEventLevel = "info" | "warn" | "error";
+type DebugEvent = {
+  id: number;
+  title: string;
+  details?: string;
+  meta?: Record<string, unknown>;
+  level?: DebugEventLevel;
+  timestamp: number;
+};
+type DebugEventInput = Omit<DebugEvent, "id" | "timestamp">;
+
 function useAutoDispose(ref: MutableRefObject<THREE.Object3D | null>) {
   useEffect(() => {
     const root = ref.current;
@@ -680,10 +691,12 @@ function StandMesh({
   orbitRef,
   lighting: lightingOverride,
   onFrameAll,
+  onDebugEvent,
 }: {
   orbitRef: MutableRefObject<CameraControlsImpl | null>;
   lighting?: LightingSettings;
   onFrameAll?: () => void;
+  onDebugEvent?: (event: DebugEventInput) => void;
 }) {
   const { config, setConfig } = useConfigStore();
   const { width, depth, height, modules } = config;
@@ -706,6 +719,7 @@ function StandMesh({
   const closeContextMenu = useContextMenuStore((s) => s.closeMenu);
   const setInteractionSelection = useSceneInteractionStore((s) => s.setSelection);
   const clearInteractionSelection = useSceneInteractionStore((s) => s.clearSelection);
+  const setInteractionCollision = useSceneInteractionStore((s) => s.setCollision);
   const setInteractionMousePosition = useSceneInteractionStore((s) => s.setMousePosition);
   const setInteractionSelectionCenter = useSceneInteractionStore((s) => s.setSelectionCenter);
   const getInteractionContext = useSceneInteractionStore((s) => s.getContext);
@@ -741,6 +755,21 @@ function StandMesh({
     const center = box.getCenter(new THREE.Vector3());
     return [center.x, center.y, center.z];
   }, []);
+  const lastSelectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onDebugEvent) return;
+    if (lastSelectionRef.current === selectedKey) return;
+    if (selectedKey) {
+      onDebugEvent({
+        title: "Selection changed",
+        details: selectedKey,
+        meta: { center: selectionCenterOf(selectedKey) },
+      });
+    } else if (lastSelectionRef.current) {
+      onDebugEvent({ title: "Selection cleared", details: lastSelectionRef.current });
+    }
+    lastSelectionRef.current = selectedKey;
+  }, [onDebugEvent, selectedKey, selectionCenterOf]);
   // TransformÔÇæShortcuts (T/R/S/G/Esc)
   const { mode: transformMode, snap: snapOn } = useTransformKeyboard(setSelectedKey);
   // Orbit sperren / freigeben
@@ -1029,14 +1058,26 @@ function StandMesh({
     (key: string, fallback: { x: number; z: number }) => lastValidPositions.current[key] ?? fallback,
     []
   );
-  const setCollisionState = useCallback((key: string, collided: boolean) => {
-    setCollidingKeys((prev) => {
-      const next = new Set(prev);
-      if (collided) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-  }, []);
+  const setCollisionState = useCallback(
+    (key: string, collided: boolean) => {
+      setCollidingKeys((prev) => {
+        const alreadyColliding = prev.has(key);
+        if ((collided && alreadyColliding) || (!collided && !alreadyColliding)) return prev;
+        const next = new Set(prev);
+        if (collided) next.add(key);
+        else next.delete(key);
+        setInteractionCollision(next.size > 0 ? true : false);
+        onDebugEvent?.({
+          title: collided ? "Collision detected" : "Collision cleared",
+          details: key,
+          meta: { active: Array.from(next).sort() },
+          level: collided ? "warn" : "info",
+        });
+        return next;
+      });
+    },
+    [onDebugEvent, setInteractionCollision]
+  );
   const ensureNoCollision = useCallback(
     (key: string, boxes: ReturnType<typeof makeAabb>[], ignoreIds: string[] = []) => {
       const ignored = new Set<string>([key, ...ignoreIds]);
@@ -1193,12 +1234,18 @@ function StandMesh({
           selectionCenter,
         })
       );
+      onDebugEvent?.({
+        title: "Context menu",
+        details: "Scene root",
+        meta: { mousePosition, selectionCenter },
+      });
       openContextMenu({ ...menu, position: mousePosition });
     },
     [
       clearInteractionSelection,
       closeContextMenu,
       getInteractionContext,
+      onDebugEvent,
       openContextMenu,
       setInteractionMousePosition,
       setInteractionSelectionCenter,
@@ -1228,10 +1275,16 @@ function StandMesh({
           selectionCenter: center,
         })
       );
+      onDebugEvent?.({
+        title: "Context menu",
+        details: key,
+        meta: { selectionType, mousePosition, selectionCenter: center },
+      });
       openContextMenu({ ...menu, position: mousePosition });
     },
     [
       getInteractionContext,
+      onDebugEvent,
       openContextMenu,
       selectionCenterOf,
       setInteractionMousePosition,
@@ -1257,6 +1310,11 @@ function StandMesh({
         const nextId = `${ctr.id}-copy-${Date.now()}`;
         const next = [...countersDetailed, { ...ctr, id: nextId, position: { x: offset.x, z: offset.z } }];
         setConfig({ modules: { countersDetailed: next } });
+        onDebugEvent?.({
+          title: "Duplicated counter",
+          details: nextId,
+          meta: { from: key, position: offset },
+        });
         return true;
       }
       if (key.startsWith("scr-d-")) {
@@ -1287,6 +1345,11 @@ function StandMesh({
         const nextId = `${scr.id}-copy-${Date.now()}`;
         const next = [...screensDetailed, { ...scr, id: nextId, position: { x: nextX, z: nextZ } }];
         setConfig({ modules: { detailedScreens: next } });
+        onDebugEvent?.({
+          title: "Duplicated screen",
+          details: nextId,
+          meta: { from: key, position: { x: nextX, z: nextZ } },
+        });
         return true;
       }
       if (key.startsWith("seat-")) {
@@ -1300,11 +1363,29 @@ function StandMesh({
         const nextId = `${seat.id ?? id}-copy-${Date.now()}`;
         const next = [...chairsDetailed, { ...seat, id: nextId, position: { x: nextPos.x, z: nextPos.z } }];
         setConfig({ modules: { chairsDetailed: next } });
+        onDebugEvent?.({
+          title: "Duplicated seating",
+          details: nextId,
+          meta: { from: key, position: nextPos, type: seat.type ?? "chair" },
+        });
         return true;
       }
       return false;
     },
-    [backWallFrontZ, chairsDetailed, countersDetailed, depth, leftWallInnerX, modules.counterVariant, rightWallInnerX, screensDetailed, screensWallSide, setConfig, width]
+    [
+      backWallFrontZ,
+      chairsDetailed,
+      countersDetailed,
+      depth,
+      leftWallInnerX,
+      modules.counterVariant,
+      onDebugEvent,
+      rightWallInnerX,
+      screensDetailed,
+      screensWallSide,
+      setConfig,
+      width,
+    ]
   );
   const resetTransformByKey = useCallback(
     (key?: string | null) => {
@@ -3546,6 +3627,36 @@ function ToneMappingController({
 
 
 export default function Configurator3D() {
+  const [debugOpen, setDebugOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has("debug3d");
+  });
+  const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([]);
+  const logDebugEvent = useCallback((event: DebugEventInput) => {
+    setDebugEvents((prev) => {
+      const nextEvent: DebugEvent = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        timestamp: Date.now(),
+        ...event,
+      };
+      return [nextEvent, ...prev].slice(0, 30);
+    });
+  }, []);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        setDebugOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+  useEffect(() => {
+    if (!debugOpen) return;
+    logDebugEvent({ title: "Debug HUD opened", details: "Capturing 3D diagnostics" });
+  }, [debugOpen, logDebugEvent]);
   const orbitRef = useRef<CameraControlsImpl | null>(null);
   const [baseDpr, setBaseDpr] = useState(() =>
     clampDprValue(Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 1.5))
@@ -3569,19 +3680,58 @@ export default function Configurator3D() {
     setIsCameraMoving(moving);
   }, []);
   const handlePerfDecline = useCallback(() => {
-    setBaseDpr((prev) => clampDprValue(prev - 0.25));
-  }, []);
+    setBaseDpr((prev) => {
+      const next = clampDprValue(prev - 0.25);
+      logDebugEvent({
+        title: "Performance decline",
+        details: `DPR ${prev.toFixed(2)} → ${next.toFixed(2)}`,
+        level: "warn",
+      });
+      return next;
+    });
+  }, [logDebugEvent]);
   const handlePerfIncline = useCallback(() => {
     setFallbackQuality(false);
-    setBaseDpr((prev) => clampDprValue(prev + 0.25));
-  }, []);
+    setBaseDpr((prev) => {
+      const next = clampDprValue(prev + 0.25);
+      logDebugEvent({ title: "Performance recovery", details: `DPR ${prev.toFixed(2)} → ${next.toFixed(2)}` });
+      return next;
+    });
+  }, [logDebugEvent]);
   const handlePerfFallback = useCallback(() => {
     setFallbackQuality(true);
-    setBaseDpr((prev) => clampDprValue(Math.min(prev, 0.75)));
-  }, []);
+    setBaseDpr((prev) => {
+      const next = clampDprValue(Math.min(prev, 0.75));
+      logDebugEvent({
+        title: "Quality fallback",
+        details: `Switched to low/steady DPR ${next.toFixed(2)}`,
+        level: "warn",
+      });
+      return next;
+    });
+  }, [logDebugEvent]);
   const { t } = useTranslation();
   const config = useConfigStore((s) => s.config);
+  const modules = config.modules;
   const queueAction = useCameraStore((s) => s.queueAction);
+  const currentPose = useCameraStore((s) => s.currentPose);
+  const lodScaleValue = useCameraStore((s) => s.lodScale);
+  const selectionIds = useSceneInteractionStore((s) => s.selectionIds);
+  const selectionType = useSceneInteractionStore((s) => s.selectionType);
+  const selectionCenter = useSceneInteractionStore((s) => s.selectionCenter);
+  const collisionState = useSceneInteractionStore((s) => s.collision);
+  const formatVec = useCallback((vec?: [number, number, number]) => (vec ? vec.map((v) => v.toFixed(2)).join(" · ") : "–"), []);
+  const moduleSummary = useMemo(
+    () => ({
+      countersLegacy: modules.counters ?? 0,
+      countersDetailed: modules.countersDetailed?.length ?? 0,
+      screensLegacy: modules.screens ?? 0,
+      screensDetailed: modules.detailedScreens?.length ?? 0,
+      seating: modules.chairsDetailed?.length ?? 0,
+      truss: Boolean(modules.truss),
+    }),
+    [modules]
+  );
   const floorRaised = config.modules.floor?.raised ?? config.modules.raisedFloor ?? false;
   const floorHeight = floorRaised ? 0.08 : 0.025;
 
@@ -3619,11 +3769,17 @@ export default function Configurator3D() {
     (pose?: CameraPose) => {
       if (!pose) {
         frameAll();
+        logDebugEvent({ title: "Quick view", details: "Frame all" });
         return;
       }
       queueAction({ type: "flyTo", pose, duration: 0.9 });
+      logDebugEvent({
+        title: "Quick view",
+        details: "Fly to preset",
+        meta: { position: pose.position, target: pose.target },
+      });
     },
-    [frameAll, queueAction]
+    [frameAll, logDebugEvent, queueAction]
   );
 
   useEffect(() => {
@@ -3724,7 +3880,12 @@ export default function Configurator3D() {
       <Physics gravity={[0, -9.81, 0]} colliders="hull">
         <Suspense fallback={null}>
           {/* OrbitRef an StandMesh weitergeben, damit Drag den Orbit sperrt */}
-          <StandMesh orbitRef={orbitRef} lighting={lightingSettings} onFrameAll={frameAll} />
+          <StandMesh
+            orbitRef={orbitRef}
+            lighting={lightingSettings}
+            onFrameAll={frameAll}
+            onDebugEvent={logDebugEvent}
+          />
         </Suspense>
       </Physics>
       <CameraRig
@@ -3836,6 +3997,109 @@ export default function Configurator3D() {
           <li>{t("legend.doubleClick")}</li>
         </ul>
       </div>
+      <div className="debug-toggle">
+        <button
+          type="button"
+          className="debug-toggle-btn"
+          onClick={() => setDebugOpen((prev) => !prev)}
+          aria-pressed={debugOpen}
+        >
+          {debugOpen ? "Debug-HUD ausblenden" : "Debug-HUD anzeigen"}
+        </button>
+        <span className="debug-hint">Strg/⌘ + Shift + D</span>
+      </div>
+      {debugOpen && (
+        <div className="debug-panel" role="log" aria-live="polite">
+          <div className="debug-panel-header">
+            <div>
+              <div className="debug-title">3D-Debug</div>
+              <div className="debug-subtitle">Live-Status & letzte Aktionen</div>
+            </div>
+            <button
+              type="button"
+              className="debug-close"
+              aria-label="Debug schließen"
+              onClick={() => setDebugOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="debug-section">
+            <div className="debug-label">Kamera</div>
+            <div className="debug-row">
+              <span>Pos</span>
+              <code>{formatVec(currentPose?.position)}</code>
+            </div>
+            <div className="debug-row">
+              <span>Target</span>
+              <code>{formatVec(currentPose?.target)}</code>
+            </div>
+            <div className="debug-row">
+              <span>LOD / DPR</span>
+              <code>
+                {lodScaleValue.toFixed(2)} / {canvasDpr.toFixed(2)} {fallbackQuality ? "(low)" : ""}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Bewegung</span>
+              <code>{isCameraMoving ? "moving" : "idle"}</code>
+            </div>
+          </div>
+          <div className="debug-section">
+            <div className="debug-label">Szene</div>
+            <div className="debug-row">
+              <span>Maße (B/H/T)</span>
+              <code>
+                {config.width.toFixed(2)} × {config.height.toFixed(2)} × {config.depth.toFixed(2)} m
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Module</span>
+              <code>
+                Ctr {moduleSummary.countersLegacy}/{moduleSummary.countersDetailed} · Scr {moduleSummary.screensLegacy}/
+                {moduleSummary.screensDetailed} · Seats {moduleSummary.seating} · Truss {moduleSummary.truss ? "on" : "off"}
+              </code>
+            </div>
+            <div className="debug-row">
+              <span>Collision</span>
+              <code>{collisionState === undefined ? "–" : collisionState ? "yes" : "no"}</code>
+            </div>
+          </div>
+          <div className="debug-section">
+            <div className="debug-label">Selektion</div>
+            <div className="debug-row">
+              <span>IDs</span>
+              <code>{selectionIds.length > 0 ? selectionIds.join(", ") : "keine"}</code>
+            </div>
+            <div className="debug-row">
+              <span>Typ</span>
+              <code>{selectionType ?? "–"}</code>
+            </div>
+            <div className="debug-row">
+              <span>Center</span>
+              <code>{formatVec(selectionCenter)}</code>
+            </div>
+          </div>
+          <div className="debug-section">
+            <div className="debug-label">Events</div>
+            <div className="debug-events">
+              {debugEvents.length === 0 && <div className="debug-muted">Noch keine Events im aktuellen Lauf.</div>}
+              {debugEvents.slice(0, 8).map((evt) => (
+                <div key={evt.id} className={`debug-event debug-${evt.level ?? "info"}`}>
+                  <div className="debug-event-header">
+                    <span className="debug-event-title">{evt.title}</span>
+                    <span className="debug-event-time">{new Date(evt.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  {evt.details && <div className="debug-event-details">{evt.details}</div>}
+                  {evt.meta && (
+                    <pre className="debug-event-meta">{JSON.stringify(evt.meta, null, 2)}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
