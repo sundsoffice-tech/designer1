@@ -699,6 +699,7 @@ function StandMesh({
   onDebugEvent?: (event: DebugEventInput) => void;
 }) {
   const { config, setConfig } = useConfigStore();
+  const queueCameraAction = useCameraStore((s) => s.queueAction);
   const { width, depth, height, modules } = config;
   const lightingConfig: Partial<LightingSettings> = useMemo(
     () => lightingOverride ?? modules.lighting ?? {},
@@ -1468,6 +1469,7 @@ function StandMesh({
     [chairsDetailed, countersDetailed, depth, modules.counterVariant, screensDetailed, setConfig, width]
   );
   // ---- Selektion / G++ltigkeit pr++fen (falls Objekt weg ist -> deselect)
+  const validSelectedKey = selectedKey;
   const isSelected = (key: string) => validSelectedKey === key;
   const firstSelectableKey = useMemo(() => {
     if (countersDetailed.length > 0) return `ctr-d-${countersDetailed[0].id}`;
