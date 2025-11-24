@@ -1171,45 +1171,6 @@ function StandMesh({
     trussOffsetX,
     trussOffsetZ,
   ]);
-  const convertLegacyScreensToDetailed = () => {
-    if ((screens ?? 0) <= 0) return;
-    const count = screens!;
-    const out: DetailedScreen[] = Array.from({ length: count }).map((_, idx) => {
-      const total = count || 1;
-      let x = 0;
-      let z = 0;
-      const wall: WallSide = (screensWallSide as WallSide) ?? "back";
-      if (wall === "back") {
-        const spacing = width / (total + 1);
-        x = -width / 2 + spacing * (idx + 1);
-        z = backWallFrontZ;
-      } else if (wall === "left") {
-        const spacing = depth / (total + 1);
-        z = -depth / 2 + spacing * (idx + 1);
-        x = leftWallInnerX;
-      } else {
-        const spacing = depth / (total + 1);
-        z = -depth / 2 + spacing * (idx + 1);
-        x = rightWallInnerX;
-      }
-      return {
-        id: `scr-${Date.now()}-${idx}`,
-        size: { w: 0.9, h: 0.55, t: 0.02 },
-        mount: "wall",
-        wallSide: wall,
-        heightFromFloor: floorHeight + 1.6,
-        position: { x, z },
-        rotationY:
-          wall === "left" ? Math.PI / 2 : wall === "right" ? -Math.PI / 2 : 0,
-      };
-    });
-    setConfig({
-      modules: {
-        detailedScreens: out,
-        screens: 0,
-      },
-    });
-  };
   const handleGroundContextMenu = useCallback(
     (event: ThreeEvent<PointerEvent>) => {
       event.stopPropagation();
@@ -1247,7 +1208,7 @@ function StandMesh({
       event.stopPropagation();
       event.preventDefault();
       const selectionType = objectType ?? selectionTypeFromKey(key);
-      if (validSelectedKey !== key) {
+      if (selectedKey !== key) {
         setSelectedKey(key);
       }
       setInteractionSelection([key], { selectionType, objectType: selectionType });
@@ -1276,7 +1237,7 @@ function StandMesh({
       setInteractionSelection,
       setInteractionSelectionCenter,
       setSelectedKey,
-      validSelectedKey,
+      selectedKey,
     ]
   );
   const duplicateSelectionByKey = useCallback(
@@ -1425,22 +1386,6 @@ function StandMesh({
     [chairsDetailed, countersDetailed, depth, modules.counterVariant, screensDetailed, setConfig, width]
   );
   // ---- Selektion / G++ltigkeit pr++fen (falls Objekt weg ist -> deselect)
-  const validSelectedKey = useMemo(() => {
-    if (!selectedKey) return null;
-    const validKeys = new Set<string>();
-    if (cabinEnabled) validKeys.add("cabin");
-    if (trussEnabled) validKeys.add("truss");
-    countersDetailed.forEach((c) => validKeys.add(`ctr-d-${c.id}`));
-    if ((counters ?? 0) > 0) {
-      Array.from({ length: counters ?? 0 }).forEach((_, idx) => validKeys.add(`legacy-counter-${idx}`));
-    }
-    screensDetailed.forEach((s) => validKeys.add(`scr-d-${s.id}`));
-    if ((screens ?? 0) > 0) {
-      Array.from({ length: screens ?? 0 }).forEach((_, idx) => validKeys.add(`screen-${idx}`));
-    }
-    chairsDetailed.forEach((s, idx) => validKeys.add(`seat-${s.id ?? `${idx}`}`));
-    return validKeys.has(selectedKey) ? selectedKey : null;
-  }, [cabinEnabled, chairsDetailed, counters, countersDetailed, screens, screensDetailed, selectedKey, trussEnabled]);
   const isSelected = (key: string) => validSelectedKey === key;
   const firstSelectableKey = useMemo(() => {
     if (countersDetailed.length > 0) return `ctr-d-${countersDetailed[0].id}`;
@@ -1470,6 +1415,8 @@ function StandMesh({
     };
     window.addEventListener("keydown", handleFrameShortcut);
     return () => window.removeEventListener("keydown", handleFrameShortcut);
+    // validSelectedKey included to re-evaluate frame shortcut target when selection changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameSelection, onFrameAll, validSelectedKey]);
   const clearSelectionState = useCallback(
     (removedKey?: string) => {
@@ -1572,7 +1519,6 @@ function StandMesh({
       screensDetailed,
       selectedKey,
       setConfig,
-      validSelectedKey,
     ]
   );
   useEffect(() => {
@@ -1635,13 +1581,13 @@ function StandMesh({
         return framed ? { status: "ok" } : { status: "noop" };
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clearInteractionSelection,
     deleteSelection,
     duplicateSelectionByKey,
     firstSelectableKey,
     frameSelection,
-    queueCameraAction,
     resetTransformByKey,
     selectionCenterOf,
     setInteractionSelection,
@@ -1656,6 +1602,8 @@ function StandMesh({
     } else {
       clearInteractionSelection();
     }
+    // validSelectedKey intentionally included to keep selection state in sync
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearInteractionSelection, setInteractionSelection, validSelectedKey]);
   useEffect(() => {
     if (validSelectedKey) {
@@ -1666,6 +1614,8 @@ function StandMesh({
       }
     }
     setInteractionSelectionCenter(undefined);
+    // validSelectedKey intentionally included to keep selection center updated
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionCenterOf, setInteractionSelectionCenter, validSelectedKey]);
   // ---- Render
   return (
@@ -3474,7 +3424,7 @@ export default function Configurator3D() {
       { id: "front", label: t("camera.quick.front"), pose: { position: [0, flyHeight, config.depth / 2 + orbitPadding], target: center } },
       { id: "top", label: t("camera.quick.top"), pose: { position: [0, flyHeight + orbitPadding * 0.45, 0.001], target: center } },
     ];
-  }, [config.depth, config.height, config.width, floorHeight, frameAll, t]);
+  }, [config.depth, config.height, config.width, floorHeight, t]);
 
   const handleQuickView = useCallback(
     (pose?: CameraPose) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type JSX, type ReactNode } from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -42,18 +42,20 @@ export default function TrussBanners({
     () => bannerWebpUrl ?? bannerImageUrl ?? mipmapUrls[0] ?? blankFallback,
     [bannerImageUrl, bannerWebpUrl, blankFallback, mipmapUrls]
   );
-  const bannerTexture = useTexture(primaryTextureUrl) as THREE.Texture;
+  const baseBannerTexture = useTexture(primaryTextureUrl) as THREE.Texture;
   const mipmapTextures = useTexture(mipmapUrls) as THREE.Texture[];
-
-  useEffect(() => {
+  const bannerTexture = useMemo(() => {
+    if (!baseBannerTexture) return baseBannerTexture;
+    const cloned = baseBannerTexture.clone();
     if (mipmapTextures.length > 0) {
-      bannerTexture.mipmaps = mipmapTextures.map((tex) => tex.image) as THREE.Texture["mipmaps"];
-      bannerTexture.generateMipmaps = false;
-      bannerTexture.needsUpdate = true;
-      return;
+      cloned.mipmaps = mipmapTextures.map((tex) => tex.image) as THREE.Texture["mipmaps"];
+      cloned.generateMipmaps = false;
+    } else {
+      cloned.generateMipmaps = true;
     }
-    bannerTexture.generateMipmaps = true;
-  }, [bannerTexture, mipmapTextures]);
+    cloned.needsUpdate = true;
+    return cloned;
+  }, [baseBannerTexture, mipmapTextures]);
 
   const materialProps = useMemo<THREE.MeshStandardMaterialParameters>(
     () =>
