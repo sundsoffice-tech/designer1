@@ -1,15 +1,18 @@
 ﻿// src/components/SidebarControls.tsx
 import { Suspense, lazy, useCallback, useEffect, useState, type FormEvent } from "react";
 import { DEFAULT_LIGHTING, useConfigStore, type DeepPartial } from "../store/configStore";
-import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region } from "../lib/pricing";
+import { generateRectangleLayout, generateUShapeLayout, generateBridgeLayout, generateRearCabinLayout } from "@ss/shared";
+import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region, ScreenConfig } from "../lib/pricing";
 import { isValidEmail, type ContactRequest } from "@ss/shared";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
 import SeatingControls from "./SeatingControls";
 import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
+import { useSceneInteractionStore } from "../store/sceneInteractionStore";
+import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
 
-type WallSide = "back" | "left" | "right";
+type WallSide = "back" | "left" | "right" | "front";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -69,9 +72,33 @@ export default function SidebarControls({
   const counters = modules.counters ?? 0;
   const screens = modules.screens ?? 0;
   const storageRoomEnabled = modules.storageRoom ?? false;
+  const cabinEnabled = modules.cabin?.enabled ?? storageRoomEnabled;
   const trussEnabled = modules.truss ?? false;
   const raisedFloor = modules.floor?.raised ?? modules.raisedFloor ?? false;
   const countersWithPower = modules.countersWithPower ?? false;
+  const floorHeight = raisedFloor ? 0.08 : 0.025;
+  const gridStep = Math.max(0.01, Math.min(1, modules.gridStep ?? modules.snapStep ?? 0.1));
+  const snapToStructure = modules.snapToStructure ?? true;
+  const detailedScreens = (modules.detailedScreens ?? []) as ScreenConfig[];
+  const selectionIds = useSceneInteractionStore((s) => s.selectionIds);
+  const selectedScreenIds = selectionIds
+    .filter((id) => id.startsWith("scr-d-"))
+    .map((id) => id.replace("scr-d-", ""))
+    .filter(Boolean);
+  const applyLayout = useCallback(
+  (build: (w: number, d: number, h: number) => Partial<StandConfig>) => {
+    const layout = build(config.width, config.depth, config.height);
+    replaceConfig({
+      ...config,
+      ...layout,
+      width: layout.width ?? config.width,
+      depth: layout.depth ?? config.depth,
+      height: layout.height ?? config.height,
+      modules: (layout.modules as StandModules) ?? config.modules,
+    });
+  },
+  [config, replaceConfig]
+);
 
   // Helper: DeepPartial-Patch für modules (typsicher)
   const patchModules = (mods: DeepPartial<StandModules>) =>
@@ -82,6 +109,7 @@ export default function SidebarControls({
     const width = typeof cabin.width === "number" ? cabin.width : 1.5;
     const depth = typeof cabin.depth === "number" ? cabin.depth : 1.5;
     const height = typeof cabin.height === "number" ? cabin.height : config.height;
+    const doorSide = (cabin.doorSide as WallSide | undefined) ?? (modules.storageDoorSide as WallSide | undefined);
     const defaultPosition = {
       x: -config.width / 2 + width / 2 + 0.25,
       z: -config.depth / 2 + depth / 2 + 0.25,
@@ -102,29 +130,41 @@ export default function SidebarControls({
             ? cabin.position.z
             : defaultPosition.z,
       },
+      doorSide,
     };
   };
 
   const toggleStorageRoom = (checked: boolean) => {
-    if (checked) {
-      patchModules({
-        storageRoom: true,
-        cabin: buildCabinPatch(),
-      });
-      return;
-    }
-
     const baseCabin = buildCabinPatch();
     patchModules({
-      storageRoom: false,
+      storageRoom: checked,
       cabin: {
-        enabled: false,
-        width: baseCabin.width ?? 1.5,
-        depth: baseCabin.depth ?? 1.5,
-        height: baseCabin.height ?? config.height,
-        position: baseCabin.position,
+        ...baseCabin,
+        enabled: checked,
       },
     });
+  };
+
+  const applyToSelectedScreens = (updater: (scr: ScreenConfig, index: number) => ScreenConfig) => {
+    const targetIds =
+      selectedScreenIds.length > 0
+        ? selectedScreenIds
+        : detailedScreens.length > 0
+        ? [detailedScreens[0].id ?? "0"]
+        : [];
+    if (targetIds.length === 0) return;
+    const next = detailedScreens.map((scr, idx) => {
+      const id = scr.id ?? `${idx}`;
+      return targetIds.includes(id) ? updater(scr, idx) : scr;
+    });
+    setConfig({ modules: { detailedScreens: next } });
+  };
+
+  const resolveUploadUrl = (path: string) => {
+    if (!apiBaseUrl) {
+      throw new Error("Backend fuer Uploads fehlt (VITE_API_BASE_URL setzen und Backend starten).");
+    }
+    return buildApiUrl(path);
   };
 
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(voiceAssistantEnabled);
@@ -136,12 +176,26 @@ export default function SidebarControls({
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
+  const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoUrlInput, setVideoUrlInput] = useState("");
 
   const canUndo = history.length > 0;
   const canRedo = future.length > 0;
+  const selectedScreen =
+    selectedScreenIds.length > 0
+      ? detailedScreens.find((scr) => selectedScreenIds.includes(scr.id ?? ""))
+      : detailedScreens[0];
+  const screenVideoMuted = selectedScreen?.videoMuted ?? true;
+  const screenVideoPaused = selectedScreen?.videoPaused ?? false;
+  const screenVideoVolume = selectedScreen?.videoVolume ?? 0;
 
   const fixedWalls =
     wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
+
+  useEffect(() => {
+    setVideoUrlInput(selectedScreen?.videoUrl ?? "");
+  }, [selectedScreen?.id, selectedScreen?.videoUrl]);
 
   const wallAttachmentIndex = modules.wallAttachmentIndex;
   const hasWallMountedObjects = () => {
@@ -336,9 +390,10 @@ export default function SidebarControls({
     setBannerUploadStatus("Upload & WebP-Konvertierung läuft...");
 
     try {
+      const uploadUrl = resolveUploadUrl("/api/upload/banner");
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch("/api/upload/banner", { method: "POST", body });
+      const res = await fetch(uploadUrl, { method: "POST", body });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.url) {
         throw new Error(json?.error || "Upload fehlgeschlagen");
@@ -359,6 +414,78 @@ export default function SidebarControls({
     } finally {
       setBannerUploading(false);
     }
+  };
+
+  const handleVideoUpload = async (file: File) => {
+    if (!file) return;
+    if (!file.type?.startsWith("video/")) {
+      setVideoUploadStatus("Bitte ein Video (mp4/webm/ogg) waehlen.");
+      return;
+    }
+    const maxSize = 80 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setVideoUploadStatus("Datei zu gross (max. 80 MB).");
+      return;
+    }
+    setVideoUploading(true);
+    setVideoUploadStatus("Video-Upload laeuft...");
+    try {
+      const uploadUrl = resolveUploadUrl("/api/upload/video");
+      const body = new FormData();
+      body.append("file", file);
+      body.append("name", file.name);
+      const res = await fetch(uploadUrl, { method: "POST", body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.url) {
+        throw new Error(json?.error || "Upload fehlgeschlagen");
+      }
+      applyToSelectedScreens((scr) => ({
+        ...scr,
+        videoUrl: json.url as string,
+        videoName: (json.name as string | undefined) ?? file.name,
+        videoPaused: false,
+        videoMuted: true,
+        videoVolume: scr.videoVolume ?? 0.4,
+      }));
+      setVideoUrlInput((json.url as string) ?? "");
+      setVideoUploadStatus(`Video gespeichert: ${json.name ?? file.name}`);
+    } catch (err) {
+      setVideoUploadStatus(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+    } finally {
+      setVideoUploading(false);
+    }
+  };
+
+  const handleVideoUrlApply = () => {
+    const trimmed = videoUrlInput.trim();
+    if (!trimmed) return;
+    applyToSelectedScreens((scr) => ({
+      ...scr,
+      videoUrl: trimmed,
+      videoName: scr.videoName ?? "Kunden-Video",
+      videoPaused: false,
+      videoMuted: scr.videoMuted ?? true,
+    }));
+  };
+
+  const handlePlayToggle = (playing: boolean) => {
+    applyToSelectedScreens((scr) => ({ ...scr, videoPaused: !playing }));
+  };
+
+  const handleVolumeChange = (value: number) => {
+    const clamped = Math.min(1, Math.max(0, value));
+    applyToSelectedScreens((scr) => {
+      const currentMuted = scr.videoMuted ?? true;
+      return {
+        ...scr,
+        videoVolume: clamped,
+        videoMuted: clamped <= 0 ? true : currentMuted,
+      };
+    });
+  };
+
+  const handleMuteToggle = (muted: boolean) => {
+    applyToSelectedScreens((scr) => ({ ...scr, videoMuted: muted }));
   };
 
   const stepModule = (
@@ -814,17 +941,81 @@ export default function SidebarControls({
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="section-title">Kollisionsschutz</span>
-          <span className="section-sub">AABB + Mindestabstand</span>
+          <span className="section-sub">OBB + typabhaengige Clearance</span>
         </div>
         <p style={{ margin: "0.25rem 0 0", lineHeight: 1.35 }}>
-          Bewegte Objekte (Tresen, Screens, Kabine, Truss-Griff) prallen an einem
-          AABB-Sicherheitsabstand ab. Bei drohender Überschneidung erscheint ein
-          roter Wireframe + Hinweis. Der Mindestabstand lässt sich über
-          <code> modules.collisionClearance</code> im Store konfigurieren
-          (Playground: 0,25 m).
+          Bewegte Objekte (Tresen, Screens, Kabine, Truss-Griff) nutzen orientierte
+          Bounding-Boxes mit typabhaengiger Clearance. Bei drohender Ueberschneidung erscheint ein
+          roter Wireframe + Hinweis. Der Puffer laesst sich global ueber
+          <code> modules.collisionClearance</code> oder je Objekt via <code>clearance</code> setzen.
         </p>
       </div>
 
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Snap & Ausrichtung</span>
+          <span className="section-sub">Raster, Waende & Truss</span>
+        </div>
+        <div className="form-grid">
+          <label>
+            Snap-Raster (m)
+            <input
+              type="number"
+              min={0.01}
+              max={1}
+              step={0.01}
+              value={gridStep}
+              onChange={(e) =>
+                patchModules({
+                  gridStep: Math.max(0.01, Math.min(1, Number(e.target.value) || 0.1)),
+                  snapStep: Math.max(0.01, Math.min(1, Number(e.target.value) || 0.1)),
+                })
+              }
+            />
+            <small style={{ color: "#6b7280" }}>
+              0.05 m = fein, 0.10 m = Standard, 0.20 m = grob.
+            </small>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={snapToStructure}
+              onChange={(e) => patchModules({ snapToStructure: e.target.checked })}
+          />
+          Snap an Waende / Truss aktiv
+        </label>
+      </div>
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Layout-Presets</span>
+          <span className="section-sub">Truss & Kabinen</span>
+        </div>
+        <div className="form-grid" style={{ gap: 8 }}>
+          <button type="button" className="btn-secondary" onClick={() => applyLayout(generateRectangleLayout)}>
+            Rechteckiges Truss-Layout
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => applyLayout(generateUShapeLayout)}>
+            U-Layout
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => applyLayout(generateBridgeLayout)}>
+            Bruecke
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => applyLayout(generateRearCabinLayout)}>
+            Kabine hinten links
+          </button>
+        </div>
+      </div>
+      <div className="sidebar-section">
+        <div className="sidebar-section-header">
+          <span className="section-title">Gruppieren & Linien</span>
+          <span className="section-sub">Multi-Select, Align</span>
+        </div>
+        <p style={{ margin: "0.25rem 0 0", lineHeight: 1.35 }}>
+          Mehrere Module mit Strg/Shift anklicken, dann gemeinsam verschieben. Align-Shortcuts: <code>L</code> = gleiche X-Linie, <code>K</code> = gleiche Z-Linie, <code>B</code> = buendig an der Rueckwand. Gruppen folgen beim Drag der Auswahl.
+        </p>
+      </div>
       {/* Grunddaten */}
       <div className="sidebar-section">
         <div className="sidebar-section-header">
@@ -1218,61 +1409,75 @@ export default function SidebarControls({
             </>
           )}
 
-          {/* Lagerraum */}
+          {/* Kabine */}
           <label className="checkbox-row">
             <input
               type="checkbox"
-              checked={storageRoomEnabled}
+              checked={cabinEnabled}
               onChange={(e) => toggleStorageRoom(e.target.checked)}
             />
-            Lagerraum / Kabine
+            Kabine (inkl. Tür)
           </label>
 
-          {storageRoomEnabled && (
+          {cabinEnabled && (
             <>
-              {/* Kabine – Maße */}
+              {/* Kabine - Maße */}
               <label>
                 Kabine Breite (m)
                 <input
                   type="number"
                   min={1}
                   step={0.1}
-                value={modules.cabin?.width ?? 1.5}
-                onChange={(e) =>
-                  {
+                  value={modules.cabin?.width ?? 1.5}
+                  onChange={(e) => {
                     const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     patchModules({
                       cabin: { ...baseCabin, width: Number(e.target.value) || 0 },
+                      storageRoom: true,
                     });
-                  }
-                }
-              />
-            </label>
+                  }}
+                />
+              </label>
               <label>
                 Kabine Tiefe (m)
                 <input
                   type="number"
                   min={1}
                   step={0.1}
-                value={modules.cabin?.depth ?? 1.5}
-                onChange={(e) =>
-                  {
+                  value={modules.cabin?.depth ?? 1.5}
+                  onChange={(e) => {
                     const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     patchModules({
                       cabin: { ...baseCabin, depth: Number(e.target.value) || 0 },
+                      storageRoom: true,
                     });
-                  }
-                }
-              />
-            </label>
+                  }}
+                />
+              </label>
+              <label>
+                Kabine Höhe (m)
+                <input
+                  type="number"
+                  min={2}
+                  step={0.1}
+                  value={modules.cabin?.height ?? config.height ?? 2.5}
+                  onChange={(e) => {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
+                    patchModules({
+                      cabin: { ...baseCabin, height: Number(e.target.value) || 0 },
+                      storageRoom: true,
+                    });
+                  }}
+                />
+              </label>
 
-              {/* Kabine – Position */}
+              {/* Kabine - Position */}
               <label>
                 Kabine X-Position (m)
                 <input
                   type="number"
                   step={0.1}
-                value={modules.cabin?.position?.x ?? 0}
+                  value={modules.cabin?.position?.x ?? 0}
                   onChange={(e) => {
                     const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     const currentPos = baseCabin.position ?? { x: 0, z: 0 };
@@ -1280,17 +1485,19 @@ export default function SidebarControls({
                       cabin: {
                         ...baseCabin,
                         position: { ...currentPos, x: Number(e.target.value) },
+                        enabled: true,
                       },
+                      storageRoom: true,
                     });
                   }}
-              />
-            </label>
+                />
+              </label>
               <label>
                 Kabine Z-Position (m)
                 <input
                   type="number"
                   step={0.1}
-                value={modules.cabin?.position?.z ?? 0}
+                  value={modules.cabin?.position?.z ?? 0}
                   onChange={(e) => {
                     const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
                     const currentPos = baseCabin.position ?? { x: 0, z: 0 };
@@ -1298,22 +1505,29 @@ export default function SidebarControls({
                       cabin: {
                         ...baseCabin,
                         position: { ...currentPos, z: Number(e.target.value) },
+                        enabled: true,
                       },
+                      storageRoom: true,
                     });
                   }}
-              />
-            </label>
+                />
+              </label>
 
               <label>
-                Türposition Lagerraum
+                Türposition Kabine
                 <select
-                  value={config.modules.storageDoorSide ?? "back"}
-                  onChange={(e) =>
+                  value={(modules.cabin?.doorSide as WallSide | undefined) ?? config.modules.storageDoorSide ?? "back"}
+                  onChange={(e) => {
+                    const baseCabin = modules.cabin ?? (buildCabinPatch() as CabinConfig);
+                    const side = e.target.value as WallSide;
                     patchModules({
-                      storageDoorSide: e.target.value as WallSide,
-                    })
-                  }
+                      storageDoorSide: side,
+                      cabin: { ...baseCabin, doorSide: side, enabled: true },
+                      storageRoom: true,
+                    });
+                  }}
                 >
+                  <option value="front">Front</option>
                   <option value="back">Rückwand</option>
                   <option value="left">Links</option>
                   <option value="right">Rechts</option>
@@ -1499,6 +1713,95 @@ export default function SidebarControls({
             </label>
           )}
 
+          {detailedScreens.length > 0 && (
+            <div className="hint-box" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>Screen-Video (kundeneigen)</div>
+              <small style={{ color: "#4b5563" }}>
+                Videos laufen geloopt und standardmaessig stumm. Waehle einen Screen im 3D-Viewport, um Play/Stop und
+                Lautstaerke zu steuern (mobile Browser brauchen ggf. einen Tap zum Start).
+              </small>
+              <label>
+                Video-URL
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="url"
+                    value={videoUrlInput}
+                    onChange={(e) => setVideoUrlInput(e.target.value)}
+                    placeholder="https://cdn.example.com/clip.mp4"
+                  />
+                  <button type="button" className="btn-secondary" onClick={handleVideoUrlApply}>
+                    Anwenden
+                  </button>
+                </div>
+              </label>
+              <label>
+                Videodatei (mp4/webm/ogg)
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                  disabled={videoUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      void handleVideoUpload(f);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+                {videoUploadStatus && (
+                  <small
+                    style={{
+                      fontSize: 10,
+                      color: videoUploading ? "#2563eb" : "#374151",
+                      display: "block",
+                      marginTop: 2,
+                    }}
+                  >
+                    {videoUploadStatus}
+                  </small>
+                )}
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handlePlayToggle(true)}
+                  disabled={!selectedScreen}
+                >
+                  Play
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handlePlayToggle(false)}
+                  disabled={!selectedScreen}
+                >
+                  Stop
+                </button>
+              </div>
+              <label>
+                Lautstaerke
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={screenVideoVolume}
+                  onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                />
+                <div className="input-inline-display">{screenVideoVolume.toFixed(2)}</div>
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={!screenVideoMuted}
+                  onChange={(e) => handleMuteToggle(!e.target.checked)}
+                />
+                Ton aktivieren (Standard: stumm, Loop an)
+              </label>
+            </div>
+          )}
+
           {/* Truss & Banner */}
           <label className="checkbox-row">
             <input
@@ -1532,14 +1835,61 @@ export default function SidebarControls({
                   min={config.height + 0.3}
                   max={7}
                   step={0.1}
-                  value={modules.trussHeight ?? config.height + 0.5}
-                  onChange={(e) =>
-                    patchModules({ trussHeight: Number(e.target.value) || 0 })
-                  }
+                  value={config.traverseHeight ?? modules.trussHeight ?? config.height + 0.5}
+                  onChange={(e) => {
+                    const nextHeight = Number(e.target.value) || 0;
+                    setConfig({
+                      traverseHeight: nextHeight,
+                      modules: { trussHeight: nextHeight },
+                    });
+                  }}
+                />
+                <input
+                  type="range"
+                  min={config.height + 0.3}
+                  max={7}
+                  step={0.05}
+                  value={config.traverseHeight ?? modules.trussHeight ?? config.height + 0.5}
+                  onChange={(e) => {
+                    const nextHeight = Number(e.target.value) || 0;
+                    setConfig({
+                      traverseHeight: nextHeight,
+                      modules: { trussHeight: nextHeight },
+                    });
+                  }}
                 />
                 <small style={{ fontSize: 10, color: "#6b7280" }}>
                   Höhe der Traverse (Mitte) über Boden. Standard:
                   Wandhöhe + 0,5 m.
+                </small>
+              </label>
+
+              <label>
+                Traverse Segmentlänge (m)
+                <input
+                  type="number"
+                  min={0.4}
+                  max={3}
+                  step={0.1}
+                  value={modules.trussSegmentLength ?? 1}
+                  onChange={(e) => {
+                    const next = Number(e.target.value) || 0;
+                    setConfig({ modules: { trussSegmentLength: next } });
+                  }}
+                />
+                <input
+                  type="range"
+                  min={0.4}
+                  max={3}
+                  step={0.05}
+                  value={modules.trussSegmentLength ?? 1}
+                  onChange={(e) => {
+                    const next = Number(e.target.value) || 0;
+                    setConfig({ modules: { trussSegmentLength: next } });
+                  }}
+                />
+                <small style={{ fontSize: 10, color: "#6b7280" }}>
+                  Kleinere Werte erzeugen mehr Streben-Segmente; Standard 1,0 m.
                 </small>
               </label>
 
@@ -1954,3 +2304,6 @@ export default function SidebarControls({
     </aside>
   );
 }
+
+
+

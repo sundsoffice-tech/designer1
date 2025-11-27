@@ -6,10 +6,8 @@ import type {
   ModuleKind,
   ModuleBundle,
 } from "@ss/shared";
-import { fetchApi } from "../lib/apiBase";
+import { buildApiUrl, runtimeApiDisabled } from "../lib/apiBase";
 import modulesJson from "../data/modules.json";
-
-const runtimeDisabled = String(import.meta.env.VITE_DISABLE_RUNTIME).toLowerCase() === "true";
 
 const colliderSchema = z.union([z.literal("aabb"), z.literal("obb"), z.literal("mesh")]);
 const dimensionsSchema = z.object({
@@ -31,11 +29,14 @@ const variantSchema = z.object({
   basePrice: z.number().optional(),
   collider: colliderSchema.optional(),
   defaultColor: z.string().optional(),
+  clearance: z.number().optional(),
   tags: z.array(z.string()).optional(),
   dimensions: dimensionsSchema.optional(),
   screenSize: z.string().optional(),
   mount: z.enum(["wall", "truss", "floor"]).optional(),
-  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  metadata: z
+    .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()]))
+    .optional(),
 });
 
 const bundleItemSchema = z.object({
@@ -101,68 +102,95 @@ const buildCompatibilityIndex = (catalog: ModuleCatalog): ModuleCompatibilityInd
 };
 
 const localCatalog = parseCatalog(modulesJson);
+const DEFAULT_ENDPOINT = "/api/catalog/modules";
+const EXPLICIT_ENDPOINT = (import.meta.env.VITE_MODULE_CATALOG_URL || "").trim();
+const LOCAL_FALLBACK = (import.meta.env.VITE_MODULE_CATALOG_FILE || "/config/modules.json").trim();
 
-/** Parsed and validated module catalog (JSON source of truth). */
-export const moduleCatalog: ModuleCatalog = localCatalog;
-export const moduleVariantsByKey: ModuleVariantMap = buildVariantMap(localCatalog);
-export const moduleCompatibilityIndex: ModuleCompatibilityIndex = buildCompatibilityIndex(localCatalog);
-export const moduleBundles: ModuleBundle[] = localCatalog.bundles ?? [];
+const uniqueSources = (sources: string[]) => Array.from(new Set(sources.filter(Boolean)));
 
-let cachedRemote: ModuleCatalog | null = null;
-let cachedRemoteVariants: ModuleVariantMap | null = null;
-let cachedRemoteCompatibility: ModuleCompatibilityIndex | null = null;
-
-const fetchRemoteCatalog = async (): Promise<ModuleCatalog | null> => {
-  if (runtimeDisabled) return null;
-  try {
-    const res = await fetchApi("/api/catalog/modules");
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data?.modules) return null;
-    return parseCatalog(data);
-  } catch {
-    return null;
+const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
+const resolveUrl = (value: string) => {
+  if (!value) return value;
+  if (isAbsoluteUrl(value)) return value;
+  if (!runtimeApiDisabled) {
+    return buildApiUrl(value);
   }
+  return value.startsWith("/") ? value : `/${value}`;
 };
 
-export const loadModuleCatalog = async (): Promise<{
+type LoadResult = {
   catalog: ModuleCatalog;
   variants: ModuleVariantMap;
   compatibility: ModuleCompatibilityIndex;
   bundles: ModuleBundle[];
-}> => {
-  if (cachedRemote) {
-    const variants = cachedRemoteVariants ?? buildVariantMap(cachedRemote);
-    const compatibility = cachedRemoteCompatibility ?? buildCompatibilityIndex(cachedRemote);
-    cachedRemoteVariants = variants;
-    cachedRemoteCompatibility = compatibility;
-    return {
-      catalog: cachedRemote,
-      variants,
-      compatibility,
-      bundles: cachedRemote.bundles ?? [],
-    };
-  }
+  source?: string;
+};
 
-  const remote = await fetchRemoteCatalog();
-  if (remote) {
-    cachedRemote = remote;
-    cachedRemoteVariants = buildVariantMap(remote);
-    cachedRemoteCompatibility = buildCompatibilityIndex(remote);
-    return {
-      catalog: remote,
-      variants: cachedRemoteVariants,
-      compatibility: cachedRemoteCompatibility,
-      bundles: remote.bundles ?? [],
-    };
-  }
+/** Parsed and validated module catalog (JSON source of truth). */
+export let moduleCatalog: ModuleCatalog = localCatalog;
+export let moduleVariantsByKey: ModuleVariantMap = buildVariantMap(localCatalog);
+export let moduleCompatibilityIndex: ModuleCompatibilityIndex = buildCompatibilityIndex(localCatalog);
+export let moduleBundles: ModuleBundle[] = localCatalog.bundles ?? [];
 
-  return {
-    catalog: moduleCatalog,
-    variants: moduleVariantsByKey,
-    compatibility: moduleCompatibilityIndex,
-    bundles: moduleBundles,
-  };
+let lastSource = "static";
+let inflight: Promise<LoadResult> | null = null;
+
+const applyCatalog = (next: ModuleCatalog, source: string) => {
+  moduleCatalog = next;
+  moduleVariantsByKey = buildVariantMap(next);
+  moduleCompatibilityIndex = buildCompatibilityIndex(next);
+  moduleBundles = next.bundles ?? [];
+  lastSource = source;
+};
+
+const fetchCatalog = async (source: string): Promise<ModuleCatalog | null> => {
+  if (!source) return null;
+  const url = resolveUrl(source);
+  if (!url) return null;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const payload = data?.catalog && data.catalog.modules ? data.catalog : data;
+  if (!payload?.modules) return null;
+  return parseCatalog(payload);
+};
+
+export const loadModuleCatalog = async (): Promise<LoadResult> => {
+  if (inflight) return inflight;
+
+  inflight = (async () => {
+    const sources = uniqueSources([EXPLICIT_ENDPOINT || DEFAULT_ENDPOINT, LOCAL_FALLBACK]);
+    for (const source of sources) {
+      try {
+        const catalog = await fetchCatalog(source);
+        if (!catalog) continue;
+        applyCatalog(catalog, source);
+        return {
+          catalog: moduleCatalog,
+          variants: moduleVariantsByKey,
+          compatibility: moduleCompatibilityIndex,
+          bundles: moduleBundles,
+          source,
+        };
+      } catch {
+        // try next source
+      }
+    }
+
+    return {
+      catalog: moduleCatalog,
+      variants: moduleVariantsByKey,
+      compatibility: moduleCompatibilityIndex,
+      bundles: moduleBundles,
+      source: lastSource,
+    };
+  })();
+
+  try {
+    return await inflight;
+  } finally {
+    inflight = null;
+  }
 };
 
 export type ModuleSelection = {
@@ -175,7 +203,7 @@ export type ModuleSelection = {
 /** Prüft Modul-Kombinationen anhand der Kompatibilitätsregeln in modules.json. */
 export const isCombinationAllowed = (selection: ModuleSelection): { ok: boolean; reasons: string[] } => {
   const reasons: string[] = [];
-  const compat = cachedRemoteCompatibility ?? moduleCompatibilityIndex;
+  const compat = moduleCompatibilityIndex;
 
   // LED-Wand erfordert spezifischen Rahmen
   if (selection.features?.includes("ledWall")) {

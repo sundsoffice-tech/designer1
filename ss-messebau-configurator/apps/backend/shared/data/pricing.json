@@ -133,6 +133,36 @@
       "price": 1200,
       "defaultColor": "#d1d5db",
       "tags": ["truss"]
+    },
+    "traverse_basic": {
+      "key": "traverse_basic",
+      "label": "Traverse Basic",
+      "kind": "truss",
+      "dimensions": { "width": 6, "depth": 4, "height": 4 },
+      "collider": "aabb",
+      "price": 1250,
+      "defaultColor": "#cbd5e1",
+      "tags": ["traverse", "rigging"]
+    },
+    "wall_segment": {
+      "key": "wall_segment",
+      "label": "Wand-Segment",
+      "kind": "wall_segment",
+      "dimensions": { "width": 1, "depth": 0.08, "height": 2.5 },
+      "collider": "aabb",
+      "price": 160,
+      "defaultColor": "#e5e7eb",
+      "tags": ["wall", "segment"]
+    },
+    "cabin": {
+      "key": "cabin",
+      "label": "Kabine",
+      "kind": "cabin",
+      "dimensions": { "width": 2, "depth": 2, "height": 2.5 },
+      "collider": "obb",
+      "price": 950,
+      "defaultColor": "#d1d5db",
+      "tags": ["cabin", "storage"]
     }
   }
 }

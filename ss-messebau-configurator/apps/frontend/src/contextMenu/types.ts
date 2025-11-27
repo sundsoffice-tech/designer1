@@ -52,3 +52,23 @@ export type BuiltContextMenu = {
   items: ContextMenuItem[];
   context: ContextMenuContext;
 };
+
+export type MenuSelectionFilter = "any" | "none" | "single" | "multi";
+
+export type ContextMenuItemConfig = {
+  id?: string;
+  commandId: CommandId;
+  icon?: ContextMenuIcon;
+  group?: string;
+  destructive?: boolean;
+  separatorBefore?: boolean;
+  when?: (context: ContextMenuContext) => boolean;
+  disabled?: boolean | ((context: ContextMenuContext) => boolean);
+};
+
+export type ContextMenuPreset = {
+  id: string;
+  objectTypes?: string[];
+  selection?: MenuSelectionFilter;
+  items: ContextMenuItemConfig[];
+};

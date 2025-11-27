@@ -31,7 +31,7 @@ VITE_ENABLE_ADMIN_PANEL=false
 
 ### Collision playground & clearance
 - Load the Collision Playground preset in the Sidebar; it uses `modules.collisionClearance = 0.25`.
-- Attempt to overlap counters/truss; expect AABB warning + revert. Increase spacing (>0.25 m) and confirm collisions clear and movement is accepted.
+- Attempt to overlap counters/truss; expect OBB warning + revert. Increase spacing (>0.25 m) and confirm collisions clear and movement is accepted.
 
 ### SeatingControls
 - Open Seating; add chair, barstool, and lounge entries with the `+` buttons and verify counts and positions render.

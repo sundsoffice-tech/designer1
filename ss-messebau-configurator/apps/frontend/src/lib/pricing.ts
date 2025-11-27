@@ -3,6 +3,7 @@
 // ======================
 // Typen
 // ======================
+import type { TextureFit } from "@ss/shared";
 
 export type StandType = "row" | "corner" | "head" | "island";
 export type Region = "NRW" | "Sued" | "S\u00fcd" | "Nord" | "Ausland";
@@ -20,15 +21,20 @@ export type WallSurface = "system" | "wood" | "banner" | "seg" | "led";
 
 export type WallDetailConfig = {
   surface?: WallSurface;
-  height?: number; // optional, falls Wand abweichend von StandhÃ¶he
+  height?: number; // optional, falls Wand abweichend von Standhöhe
   /** Optisches Finish (Farbe/Print) aus der Admin-Materialbibliothek */
   finishId?: string;
+  /** Optional direkte Textur aus der Library */
+  textureUrl?: string;
+  textureFit?: TextureFit;
+  textureRepeat?: [number, number];
 };
 
 export type WallPanelRules = {
   baseWidth: number;
   minWidth: number;
   maxWidth: number;
+  defaultHeight?: number;
   /** Fallback-OberflÃ¤che fÃ¼r neu erzeugte Paneele */
   defaultSurface?: WallSurface;
 };
@@ -71,6 +77,9 @@ export type FloorConfig = {
   /** Optional: direkt eingebettete Textur (wenn keine Bibliothek genutzt wird) */
   textureUrl?: string;
   textureFileName?: string;
+  /** Textur-Einstellung fuer das Seitenverhaeltnis */
+  textureFit?: TextureFit;
+  textureRepeat?: [number, number];
 };
 
 type AccessibilityConfig = {
@@ -104,9 +113,11 @@ export type CabinConfig = {
     x: number;
     z: number;
   };
+  rotationY?: number;
 
   /** Optionale Liste an TÃ¼ren (einzeln oder mehrere / breite Ã–ffnung) */
   doors?: CabinDoorConfig[];
+  clearance?: number;
 };
 
 export type ScreenSize = "55" | "65" | "75";
@@ -133,6 +144,11 @@ export type ScreenConfig = {
   /** Optionales Video pro Screen (nur Frontend; Pricing ignoriert) */
   videoUrl?: string;
   videoName?: string;
+  videoMuted?: boolean;
+  videoVolume?: number;
+  videoPaused?: boolean;
+  /** individueller Kollisions-Puffer (Meter) */
+  clearance?: number;
 };
 
 export type SeatingType = "chair" | "barstool" | "lounge";
@@ -162,6 +178,8 @@ export type ChairConfig = {
     x: number;
     z: number;
   };
+  /** individueller Kollisions-Puffer (Meter) */
+  clearance?: number;
 };
 
 // Frei importierte 3D-Objekte (z. B. GLB/GLTF)
@@ -182,11 +200,39 @@ export type CustomObjectConfig = {
     d?: number;
     h?: number;
   };
+  /** Individueller Clearance-Puffer (Meter) */
+  clearance?: number;
+  /** Optional definierte Snap-Punkte aus dem Admin-Upload */
+  snapPoints?: { x: number; y?: number; z: number }[];
+  weight?: number;
+  /** Referenz auf den hochgeladenen Modell-Eintrag */
+  modelId?: string;
   position: {
     x: number;
     z: number;
     y?: number;
   };
+};
+
+export type LampConfig = {
+  id: string;
+  name?: string;
+  assetUrl: string;
+  modelId?: string;
+  mount?: "floor" | "truss" | "wall";
+  wallSide?: WallSide;
+  position: { x: number; z: number; y?: number };
+  rotationY?: number;
+  heightFromFloor?: number;
+  footprint?: { w?: number; d?: number; h?: number };
+  clearance?: number;
+  snapPoints?: { x: number; y?: number; z: number }[];
+  intensity?: number;
+  color?: string;
+  distance?: number;
+  angle?: number;
+  decay?: number;
+  spot?: boolean;
 };
 
 export type RoundTableConfig = {
@@ -277,11 +323,15 @@ export type CounterConfig = {
     accent?: string;
     top?: string;
   };
+  clearance?: number;
 };
 
 export type StandModules = {
   // Legacy-Felder
   wallsClosedSides: number;
+  wallHeight?: number;
+  cabinSize?: { width: number; depth: number; height?: number };
+  cabinDoorPosition?: WallSide;
   storageRoom: boolean;
   storageDoorSide?: WallSide;
 
@@ -361,8 +411,16 @@ export type StandModules = {
   chairsDetailed?: ChairConfig[];
   roundTables?: RoundTableConfig[];
   customObjects?: CustomObjectConfig[];
+  lamps?: LampConfig[];
   /** Mindestabstand f\u00fcr Kollisionspr\u00fcfungen (Meter) */
   collisionClearance?: number;
+  /** optionaler Kollisions-Puffer speziell f\u00fcr die Truss */
+  trussClearance?: number;
+  /** Rasterweite f\u00fcr Snap-Translationen (Meter) */
+  gridStep?: number;
+  snapStep?: number;
+  /** Snapping an W\u00e4nde/Truss aktivieren */
+  snapToStructure?: boolean;
 
   // Truss-Details (optional, falls spÃ¤ter genutzt)
   trussConfig?: TrussConfig;
@@ -383,6 +441,7 @@ export type StandModules = {
 
   /** absolute Truss-HÃ¶he Ã¼ber Hallenboden (m), optional */
   trussHeight?: number;
+  trussSegmentLength?: number;
   /** optionale XY-Verschiebung der Truss (Meter, relativ zur Standmitte) */
   trussOffset?: { x?: number; z?: number };
 
@@ -426,6 +485,7 @@ export type StandConfig = {
   region: Region;
   rush: boolean;
   modules: StandModules;
+  traverseHeight?: number;
   /** Optionaler Paketbezug fuer Bundle-Presets */
   bundleKey?: string;
   bundleLabel?: string;
@@ -1317,10 +1377,9 @@ function calcTrussCost(cfg: StandConfig, pricing: ResolvedPricing): TrussCost {
     lightCost += attachmentLights * pricing.trussLightPrice;
   }
 
+  const resolvedTrussHeight = cfg.traverseHeight ?? cfg.modules.trussHeight;
   const heightFactor =
-    cfg.modules.trussHeight && cfg.modules.trussHeight > 4
-      ? 1 + (cfg.modules.trussHeight - 4) * 0.05
-      : 1;
+    resolvedTrussHeight && resolvedTrussHeight > 4 ? 1 + (resolvedTrussHeight - 4) * 0.05 : 1;
 
   const structureCost = (structureBase + frameCost) * heightFactor;
   const scaledLightCost = lightCost * heightFactor;
@@ -1440,3 +1499,4 @@ export function calcPrice(
 ): number {
   return calcPriceDetailed(cfg, pricingModel, options).total;
 }
+

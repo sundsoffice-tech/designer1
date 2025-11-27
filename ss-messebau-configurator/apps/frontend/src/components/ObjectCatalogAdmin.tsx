@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { CustomModelModule } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
 import {
   DEFAULT_OBJECT_TEMPLATES,
@@ -38,6 +37,7 @@ type Draft = {
   variant: CounterVariant;
   price?: number;
   category: string;
+  assetUrl?: string;
   assetDataUrl?: string;
   assetFileName?: string;
   scale: number;
@@ -56,7 +56,8 @@ type Draft = {
 };
 
 type ImportCandidate = {
-  dataUrl: string;
+  assetUrl?: string;
+  dataUrl?: string;
   fileName: string;
   derivedName: string;
   dimensions?: { width: number; depth: number; height: number };
@@ -71,6 +72,7 @@ const defaultDraft: Draft = {
   variant: "basic",
   price: undefined,
   category: "",
+  assetUrl: undefined,
   assetDataUrl: undefined,
   assetFileName: undefined,
   scale: 1,
@@ -94,6 +96,7 @@ const templateToDraft = (tpl: ObjectTemplate): Draft => ({
   variant: tpl.variant ?? "basic",
   price: tpl.price,
   category: tpl.category ?? "",
+  assetUrl: tpl.assetUrl,
   assetDataUrl: tpl.assetDataUrl,
   assetFileName: tpl.assetFileName,
   scale: tpl.defaultScale ?? 1,
@@ -116,14 +119,6 @@ const toNumber = (val: string, fallback: number | undefined) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
-const readFileAsDataUrl = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-
 const normalizeCategory = (value?: string) => {
   const trimmed = value?.trim().replace(/\s+/g, " ");
   return trimmed && trimmed.length > 0 ? trimmed : "Ohne Kategorie";
@@ -140,41 +135,49 @@ const slugifyName = (value: string) =>
 const labelFromFileName = (value: string) =>
   value.replace(/\.(glb|gltf)$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 
-const measureGltfFile = async (file: File) => {
-  const loader = new GLTFLoader();
-  const url = URL.createObjectURL(file);
+const MAX_MODEL_SIZE_MB = 60;
+const MODEL_EXTENSIONS = new Set([".glb", ".gltf", ".fbx"]);
 
-  return new Promise<{ width: number; depth: number; height: number }>((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => {
-        try {
-          const box = new THREE.Box3().setFromObject(gltf.scene);
-          const size = new THREE.Vector3();
-          box.getSize(size);
-          URL.revokeObjectURL(url);
-          resolve({
-            width: Number(size.x.toFixed(3)),
-            depth: Number(size.z.toFixed(3)),
-            height: Number(size.y.toFixed(3)),
-          });
-        } catch (err) {
-          URL.revokeObjectURL(url);
-          reject(err);
-        }
-      },
-      undefined,
-      (err) => {
-        URL.revokeObjectURL(url);
-        reject(err);
-      }
-    );
-  });
+const validateModelFile = (file: File): string | null => {
+  const extMatch = (file.name || "").toLowerCase().match(/\.[a-z0-9]+$/);
+  const ext = extMatch?.[0] ?? "";
+  if (!MODEL_EXTENSIONS.has(ext)) {
+    return "Nur GLB/GLTF/FBX sind erlaubt.";
+  }
+  const sizeMb = file.size / 1024 / 1024;
+  if (sizeMb > MAX_MODEL_SIZE_MB) {
+    return `Datei zu gross (${sizeMb.toFixed(1)} MB). Maximal ${MAX_MODEL_SIZE_MB} MB.`;
+  }
+  return null;
+};
+
+const uploadModelToBackend = async (
+  file: File,
+  meta: { name?: string; category?: string; price?: number; type?: "custom" | "lamp" } = {}
+): Promise<CustomModelModule> => {
+  const validation = validateModelFile(file);
+  if (validation) {
+    throw new Error(validation);
+  }
+  const body = new FormData();
+  body.append("file", file);
+  body.append("type", meta.type ?? "custom");
+  if (meta.name) body.append("name", meta.name);
+  if (meta.category) body.append("category", meta.category);
+  if (meta.price != null) body.append("price", String(meta.price));
+
+  const res = await fetch("/api/uploadModel", { method: "POST", body });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.module) {
+    throw new Error(json?.error || json?.details || "Upload fehlgeschlagen");
+  }
+  return json.module as CustomModelModule;
 };
 
 export default function ObjectCatalogAdmin() {
   const config = useConfigStore((s) => s.config);
   const setConfig = useConfigStore((s) => s.setConfig);
+  const refreshModuleCatalog = useConfigStore((s) => s.refreshModuleCatalog);
   const {
     templates,
     addTemplate,
@@ -187,6 +190,7 @@ export default function ObjectCatalogAdmin() {
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [quickImport, setQuickImport] = useState<ImportCandidate | null>(null);
   const [quickName, setQuickName] = useState<string>("");
@@ -267,38 +271,73 @@ export default function ObjectCatalogAdmin() {
 
   const handleDraftFile = async (file: File) => {
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      setError(null);
+      setStatus("Lade 3D-Datei hoch...");
+      const uploaded = await uploadModelToBackend(file, {
+        name: draft.name || file.name,
+        category: draft.category,
+        price: draft.price,
+      });
       setDraft((d) => ({
         ...d,
-        assetDataUrl: dataUrl,
+        assetUrl: uploaded.modelPath,
+        assetDataUrl: undefined,
         assetFileName: file.name,
+        width: uploaded.width ?? d.width,
+        depth: uploaded.depth ?? d.depth,
+        height: uploaded.height ?? d.height,
+        footprintW: uploaded.width ?? d.footprintW,
+        footprintD: uploaded.depth ?? d.footprintD,
+        footprintH: uploaded.height ?? d.footprintH,
       }));
-      setStatus(`3D-Datei geladen: ${file.name}`);
+      void refreshModuleCatalog();
+      setStatus(`3D-Datei hochgeladen: ${file.name}`);
     } catch (err) {
-      console.error(err);
-      alert("3D-Datei konnte nicht gelesen werden.");
+      const message = err instanceof Error ? err.message : "3D-Datei konnte nicht geladen werden.";
+      setError(message);
+      setStatus("");
     }
   };
 
   const replaceTemplateAsset = async (tplId: string, file: File) => {
     try {
-      const dataUrl = await readFileAsDataUrl(file);
       const target = templates[tplId];
       if (!target) {
-        setStatus("Vorlage nicht gefunden.");
+        setError("Vorlage nicht gefunden.");
         return;
       }
+      setError(null);
+      setStatus("Lade 3D-Datei hoch...");
+      const uploaded = await uploadModelToBackend(file, {
+        name: target.name || file.name,
+        category: target.category,
+        price: target.price,
+      });
       updateTemplate(tplId, {
-        assetDataUrl: dataUrl,
+        assetUrl: uploaded.modelPath,
+        assetDataUrl: undefined,
         assetFileName: file.name,
+        dimensions: uploaded.width
+          ? { width: uploaded.width, depth: uploaded.depth, height: uploaded.height }
+          : target.dimensions,
       });
       if (editingId === tplId) {
-        setDraft((d) => ({ ...d, assetDataUrl: dataUrl, assetFileName: file.name }));
+        setDraft((d) => ({
+          ...d,
+          assetUrl: uploaded.modelPath,
+          assetDataUrl: undefined,
+          assetFileName: file.name,
+          width: uploaded.width ?? d.width,
+          depth: uploaded.depth ?? d.depth,
+          height: uploaded.height ?? d.height,
+        }));
       }
+      void refreshModuleCatalog();
       setStatus(`3D-Datei aktualisiert${target.name ? ` (${target.name})` : ""}`);
     } catch (err) {
-      console.error(err);
-      alert("3D-Datei konnte nicht gelesen werden.");
+      const message = err instanceof Error ? err.message : "3D-Datei konnte nicht gelesen werden.";
+      setError(message);
+      setStatus("");
     }
   };
 
@@ -313,50 +352,64 @@ export default function ObjectCatalogAdmin() {
     setQuickTargetId("new");
     setPlaceAfterImport(true);
     setDragActive(false);
+    setError(null);
   };
 
   const handleQuickFile = async (file: File) => {
     if (importBusy) return;
     setImportBusy(true);
+    setError(null);
+    setStatus("Lade 3D-Datei hoch...");
+    setQuickImport(null);
     try {
-      const [dataUrl, measured] = await Promise.all([
-        readFileAsDataUrl(file),
-        measureGltfFile(file).catch(() => null),
-      ]);
-
       const derivedName = labelFromFileName(file.name) || "Custom 3D Objekt";
+      const uploaded = await uploadModelToBackend(file, {
+        name: quickName || derivedName,
+        category: quickCategory,
+        price: quickPrice,
+      });
+
+      const dimensions = uploaded
+        ? { width: uploaded.width, depth: uploaded.depth, height: uploaded.height }
+        : undefined;
+
       const candidate: ImportCandidate = {
-        dataUrl,
+        assetUrl: uploaded.modelPath,
         fileName: file.name,
         derivedName,
-        dimensions: measured ?? undefined,
+        dimensions,
       };
 
       setQuickImport(candidate);
+      void refreshModuleCatalog();
       setQuickName((prev) => (prev.trim() ? prev : derivedName));
       setQuickCategory((prev) => prev || DEFAULT_CATEGORY);
       setDraft((d) => ({
         ...d,
         kind: "custom",
-        assetDataUrl: dataUrl,
+        assetUrl: uploaded.modelPath,
+        assetDataUrl: undefined,
         assetFileName: file.name,
         scale: quickScale,
-        width: measured?.width ?? d.width,
-        depth: measured?.depth ?? d.depth,
-        height: measured?.height ?? d.height,
-        footprintW: measured?.width ?? d.footprintW,
-        footprintD: measured?.depth ?? d.footprintD,
-        footprintH: measured?.height ?? d.footprintH,
+        width: dimensions?.width ?? d.width,
+        depth: dimensions?.depth ?? d.depth,
+        height: dimensions?.height ?? d.height,
+        footprintW: dimensions?.width ?? d.footprintW,
+        footprintD: dimensions?.depth ?? d.footprintD,
+        footprintH: dimensions?.height ?? d.footprintH,
       }));
 
-      const dimMsg = measured
-        ? ` | Maße erkannt: ${measured.width} x ${measured.depth}${measured.height ? ` x ${measured.height}` : ""} m`
-        : "";
-      setStatus(`3D-Datei geladen (${file.name})${dimMsg}`);
+      const dimMsg =
+        dimensions && dimensions.width && dimensions.depth
+          ? ` (${dimensions.width} x ${dimensions.depth}${dimensions.height ? ` x ${dimensions.height}` : ""} m)`
+          : "";
+      setStatus(`3D-Datei hochgeladen (${file.name})${dimMsg}`);
     } catch (err) {
-      console.error(err);
+      const message =
+        err instanceof Error ? err.message : "3D-Datei konnte nicht geladen oder gelesen werden.";
       setQuickImport(null);
-      setStatus("3D-Datei konnte nicht geladen oder gelesen werden.");
+      setError(message);
+      setStatus("");
     } finally {
       setImportBusy(false);
       setDragActive(false);
@@ -364,8 +417,9 @@ export default function ObjectCatalogAdmin() {
   };
 
   const commitQuickImport = () => {
-    if (!quickImport?.dataUrl) {
-      setStatus("Bitte zuerst eine GLB/GLTF-Datei in den Import-Bereich ziehen.");
+    if (!quickImport?.assetUrl) {
+      setError("Bitte zuerst eine GLB/GLTF-Datei in den Import-Bereich hochladen.");
+      setStatus("");
       return;
     }
 
@@ -392,7 +446,8 @@ export default function ObjectCatalogAdmin() {
       kind: "custom",
       category: resolvedCategory || undefined,
       price: quickPrice ?? target?.price,
-      assetDataUrl: quickImport.dataUrl,
+      assetUrl: quickImport.assetUrl,
+      assetDataUrl: undefined,
       assetFileName: quickImport.fileName,
       defaultScale: quickScale || 1,
       footprint,
@@ -427,13 +482,17 @@ export default function ObjectCatalogAdmin() {
 
   const storeTemplate = () => {
     if (!draft.name.trim()) {
-      setStatus("Name fehlt");
+      setError("Name fehlt");
+      setStatus("");
       return;
     }
-    if (draft.kind === "custom" && !draft.assetDataUrl) {
-      alert("Bitte zuerst eine 3D-Datei (GLB/GLTF) laden oder ersetzen.");
+    const hasAsset = Boolean(draft.assetUrl || draft.assetDataUrl);
+    if (draft.kind === "custom" && !hasAsset) {
+      setError("Bitte zuerst eine 3D-Datei (GLB/GLTF) hochladen oder ersetzen.");
+      setStatus("");
       return;
     }
+    setError(null);
 
     const dimensions =
       draft.kind === "screen"
@@ -462,6 +521,7 @@ export default function ObjectCatalogAdmin() {
       name: draft.name.trim(),
       kind: draft.kind,
       price: draft.price,
+      assetUrl: draft.assetUrl,
       assetDataUrl: draft.assetDataUrl,
       assetFileName: draft.assetFileName,
       defaultScale: draft.scale || 1,
@@ -510,7 +570,8 @@ export default function ObjectCatalogAdmin() {
     }
 
     if (tpl.kind === "custom") {
-      if (!tpl.assetDataUrl) {
+      const assetUrl = tpl.assetUrl ?? tpl.assetDataUrl;
+      if (!assetUrl) {
         alert("Keine 3D-Datei hinterlegt. Bitte im Admin-Formular laden.");
         return;
       }
@@ -519,7 +580,7 @@ export default function ObjectCatalogAdmin() {
       const angle = customObjects.length * 1.2;
       const x = Math.cos(angle) * radius * 0.6;
       const z = Math.sin(angle) * radius * 0.6;
-      const customCfg = templateToCustomObject(tpl, { x, z });
+      const customCfg = { ...templateToCustomObject(tpl, { x, z }), assetUrl };
 
       setConfig({
         modules: {
@@ -556,6 +617,22 @@ export default function ObjectCatalogAdmin() {
           screens: 0,
         },
       });
+      return;
+    }
+
+    if (tpl.kind === "traverse") {
+      const targetHeight =
+        tpl.dimensions?.height ??
+        config.traverseHeight ??
+        config.modules.trussHeight ??
+        config.height + 0.5;
+      setConfig({
+        traverseHeight: targetHeight,
+        modules: {
+          truss: true,
+          trussHeight: targetHeight,
+        },
+      });
     }
   };
 
@@ -576,7 +653,7 @@ export default function ObjectCatalogAdmin() {
       </div>
       <p style={{ margin: "0 0 8px", lineHeight: 1.35 }}>
         Erweiterbarer Katalog f\u00fcr wiederverwendbare Objekte. Admins k\u00f6nnen
-        Vorlagen inkl. Ma\u00dfe & Preis pflegen, eigene GLB/GLTF-Dateien einbetten
+        Vorlagen inkl. Ma\u00dfe & Preis pflegen, GLB/GLTF-Dateien serverseitig ablegen
         und direkt auf den Stand legen.
       </p>
 
@@ -590,6 +667,11 @@ export default function ObjectCatalogAdmin() {
         </span>
       </div>
 
+      {error && (
+        <div className="status-hint" role="alert" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+          {error}
+        </div>
+      )}
       {status && (
         <div className="status-hint">
           {status}
@@ -822,6 +904,7 @@ export default function ObjectCatalogAdmin() {
             >
               <option value="counter">Counter / Tresen</option>
               <option value="screen">Screen</option>
+              <option value="traverse">Traverse</option>
               <option value="custom">Custom 3D (GLB/GLTF)</option>
             </select>
           </label>
@@ -1102,6 +1185,7 @@ export default function ObjectCatalogAdmin() {
         )}
         {filteredTemplates.map((tpl) => {
           const fileInputId = `tpl-asset-${tpl.id}`;
+          const hasAsset = Boolean(tpl.assetUrl || tpl.assetDataUrl);
           return (
             <div key={tpl.id} className="catalog-card" style={{ minWidth: 240 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
@@ -1123,9 +1207,11 @@ export default function ObjectCatalogAdmin() {
                 {tpl.dimensions?.height ? ` / h ${tpl.dimensions?.height} m` : ""}
               </small>
               {tpl.kind === "custom" && (
-                <small style={{ color: tpl.assetDataUrl ? "#15803d" : "#b91c1c" }}>
-                  {tpl.assetDataUrl
-                    ? `3D-File: ${tpl.assetFileName || "GLB/GLTF hinterlegt"} (Scale ${tpl.defaultScale ?? 1})`
+                <small style={{ color: hasAsset ? "#15803d" : "#b91c1c" }}>
+                  {hasAsset
+                    ? `3D-File: ${tpl.assetFileName || tpl.assetUrl || "GLB/GLTF hinterlegt"} (Scale ${
+                        tpl.defaultScale ?? 1
+                      })`
                     : "Kein 3D-File hinterlegt"}
                 </small>
               )}
@@ -1167,8 +1253,8 @@ export default function ObjectCatalogAdmin() {
                   type="button"
                   className="btn-secondary"
                   onClick={() => applyTemplateToStand(tpl.id)}
-                  disabled={tpl.kind === "custom" && !tpl.assetDataUrl}
-                  title={tpl.kind === "custom" && !tpl.assetDataUrl ? "Bitte zunaechst ein GLB/GLTF laden" : undefined}
+                  disabled={tpl.kind === "custom" && !hasAsset}
+                  title={tpl.kind === "custom" && !hasAsset ? "Bitte zunaechst ein GLB/GLTF laden" : undefined}
                 >
                   Auf Stand legen
                 </button>

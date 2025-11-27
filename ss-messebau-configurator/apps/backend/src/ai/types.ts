@@ -7,6 +7,7 @@ export type StandConfig = {
   region: string;
   rush: boolean;
   modules: any; // optional detaillierter machen, wenn ihr moechtet
+  traverseHeight?: number;
 };
 
 export type StandConfigPatch = Partial<StandConfig> & {

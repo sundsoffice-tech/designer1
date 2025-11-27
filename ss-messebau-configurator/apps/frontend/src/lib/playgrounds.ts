@@ -11,6 +11,7 @@ export const collisionPlayground: StandConfig = {
   type: "corner",
   region: "NRW",
   rush: false,
+  traverseHeight: 3.2,
   modules: {
     wallsClosedSides: 2,
     storageRoom: true,

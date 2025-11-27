@@ -1,4 +1,4 @@
-import { useMemo, type JSX, type ReactNode } from "react";
+import { useEffect, useMemo, type JSX, type ReactNode } from "react";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -42,6 +42,22 @@ export default function TrussBanners({
     () => bannerWebpUrl ?? bannerImageUrl ?? mipmapUrls[0] ?? blankFallback,
     [bannerImageUrl, bannerWebpUrl, blankFallback, mipmapUrls]
   );
+  useEffect(() => {
+    if (primaryTextureUrl) {
+      try {
+        useTexture.preload(primaryTextureUrl);
+      } catch {
+        // ignore preload issues
+      }
+    }
+    mipmapUrls.forEach((url) => {
+      try {
+        useTexture.preload(url);
+      } catch {
+        // ignore
+      }
+    });
+  }, [mipmapUrls, primaryTextureUrl]);
   const baseBannerTexture = useTexture(primaryTextureUrl) as THREE.Texture;
   const mipmapTextures = useTexture(mipmapUrls) as THREE.Texture[];
   const bannerTexture = useMemo(() => {
@@ -61,11 +77,12 @@ export default function TrussBanners({
     () =>
       bannerTexture
         ? { map: bannerTexture }
-        : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const),
+    : ({ color: "#111827", roughness: 0.5, metalness: 0.2 } as const),
     [bannerTexture]
   );
 
-  const bannerY = trussHeight - 0.4 - bannerHeight / 2;
+  const anchorY = trussHeight - bannerHeight / 2;
+  const sideOffset = bannerThickness / 2 + 0.04;
 
   const banners = useMemo(() => {
     if (!hasAnyBanner) return [];
@@ -75,9 +92,9 @@ export default function TrussBanners({
       Array.from({ length: bannersFront }).forEach((_, i) => {
         const spacing = width / (bannersFront + 1);
         const x = -width / 2 + spacing * (i + 1);
-        const z = depth / 2 - 0.05;
+        const z = depth / 2 - sideOffset;
         nodes.push(
-          <mesh key={`banner-front-${i}`} position={[x, bannerY, z]} castShadow>
+          <mesh key={`banner-front-${i}`} position={[x, anchorY, z]} castShadow>
             <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
             <meshStandardMaterial {...materialProps} />
           </mesh>
@@ -89,9 +106,9 @@ export default function TrussBanners({
       Array.from({ length: bannersBack }).forEach((_, i) => {
         const spacing = width / (bannersBack + 1);
         const x = -width / 2 + spacing * (i + 1);
-        const z = -depth / 2 + 0.05;
+        const z = -depth / 2 + sideOffset;
         nodes.push(
-          <mesh key={`banner-back-${i}`} position={[x, bannerY, z]} castShadow>
+          <mesh key={`banner-back-${i}`} position={[x, anchorY, z]} castShadow>
             <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
             <meshStandardMaterial {...materialProps} />
           </mesh>
@@ -103,9 +120,9 @@ export default function TrussBanners({
       Array.from({ length: bannersLeft }).forEach((_, i) => {
         const spacing = depth / (bannersLeft + 1);
         const z = -depth / 2 + spacing * (i + 1);
-        const x = -width / 2 + 0.05;
+        const x = -width / 2 + sideOffset;
         nodes.push(
-          <mesh key={`banner-left-${i}`} position={[x, bannerY, z]} rotation-y={Math.PI / 2} castShadow>
+          <mesh key={`banner-left-${i}`} position={[x, anchorY, z]} rotation-y={Math.PI / 2} castShadow>
             <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
             <meshStandardMaterial {...materialProps} />
           </mesh>
@@ -117,9 +134,9 @@ export default function TrussBanners({
       Array.from({ length: bannersRight }).forEach((_, i) => {
         const spacing = depth / (bannersRight + 1);
         const z = -depth / 2 + spacing * (i + 1);
-        const x = width / 2 - 0.05;
+        const x = width / 2 - sideOffset;
         nodes.push(
-          <mesh key={`banner-right-${i}`} position={[x, bannerY, z]} rotation-y={-Math.PI / 2} castShadow>
+          <mesh key={`banner-right-${i}`} position={[x, anchorY, z]} rotation-y={-Math.PI / 2} castShadow>
             <boxGeometry args={[bannerWidth, bannerHeight, bannerThickness]} />
             <meshStandardMaterial {...materialProps} />
           </mesh>
@@ -132,14 +149,15 @@ export default function TrussBanners({
     bannerHeight,
     bannerThickness,
     bannerWidth,
-    bannerY,
     bannersBack,
     bannersFront,
     bannersLeft,
     bannersRight,
+    anchorY,
     depth,
     hasAnyBanner,
     materialProps,
+    sideOffset,
     width,
   ]);
 

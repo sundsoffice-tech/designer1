@@ -11,6 +11,7 @@ const DEFAULT_PANEL_RULES: WallPanelRules = {
   baseWidth: 1,
   minWidth: 0.6,
   maxWidth: 1.5,
+  defaultHeight: 2.5,
   defaultSurface: "system",
 };
 
@@ -104,7 +105,11 @@ export function normalizeWallPanels(
     }
     const length = side === "back" ? cfg.width : cfg.depth;
     const fallbackSurface = (detail[side]?.surface ?? rules.defaultSurface ?? "system") as WallSurface;
-    const fallbackHeight = detail[side]?.height ?? wallsConfig[side]?.height ?? (cfg.height || 2.5);
+    const customDefaultHeight = modules.wallPanelRules?.defaultHeight;
+    const fallbackHeight =
+      detail[side]?.height ??
+      wallsConfig[side]?.height ??
+      (customDefaultHeight ?? cfg.height ?? DEFAULT_PANEL_RULES.defaultHeight ?? 2.5);
     panels[side] = buildPanelsForSide(
       side,
       length,

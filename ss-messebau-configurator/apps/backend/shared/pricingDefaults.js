@@ -128,6 +128,16 @@ export const DEFAULT_PRICING_MODEL = {
       defaultColor: "#d1d5db",
       tags: ["truss"],
     },
+    traverse_basic: {
+      key: "traverse_basic",
+      label: "Traverse Basic",
+      kind: "truss",
+      dimensions: { width: 6, depth: 4, height: 4 },
+      collider: "aabb",
+      price: 1250,
+      defaultColor: "#cbd5e1",
+      tags: ["traverse", "rigging"],
+    },
   },
 };
 

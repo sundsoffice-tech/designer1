@@ -7,6 +7,8 @@ const ROT_EPSILON = 1e-3;
 const LED_FRAME_DEPTH = 0.12;
 const BANNER_THICKNESS = 0.04;
 export const DEFAULT_CLEARANCE = 0.2;
+const ROLE_FLOOR = "floor";
+const ROLE_WALL_ATTACHMENT = "wall-attachment";
 const normalizeCounterPlacement = (placement) => {
     return placement === "center" || placement === "middle" || placement === "island" ? "center" : "front";
 };
@@ -34,6 +36,16 @@ export const intersects = (a, b) => {
     const intersectsAabb = (boxA, boxB) => !(boxA.maxX <= boxB.minX || boxA.minX >= boxB.maxX || boxA.maxZ <= boxB.minZ || boxA.minZ >= boxB.maxZ);
     const partsA = (a?.colliders?.length ? a.colliders : [a]);
     const partsB = (b?.colliders?.length ? b.colliders : [b]);
+    const resolveRole = (box) => (box?.role ?? ROLE_FLOOR);
+    const shouldCollide = (boxA, boxB) => {
+        const roleA = resolveRole(boxA);
+        const roleB = resolveRole(boxB);
+        if (roleA === ROLE_WALL_ATTACHMENT && roleB === ROLE_FLOOR)
+            return false;
+        if (roleB === ROLE_WALL_ATTACHMENT && roleA === ROLE_FLOOR)
+            return false;
+        return true;
+    };
     const ensurePolygon = (box) => {
         if (box.polygon)
             return box.polygon;
@@ -43,6 +55,8 @@ export const intersects = (a, b) => {
     };
     for (const boxA of partsA) {
         for (const boxB of partsB) {
+            if (!shouldCollide(boxA, boxB))
+                continue;
             const useObb = hasRotation(boxA.rotationY ?? 0) || hasRotation(boxB.rotationY ?? 0);
             if (!useObb) {
                 if (intersectsAabb(boxA, boxB))
@@ -57,7 +71,7 @@ export const intersects = (a, b) => {
     }
     return false;
 };
-export const makeAabb = (id, label, x, z, width, depth, clearance = DEFAULT_CLEARANCE, rotationY = 0, colliders = []) => {
+export const makeAabb = (id, label, x, z, width, depth, clearance = DEFAULT_CLEARANCE, rotationY = 0, colliders = [], role = ROLE_FLOOR) => {
     const safeWidth = Number.isFinite(width) ? Math.abs(width) : 0;
     const safeDepth = Number.isFinite(depth) ? Math.abs(depth) : 0;
     const safeClearance = Number.isFinite(clearance) ? clearance : 0;
@@ -94,6 +108,7 @@ export const makeAabb = (id, label, x, z, width, depth, clearance = DEFAULT_CLEA
             minZ: centerZ - paddedHalfD,
             maxZ: centerZ + paddedHalfD,
             polygon,
+            role: role ?? ROLE_FLOOR,
         };
     };
     if (colliders?.length) {
@@ -127,6 +142,7 @@ export const makeAabb = (id, label, x, z, width, depth, clearance = DEFAULT_CLEA
             maxZ: z + halfDepth,
             colliders: colliderBoxes,
             polygon: compositePolygon,
+            role: role ?? ROLE_FLOOR,
         };
     }
     return buildBox(x, z, safeWidth, safeDepth);
@@ -205,7 +221,8 @@ export function buildSceneAabbs(cfg, clearance = DEFAULT_CLEARANCE) {
         const x = scr.position?.x ?? 0;
         const z = scr.position?.z ?? 0;
         const rotationY = typeof scr.rotationY === "number" ? scr.rotationY : 0;
-        boxes.push(makeAabb(`scr-d-${scr.id}`, "Screen", x, z, footprint.w, footprint.d, clearance, rotationY));
+        const role = mount === "wall" && !scr.floating ? ROLE_WALL_ATTACHMENT : ROLE_FLOOR;
+        boxes.push(makeAabb(`scr-d-${scr.id}`, "Screen", x, z, footprint.w, footprint.d, clearance, rotationY, [], role));
     });
     // Legacy-Screens (numerische Angabe) blocken ebenfalls, falls keine detaillierten existieren
     const legacyScreens = detailedScreens.length === 0 && typeof mAny.screens === "number" ? mAny.screens : 0;
@@ -220,21 +237,21 @@ export function buildSceneAabbs(cfg, clearance = DEFAULT_CLEARANCE) {
             const spacing = cfg.width / (legacyScreens + 1);
             for (let i = 0; i < legacyScreens; i++) {
                 const x = -cfg.width / 2 + spacing * (i + 1);
-                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", x, backWallFrontZ, footprint.w, footprint.d, clearance));
+                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", x, backWallFrontZ, footprint.w, footprint.d, clearance, 0, [], ROLE_WALL_ATTACHMENT));
             }
         }
         else if (side === "left") {
             const spacing = cfg.depth / (legacyScreens + 1);
             for (let i = 0; i < legacyScreens; i++) {
                 const z = -cfg.depth / 2 + spacing * (i + 1);
-                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", leftWallInnerX, z, footprint.w, footprint.d, clearance));
+                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", leftWallInnerX, z, footprint.w, footprint.d, clearance, 0, [], ROLE_WALL_ATTACHMENT));
             }
         }
         else {
             const spacing = cfg.depth / (legacyScreens + 1);
             for (let i = 0; i < legacyScreens; i++) {
                 const z = -cfg.depth / 2 + spacing * (i + 1);
-                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", rightWallInnerX, z, footprint.w, footprint.d, clearance));
+                boxes.push(makeAabb(`scr-legacy-${i}`, "Screen", rightWallInnerX, z, footprint.w, footprint.d, clearance, 0, [], ROLE_WALL_ATTACHMENT));
             }
         }
     }
@@ -274,11 +291,12 @@ export function buildSceneAabbs(cfg, clearance = DEFAULT_CLEARANCE) {
             const size = frame.size ?? 2.5;
             const depth = LED_FRAME_DEPTH;
             const rotationY = typeof frame.rotationY === "number" ? frame.rotationY : Math.PI;
+            const role = ROLE_WALL_ATTACHMENT;
             for (let i = 0; i < count; i++) {
                 const x = frame.position?.x ?? -cfg.width / 2 + spacing * (i + 1);
                 const z = frame.position?.z ?? cfg.depth / 2 - 0.25;
                 const id = frame.id ?? `led-frame-${frameIdx}-${i}-${globalIdx}`;
-                boxes.push(makeAabb(id, "LED-Rahmen", x, z, size, depth, clearance, rotationY));
+                boxes.push(makeAabb(id, "LED-Rahmen", x, z, size, depth, clearance, rotationY, [], role));
                 globalIdx += 1;
             }
         });

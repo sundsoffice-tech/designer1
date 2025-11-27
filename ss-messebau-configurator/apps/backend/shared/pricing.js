@@ -388,8 +388,9 @@ const calcTrussCost = (cfg, pricing) => {
   sum += frames * pricing.trussBannerFramePrice;
   sum += lightCost;
 
-  if (cfg.modules.trussHeight && cfg.modules.trussHeight > 4) {
-    const extraH = cfg.modules.trussHeight - 4;
+  const resolvedTrussHeight = cfg.traverseHeight ?? cfg.modules.trussHeight;
+  if (resolvedTrussHeight && resolvedTrussHeight > 4) {
+    const extraH = resolvedTrussHeight - 4;
     sum *= 1 + extraH * 0.05;
   }
 

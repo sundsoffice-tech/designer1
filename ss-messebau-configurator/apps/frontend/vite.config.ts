@@ -32,6 +32,12 @@ export default defineConfig({
   server: {
     host: true,
   },
+  optimizeDeps: {
+    // Rapier ships a custom WASM init signature; esbuild prebundling rewrites the call
+    // and triggers the "pass a single object" deprecation warning. Skipping keeps the
+    // original loader untouched in dev.
+    exclude: ["@dimforge/rapier3d-compat", "@react-three/rapier"],
+  },
   plugins: [
     react(),
     VitePWA({
