@@ -1,5 +1,5 @@
 ﻿// src/components/SidebarControls.tsx
-import { Suspense, lazy, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { DEFAULT_LIGHTING, useConfigStore, type DeepPartial } from "../store/configStore";
 import { generateRectangleLayout, generateUShapeLayout, generateBridgeLayout, generateRearCabinLayout } from "@ss/shared";
 import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region, ScreenConfig } from "../lib/pricing";
@@ -53,21 +53,7 @@ export default function SidebarControls({
     history,
     future,
   } = useConfigStore();
-
-  if (!config || !config.modules) {
-    return (
-      <aside className={sidebarClassName} id="app-sidebar" aria-hidden={!drawerOpen}>
-        <button type="button" className="sidebar-close" onClick={onClose}>
-          Schließen
-        </button>
-        <div className="sidebar-fallback" role="status">
-          Konfiguration nicht verfügbar.
-        </div>
-      </aside>
-    );
-  }
-
-  const modules = config.modules;
+  const modules = useMemo(() => (config.modules ?? {}) as StandModules, [config.modules]);
   const wallsClosedSides = modules.wallsClosedSides ?? 0;
   const counters = modules.counters ?? 0;
   const screens = modules.screens ?? 0;
@@ -278,7 +264,7 @@ export default function SidebarControls({
   };
 
   const handleStandTypeChange = (nextType: StandType) => {
-    if (nextType === config.type) return;
+    if (!config || nextType === config.type) return;
     const currentWalls = wallFixedMap[config.type as keyof typeof wallFixedMap] ?? 0;
     const nextWalls = wallFixedMap[nextType as keyof typeof wallFixedMap] ?? 0;
     if (currentWalls > 0 && nextWalls === 0 && hasWallMountedObjects()) {
@@ -297,7 +283,7 @@ export default function SidebarControls({
   const floor = config.modules.floor;
   const floorType = floor?.type ?? "carpet";
   const floorRaised = floor?.raised ?? raisedFloor;
-  const counterPlacement = normalizeCounterPlacement(config.modules.countersWall);
+  const counterPlacement = normalizeCounterPlacement(modules.countersWall);
 
   useEffect(() => {
     const handleHistoryHotkeys = (event: KeyboardEvent) => {
@@ -657,7 +643,7 @@ export default function SidebarControls({
       wallLines.push("  • " + wallSurfaceLabel("right", "Rechte Wand"));
 
     return wallLines;
-  }, [modules]);
+  }, [modules, wallsClosedSides]);
 
   const buildModuleLines = useCallback(() => {
     const lightsFront = modules.trussLightsFront ?? 0;
@@ -696,7 +682,19 @@ export default function SidebarControls({
       `- Wandstrahler: Back ${wallBack}, Links ${wallLeft}, Rechts ${wallRight}`,
       `- Truss-Bannerrahmen (ca. ${bannerW || "?"} × ${bannerH || "?"} m): Front ${bFront}, Back ${bBack}, Links ${bLeft}, Rechts ${bRight}`,
     ];
-  }, [buildWallLines, formatLedWallLabel, modules, summarizeLedFrames]);
+  }, [
+    buildWallLines,
+    counters,
+    countersWithPower,
+    formatLedWallLabel,
+    modules,
+    raisedFloor,
+    screens,
+    storageRoomEnabled,
+    summarizeLedFrames,
+    trussEnabled,
+    wallsClosedSides,
+  ]);
 
   const buildStandSummary = useCallback(
     (options: { includeFair?: boolean; includePrice?: boolean } = {}) => {
@@ -715,7 +713,7 @@ export default function SidebarControls({
         ...(options.includePrice ? [`Richtpreis (brutto / Richtwert): ${price.toLocaleString("de-DE")} €`] : []),
       ];
     },
-    [buildModuleLines, config.depth, config.region, config.rush, config.type, config.width, fair, price]
+    [buildModuleLines, config?.depth, config?.region, config?.rush, config?.type, config?.width, fair, price]
   );
 
   const buildContactSection = useCallback((contact: ContactRequest) => {

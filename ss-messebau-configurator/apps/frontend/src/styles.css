@@ -122,6 +122,11 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
+.body-lock {
+  overflow: hidden;
+  height: 100%;
+}
+
 a {
   color: var(--accent);
   text-decoration: none;
@@ -161,6 +166,10 @@ button {
   min-height: 100vh;
   align-items: stretch;
   overflow: hidden;
+}
+
+.app-shell-mobile {
+  flex-direction: column;
 }
 
 :root[data-contrast="high"] .offline-banner {
@@ -1216,6 +1225,11 @@ button {
   background: radial-gradient(circle at 20% 20%, #f7f9ff 0%, #eef2f7 45%, #e6edf7 100%);
 }
 
+.main-viewport.is-mobile {
+  height: 100vh;
+  min-height: 0;
+}
+
 .main-viewport canvas {
   outline: none;
 }
@@ -1227,6 +1241,11 @@ button {
   min-height: 0;
   flex: 1;
   background: var(--bg);
+}
+
+.main-viewport.is-mobile .viewport-shell {
+  height: calc(100vh - 18px);
+  min-height: calc(100vh - 18px);
 }
 
 .viewport-shell canvas {
@@ -1525,11 +1544,14 @@ button {
   }
 
   .sidebar {
-    width: 86%;
-    max-width: 420px;
+    width: clamp(260px, 78vw, 520px);
+    max-width: none;
     position: fixed;
     inset: 0 auto 0 0;
     height: 100vh;
+    border-radius: 0 16px 16px 0;
+    padding-top: 68px;
+    touch-action: pan-y;
     transform: translateX(-100%);
     transition: transform 0.24s ease, box-shadow 0.24s ease;
     z-index: 1220;
@@ -1551,6 +1573,7 @@ button {
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(2px);
     z-index: 1210;
   }
 
@@ -1562,34 +1585,49 @@ button {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    z-index: 1300;
   }
 
   .main-viewport {
     height: 100vh;
+    min-height: 0;
   }
 
   .hud-controls,
   .hud-legend {
-    width: min(320px, calc(100% - 24px));
+    width: calc(100% - 24px);
+    left: 12px;
     right: 12px;
+    padding: 10px 12px;
+    font-size: 11px;
+    gap: 6px;
+    backdrop-filter: blur(8px);
   }
 
   .hud-controls {
-    top: 12px;
+    top: 10px;
   }
 
   .hud-legend {
-    bottom: 12px;
-  }
-
-  .debug-panel {
-    right: 12px;
-    width: min(360px, calc(100% - 24px));
+    bottom: 10px;
   }
 
   .debug-toggle {
     right: 12px;
     bottom: 12px;
+    left: auto;
+  }
+
+  .debug-panel {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    top: auto;
+    width: auto;
+    max-height: 60vh;
+    border-radius: 16px 16px 12px 12px;
+    padding: 14px 16px;
+    box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.16);
   }
 }
 

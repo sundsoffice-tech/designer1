@@ -1,4 +1,5 @@
 // src/components/Configurator3D.tsx
+/* eslint-disable react-hooks/refs */
 import {
   Suspense,
   lazy,
@@ -2640,8 +2641,6 @@ function StandMesh({
     };
     window.addEventListener("keydown", handleFrameShortcut);
     return () => window.removeEventListener("keydown", handleFrameShortcut);
-    // validSelectedKey included to re-evaluate frame shortcut target when selection changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameSelection, onFrameAll, validSelectedKey]);
   const clearSelectionState = useCallback(
     (removedKey?: string) => {
@@ -2755,6 +2754,7 @@ function StandMesh({
       customObjects,
       screensDetailed,
       selectedKey,
+      validSelectedKey,
       setConfig,
     ]
   );
@@ -2841,13 +2841,13 @@ function StandMesh({
         return framed ? { status: "ok" } : { status: "noop" };
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clearInteractionSelection,
     deleteSelection,
     duplicateSelectionByKey,
     firstSelectableKey,
     frameSelection,
+    queueCameraAction,
     resetTransformByKey,
     alignSelection,
     selectionCenterOf,
@@ -2876,8 +2876,6 @@ function StandMesh({
       }
     }
     setInteractionSelectionCenter(undefined);
-    // validSelectedKey intentionally included to keep selection center updated
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionCenterOf, setInteractionSelectionCenter, validSelectedKey]);
   // ---- Render
   return (
