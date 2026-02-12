@@ -4,6 +4,8 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import SidebarControls from "./SidebarControls";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useTranslation } from "../i18n";
+import ModelUploadPanel from "./ModelUploadPanel";
+import TextureUploadPanel from "./TextureUploadPanel";
 
 const adminEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_PANEL === "true";
 
@@ -56,39 +58,43 @@ export default function AdminShell() {
   };
 
   const isMobile = !isDesktop;
+  const sidebarClassName = sidebarOpen
+    ? "sidebar sidebar-open translate-x-0"
+    : "sidebar sidebar-hidden -translate-x-full";
+
+  const sidebarFallback = (
+    <aside className={sidebarClassName} id="app-sidebar" aria-hidden={!sidebarOpen}>
+      <button type="button" className="sidebar-close" onClick={closeSidebar}>
+        {t("app.menu.close", { defaultValue: "Schließen" })}
+      </button>
+      <div
+        className="sidebar-fallback"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          borderRadius: "12px",
+          background: "#fef2f2",
+          color: "#b91c1c",
+          fontWeight: 700,
+          border: "1px solid #fecdd3",
+          boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
+        }}
+        role="status"
+      >
+        Sidebar konnte nicht geladen werden
+      </div>
+    </aside>
+  );
 
   return (
     <div className="app-root">
       {isMobile && sidebarOpen && <div className="sidebar-backdrop" onClick={closeSidebar} />}
       <div className="app-shell">
-        <aside
-          className={`sidebar ${sidebarOpen ? "sidebar-open" : "sidebar-hidden"}`}
-          id="app-sidebar"
-        >
-          <ErrorBoundary
-            fallback={
-              <div
-                className="sidebar-fallback"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  background: "#fef2f2",
-                  color: "#b91c1c",
-                  fontWeight: 700,
-                  border: "1px solid #fecdd3",
-                  boxShadow: "0 8px 18px rgba(0,0,0,0.08)",
-                }}
-              >
-                Sidebar konnte nicht geladen werden
-              </div>
-            }
-          >
-            <SidebarControls drawerOpen={sidebarOpen} onClose={closeSidebar} />
-          </ErrorBoundary>
-        </aside>
+        <ErrorBoundary fallback={sidebarFallback}>
+          <SidebarControls drawerOpen={sidebarOpen} onClose={closeSidebar} />
+        </ErrorBoundary>
         <main className="main-viewport">
           <button
             type="button"
@@ -99,6 +105,10 @@ export default function AdminShell() {
           >
             {t("app.menu.open", { defaultValue: "Menü & Einstellungen" })}
           </button>
+          <div style={{ width: "100%", maxWidth: 980, margin: "0 auto 12px", padding: "0 12px" }}>
+            <ModelUploadPanel />
+            <TextureUploadPanel />
+          </div>
           <Configurator3D />
         </main>
       </div>

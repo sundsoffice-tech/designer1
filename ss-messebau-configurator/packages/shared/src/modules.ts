@@ -7,7 +7,21 @@ type Dimensions3D = {
   thickness?: number;
 };
 
-export type ModuleKind = "counter" | "screen" | "truss" | "wall" | "frame" | "custom" | string;
+export type ModuleKind =
+  | "counter"
+  | "screen"
+  | "truss"
+  | "wall"
+  | "wall_segment"
+  | "frame"
+  | "cabin"
+  | "custom"
+  | string;
+
+export const MODULE_KEYS = {
+  WALL_SEGMENT: "wall_segment",
+  CABIN: "cabin",
+};
 
 type ModuleVariant = {
   key: string;
@@ -18,6 +32,7 @@ type ModuleVariant = {
   basePrice?: number;
   collider?: ColliderType;
   defaultColor?: string;
+  clearance?: number;
   tags?: string[];
   dimensions?: Dimensions3D;
   screenSize?: string;
@@ -64,3 +79,36 @@ export type ResolvedModuleVariant = ModuleVariant & {
 
 export type ModuleVariantMap = Record<string, ResolvedModuleVariant>;
 export type ModuleCompatibilityIndex = Record<string, Record<string, string[]>>;
+
+export type ModelAttachmentPoint = { x: number; y?: number; z: number; label?: string };
+
+export type CustomModelModule = {
+  id: string;
+  type: "custom";
+  name: string;
+  category?: string;
+  modelPath: string;
+  width: number;
+  depth: number;
+  height: number;
+  clearance?: number;
+  attachmentPoints?: ModelAttachmentPoint[];
+  weight?: number;
+  price?: number;
+  createdAt?: number;
+  sourceFileName?: string;
+};
+
+export type CustomModelCatalog = CustomModelModule[];
+
+export type LampModule = CustomModelModule & {
+  type: "lamp";
+  intensity?: number;
+  color?: string;
+  distance?: number;
+  angle?: number;
+  decay?: number;
+  mount?: "floor" | "truss" | "wall";
+  heightFromFloor?: number;
+  spot?: boolean;
+};

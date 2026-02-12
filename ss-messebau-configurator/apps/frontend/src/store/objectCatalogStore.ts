@@ -16,7 +16,7 @@ import {
   resolveScreenSize,
 } from "../config/objectDimensions";
 
-export type ObjectKind = "counter" | "screen" | "custom";
+export type ObjectKind = "counter" | "screen" | "custom" | "traverse";
 
 export type ObjectTemplate = {
   id: string;
@@ -26,12 +26,16 @@ export type ObjectTemplate = {
   category?: string;
   price?: number;
   /** Optional: eingebettete 3D-Datei (z. B. GLB/GLTF) als Data-URL */
+  assetUrl?: string;
   assetDataUrl?: string;
   assetFileName?: string;
   defaultScale?: number;
   footprint?: { width?: number; depth?: number; height?: number };
   variant?: CounterVariant;
   screenSize?: ScreenSize;
+  wallHeight?: number;
+  cabinSize?: { width: number; depth: number; height?: number };
+  cabinDoorPosition?: WallSide;
   defaults?: {
     withPower?: boolean;
     mount?: ScreenConfig["mount"];
@@ -124,6 +128,28 @@ export const DEFAULT_OBJECT_TEMPLATES: ObjectTemplate[] = [
       thickness: defaultScreenDims.t,
     },
     defaults: { mount: "wall", wallSide: "back", heightFromFloor: 1.6 },
+  },
+  {
+    id: "traverse-basic",
+    name: "Traverse Standard",
+    kind: "traverse",
+    category: "Truss / Rigging",
+    description: "Freistehende Traverse ohne Banner",
+    price: 1250,
+    dimensions: { width: 6, depth: 4, height: 4 },
+    metadata: { type: "traverse", level: "standard" },
+  },
+  {
+    id: "cabin-door",
+    name: "Kabinen-Tür",
+    kind: "custom",
+    category: "Kabine",
+    description: "Türelement für Kabinen-/Lagerraum-Wände",
+    price: 180,
+    dimensions: { width: 0.9, depth: 0.04, height: 2.1, thickness: 0.04 },
+    wallHeight: 2.5,
+    cabinDoorPosition: "front",
+    metadata: { type: "door", mount: "wall" },
   },
 ];
 
@@ -233,11 +259,12 @@ export const templateToCustomObject = (
   tpl: ObjectTemplate,
   position: { x: number; z: number }
 ): CustomObjectConfig => {
+  const assetUrl = tpl.assetUrl ?? tpl.assetDataUrl ?? "";
   return {
     id: `custom-${tpl.id}-${Date.now()}`,
     templateId: tpl.id,
     name: tpl.name,
-    assetUrl: tpl.assetDataUrl ?? "",
+    assetUrl,
     sourceFileName: tpl.assetFileName,
     scale: tpl.defaultScale ?? 1,
     footprint: tpl.footprint

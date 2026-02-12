@@ -1,4 +1,4 @@
-import { fetchApi } from "./apiBase";
+import { fetchApi, runtimeApiDisabled } from "./apiBase";
 import { calcPrice } from "./pricing";
 import type { StandConfig } from "./pricing";
 
@@ -27,7 +27,7 @@ const resolveCustomerId = (options?: PriceRequestOptions) => {
   return options?.customerId || (envCustomerId ? String(envCustomerId) : undefined);
 };
 
-const isRuntimeDisabled = String(import.meta.env.VITE_DISABLE_RUNTIME).toLowerCase() === "true";
+const isRuntimeDisabled = runtimeApiDisabled;
 
 const LOCAL_CONFIG_KEY = "ss-runtime-configs";
 

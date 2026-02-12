@@ -49,7 +49,7 @@
   "accessibility.barrierFreeHint": "Markiert eine freie, kontrastierte Rampenflaeche im 3D-Viewport.",
   "accessibility.rampLength": "Ramplaenge (m)",
   "accessibility.rampHint": "Halte mindestens 0,8 m fuer Rollstuehle und Carts frei.",
-  "accessibility.barrierFreeTag": "Barrierefrei \u2022 Rampe {{length}} m",
+  "accessibility.barrierFreeTag": "Barrierefrei • Rampe {{length}} m",
   "guided.title": "Gefuehrter Ablauf",
   "guided.subtitle": "Step-by-Step",
   "guided.lead": "Beginnen Sie mit Flaeche & Standtyp, veredeln Sie danach Waende/Boden und platzieren Sie Module. Der Richtpreis aktualisiert sich live.",
@@ -128,8 +128,8 @@
   "presets.collision.desc": "Mock-Stand mit vielen Objekten",
   "presets.collision.tooltip": "Laedt den Mock-Stand mit eng stehenden Modulen, um Kollisionen zu testen",
   "collision.title": "Kollisionsschutz",
-  "collision.subtitle": "AABB + Mindestabstand",
-  "collision.body": "Bewegte Objekte (Tresen, Screens, Kabine, Truss-Griff) prallen an einem AABB-Sicherheitsabstand ab. Bei drohender Ueberschneidung erscheint ein roter Wireframe + Hinweis. Der Mindestabstand laesst sich ueber modules.collisionClearance im Store konfigurieren (Playground: 0,25 m).",
+  "collision.subtitle": "OBB + typabhaengige Clearance",
+  "collision.body": "Bewegte Objekte nutzen orientierte Bounding Boxes mit typabhaengiger Clearance. Konfigurierbar global ueber modules.collisionClearance oder je Objekt via clearance; bei Ueberschneidung roter Wireframe + Hinweis.",
   "basic.title": "Grunddaten",
   "basic.subtitle": "Flaeche & Standtyp",
   "basic.width": "Breite (m)",
@@ -352,8 +352,8 @@
   "contextMenu.floor.upload": "Boden-Textur hochladen",
   "contextMenu.floor.raised.enable": "Raised Floor aktivieren",
   "contextMenu.floor.raised.disable": "Raised Floor deaktivieren",
-  "contextMenu.banner.upload": "Banner-Motiv hochladen ...",
-  "contextMenu.banner.clear": "Banner-Motiv entfernen",
+  "contextMenu.banner.upload": "Banner-Bild hochladen",
+  "contextMenu.banner.clear": "Banner-Bild entfernen",
   "contextMenu.counter.basic": "Variante: Basic",
   "contextMenu.counter.premium": "Variante: Premium",
   "contextMenu.counter.corner": "Variante: Corner",
@@ -445,8 +445,6 @@
   "contextMenu.panel.redistribute": "Paneele neu verteilen",
   "contextMenu.finish": "Finish: {label}",
   "contextMenu.finish.remove": "Finish entfernen",
-  "contextMenu.banner.upload": "Banner-Bild hochladen",
-  "contextMenu.banner.clear": "Banner-Bild entfernen",
   "contextMenu.counter.color": "Farbe anpassen",
   "contextMenu.counter.colorTitle": "Tresen {id}",
   "contextMenu.table.color": "Farbe anpassen",
@@ -594,5 +592,3 @@
   "contextMenu.toggleCollision": "Kollision beachten",
   "contextMenu.separator": "---"
 }
-
-

@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { safeNumber } from "@ss/shared";
 
 const DEFAULT_DATA_DIR = join(process.cwd(), "data");
 const DEFAULT_FILE_NAME = "configs.json";
+
+export const safeNumber = (value, fallback) => {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+};
 
 const isValidRecord = (item) =>
   item &&

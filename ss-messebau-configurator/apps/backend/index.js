@@ -1,4 +1,3 @@
-import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import fs from "fs";
@@ -8,11 +7,22 @@ import { spawn } from "child_process";
 import sharp from "sharp";
 import { OpenAI } from "openai";
 import { z } from "zod";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { aiRouter } from "./src/ai/router.js";
 import { buildSceneAabbs, DEFAULT_CLEARANCE, intersects } from "./shared/collision.js";
 import { PersistentConfigStore, safeNumber } from "./shared/configStore.js";
 import { calcPrice } from "./shared/pricing.js";
 import { loadPricingModel } from "./shared/pricingData.js";
+import { loadModuleCatalog as loadModuleCatalogFromFile, mergeCustomModulesIntoCatalog } from "./shared/moduleCatalog.js";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Prefer the monorepo root .env, but fall back to a local one if present.
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 const app = express();
 
@@ -25,8 +35,26 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024 },
 });
+const modelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 64 * 1024 * 1024 },
+});
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 80 * 1024 * 1024 },
+});
 const uploadDir = path.resolve(process.cwd(), "uploads");
+const publicUploadsDir = path.resolve(process.cwd(), "public", "uploads");
+const modelsDir = path.join(publicUploadsDir, "models");
+const modelsCatalogPath = path.join(modelsDir, "catalog.json");
+const texturesDir = path.join(publicUploadsDir, "textures");
+const texturesCatalogPath = path.join(texturesDir, "catalog.json");
+const videosDir = path.join(publicUploadsDir, "videos");
+const sharedTextureLibraryPath = path.resolve(__dirname, "..", "..", "packages", "shared", "src", "textures.ts");
 await fs.promises.mkdir(uploadDir, { recursive: true });
+await fs.promises.mkdir(modelsDir, { recursive: true });
+await fs.promises.mkdir(texturesDir, { recursive: true });
+await fs.promises.mkdir(videosDir, { recursive: true });
 
 const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -52,6 +80,220 @@ const clampToPotBox = (w, h, maxEdge = 4096) => ({
   height: nearestPowerOfTwoFloor(h, maxEdge),
 });
 
+const slugify = (value) =>
+  (value || "")
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "model";
+
+const toArrayBuffer = (buffer) =>
+  buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+const parseSnapPoints = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((p) => ({
+        x: Number(p.x),
+        y: typeof p.y === "number" ? Number(p.y) : undefined,
+        z: Number(p.z),
+      }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z));
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((p) => ({
+          x: Number(p.x),
+          y: typeof p.y === "number" ? Number(p.y) : undefined,
+          z: Number(p.z),
+        }))
+        .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z));
+    }
+  } catch {
+    // plain string format handled below
+  }
+
+  return String(raw)
+    .split(/\n|;/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/[,|\s]+/).map((part) => Number(part)))
+    .filter((coords) => coords.length >= 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1]))
+    .map((coords) => {
+      const [xRaw, second, third] = coords;
+      const x = xRaw;
+      const y = Number.isFinite(third) ? second : undefined;
+      const z = Number.isFinite(third) ? third : second;
+      return { x, y, z };
+    })
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z));
+};
+
+const ensureNodeImageEnv = () => {
+  if (typeof globalThis.window === "undefined") {
+    globalThis.window = globalThis;
+  }
+  if (typeof globalThis.Image === "undefined") {
+    class ImageMock {
+      constructor() {
+        this.onload = null;
+        this.onerror = null;
+        this.crossOrigin = null;
+      }
+
+      set src(_value) {
+        if (typeof setImmediate === "function") {
+          setImmediate(() => this.onload?.({ target: this }));
+        } else {
+          setTimeout(() => this.onload?.({ target: this }), 0);
+        }
+      }
+    }
+    globalThis.Image = ImageMock;
+    globalThis.HTMLImageElement = ImageMock;
+  }
+  if (typeof globalThis.document === "undefined") {
+    globalThis.document = {
+      createElement: () => new globalThis.Image(),
+      createElementNS: () => new globalThis.Image(),
+    };
+  }
+  if (typeof globalThis.createImageBitmap === "undefined") {
+    globalThis.createImageBitmap = async (image) => ({
+      close: () => (typeof image?.close === "function" ? image.close() : undefined),
+    });
+  }
+};
+
+const extractSizeFromObject = (object) => {
+  if (!object) throw new Error("Model contains no scene graph");
+  if (typeof object.updateMatrixWorld === "function") {
+    object.updateMatrixWorld(true);
+  }
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  return { size, center };
+};
+
+const measureModelBuffer = async (buffer, ext) => {
+  ensureNodeImageEnv();
+  const normalizedExt = (ext || "").toLowerCase();
+  const arrayBuffer = toArrayBuffer(buffer);
+
+  if (normalizedExt === ".fbx") {
+    const loader = new FBXLoader();
+    const scene = loader.parse(arrayBuffer, "");
+    return extractSizeFromObject(scene);
+  }
+
+  const loader = new GLTFLoader();
+  const gltf = await loader.parseAsync(arrayBuffer, "");
+  return extractSizeFromObject(gltf.scene);
+};
+
+const readModelCatalog = async () => {
+  try {
+    const raw = await fs.promises.readFile(modelsCatalogPath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return [];
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      console.warn("[models] Failed to read catalog", err);
+    }
+    return [];
+  }
+};
+
+const writeModelCatalog = async (entries) => {
+  await fs.promises.writeFile(modelsCatalogPath, JSON.stringify(entries, null, 2), "utf8");
+};
+
+const readTextureCatalog = async () => {
+  try {
+    const raw = await fs.promises.readFile(texturesCatalogPath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return [];
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      console.warn("[textures] Failed to read catalog", err);
+    }
+    return [];
+  }
+};
+
+const writeTextureCatalog = async (entries) => {
+  await fs.promises.writeFile(texturesCatalogPath, JSON.stringify(entries, null, 2), "utf8");
+};
+
+const renderTextureLibrarySource = (entries) => {
+  const stringify = (value) => JSON.stringify(value ?? "");
+  const header = `export type TextureCategory = "wall" | "floor" | "banner" | "generic";
+export type TextureFit = "stretch" | "cover";
+
+export type TextureEntry = {
+  id: string;
+  name: string;
+  url: string;
+  category: TextureCategory;
+  fit?: TextureFit;
+  width?: number;
+  height?: number;
+  size?: number;
+  uploadedAt?: number;
+  fileName?: string;
+  mipmaps?: string[];
+  ktx2Url?: string;
+  format?: string;
+};
+
+export type TextureLibrary = TextureEntry[];
+`;
+
+  const body = entries
+    .map((entry) => {
+      const parts = [
+        `id: ${stringify(entry.id)}`,
+        `name: ${stringify(entry.name)}`,
+        `url: ${stringify(entry.url)}`,
+        `category: ${stringify(entry.category)}`,
+      ];
+      if (entry.fit) parts.push(`fit: ${stringify(entry.fit)}`);
+      if (Number.isFinite(entry.width)) parts.push(`width: ${Number(entry.width)}`);
+      if (Number.isFinite(entry.height)) parts.push(`height: ${Number(entry.height)}`);
+      if (Number.isFinite(entry.size)) parts.push(`size: ${Number(entry.size)}`);
+      if (Number.isFinite(entry.uploadedAt)) parts.push(`uploadedAt: ${Number(entry.uploadedAt)}`);
+      if (entry.fileName) parts.push(`fileName: ${stringify(entry.fileName)}`);
+      if (Array.isArray(entry.mipmaps) && entry.mipmaps.length) parts.push(`mipmaps: ${JSON.stringify(entry.mipmaps)}`);
+      if (entry.ktx2Url) parts.push(`ktx2Url: ${stringify(entry.ktx2Url)}`);
+      if (entry.format) parts.push(`format: ${stringify(entry.format)}`);
+      return `  { ${parts.join(", ")} },`;
+    })
+    .join("\n");
+
+  return `${header}
+export const textureLibrary: TextureLibrary = [
+${body}
+];
+`;
+};
+
+const writeSharedTextureLibrary = async (entries) => {
+  try {
+    const source = renderTextureLibrarySource(entries);
+    await fs.promises.writeFile(sharedTextureLibraryPath, source, "utf8");
+  } catch (err) {
+    console.warn("[textures] Failed to sync shared texture library", err);
+  }
+};
+
 const encodeKtx2 = async (inputPath, outputPath) => {
   const bin = process.env.KTX2_BIN || process.env.BASISU_BIN || "basisu";
   const args = ["-ktx2", "-uastc", "4", "-zcmp", "2", "-mipmap", "-y_flip", "-output_file", outputPath, inputPath];
@@ -68,12 +310,17 @@ const encodeKtx2 = async (inputPath, outputPath) => {
   });
 };
 
+await writeSharedTextureLibrary(await readTextureCatalog());
+
 app.use(
   cors({
     origin: corsOrigins.length ? corsOrigins : true,
   })
 );
 app.use(express.json({ limit: "1mb" }));
+app.use("/uploads/models", express.static(modelsDir));
+app.use("/uploads/textures", express.static(texturesDir));
+app.use("/uploads", express.static(publicUploadsDir));
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/ai", aiRouter);
 
@@ -248,6 +495,8 @@ app.post("/api/upload/banner", upload.single("file"), async (req, res) => {
     }
 
     const id = `banner-${Date.now()}-${Math.round(Math.random() * 1e5)}`;
+    const nameInput = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const textureName = nameInput || file.originalname || id;
     const meta = await sharp(file.buffer).metadata();
     const sourceWidth = meta.width ?? 0;
     const sourceHeight = meta.height ?? 0;
@@ -326,6 +575,23 @@ app.post("/api/upload/banner", upload.single("file"), async (req, res) => {
       }
     }
 
+    const textureEntry = {
+      id,
+      name: textureName,
+      url: `/uploads/${baseName}`,
+      category: "banner",
+      width: webpWidth,
+      height: webpHeight,
+      size: baseStats.size,
+      uploadedAt: Date.now(),
+      fileName: file.originalname,
+      mipmaps,
+      ktx2Url,
+      format: ktx2Url ? "ktx2+webp" : "webp",
+    };
+    const textureCatalog = await readTextureCatalog();
+    await writeTextureCatalog([textureEntry, ...textureCatalog.filter((t) => t?.id !== textureEntry.id)]);
+
     res.json({
       url: `/uploads/${baseName}`,
       webpUrl: `/uploads/${baseName}`,
@@ -336,10 +602,233 @@ app.post("/api/upload/banner", upload.single("file"), async (req, res) => {
       size: baseStats.size,
       format: ktx2Url ? "ktx2+webp" : "webp",
       pot: ktx2Url ? potBox : undefined,
+      texture: textureEntry,
     });
   } catch (err) {
     console.error("Banner upload failed", err);
     res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+app.get("/api/models", async (_req, res) => {
+  const catalog = await readModelCatalog();
+  res.json({ models: catalog, count: catalog.length });
+});
+
+app.get("/api/textures", async (_req, res) => {
+  const catalog = await readTextureCatalog();
+  res.json({ textures: catalog, count: catalog.length });
+});
+
+app.post("/api/uploadTexture", upload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const maxSizeBytes = 12 * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return res
+      .status(413)
+      .json({ error: `File too large (max ${(maxSizeBytes / 1024 / 1024).toFixed(0)} MB)` });
+  }
+  const allowed = ["image/png", "image/jpeg", "image/webp"];
+  if (!allowed.some((type) => file.mimetype === type || file.mimetype?.includes(type.split("/")[1]))) {
+    return res.status(400).json({ error: "Nur PNG, JPG oder WebP erlaubt" });
+  }
+
+  try {
+    const nameInput = (req.body?.name || file.originalname || "Texture").toString();
+    const name = nameInput.trim() || "Texture";
+    const categoryRaw = (req.body?.category || "generic").toString().toLowerCase();
+    const category = ["wall", "floor", "banner"].includes(categoryRaw) ? categoryRaw : "generic";
+    const fitRaw = (req.body?.fit || req.body?.aspectMode || "").toString().toLowerCase();
+    const fit = fitRaw === "stretch" ? "stretch" : "cover";
+    const id = `${slugify(name)}-${Date.now().toString(36)}`;
+    const ext = path.extname(file.originalname || ".png") || ".png";
+    const targetFile = `${id}${ext}`;
+    const targetPath = path.join(texturesDir, targetFile);
+
+    await fs.promises.writeFile(targetPath, file.buffer);
+
+    let width;
+    let height;
+    try {
+      const meta = await sharp(file.buffer).metadata();
+      width = meta.width;
+      height = meta.height;
+    } catch {
+      // ignore meta errors
+    }
+
+    const entry = {
+      id,
+      name,
+      url: `/uploads/textures/${targetFile}`,
+      category,
+      fit,
+      width,
+      height,
+      size: file.size,
+      uploadedAt: Date.now(),
+      fileName: file.originalname,
+    };
+
+    const catalog = await readTextureCatalog();
+    const next = [entry, ...catalog.filter((t) => t?.id !== entry.id)];
+    await writeTextureCatalog(next);
+    await writeSharedTextureLibrary(next);
+
+    res.json({ ok: true, texture: entry });
+  } catch (err) {
+    console.error("Texture upload failed", err);
+    res.status(500).json({ error: "Texture upload failed" });
+  }
+});
+
+app.post("/api/upload/video", videoUpload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const allowed = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/mpeg", "video/x-m4v"];
+  const okType = allowed.some((type) => file.mimetype === type || file.mimetype?.includes(type.split("/")[1]));
+  if (!okType && !file.mimetype?.startsWith("video/")) {
+    return res.status(400).json({ error: "Ungueltiges Videoformat (mp4/webm/ogg/mov)." });
+  }
+
+  try {
+    const baseName = path.basename(file.originalname || "video", path.extname(file.originalname || ""));
+    const id = `${slugify(baseName) || "video"}-${Date.now().toString(36)}`;
+    const extRaw = (path.extname(file.originalname || "") || ".mp4").toLowerCase();
+    const safeExt = [".mp4", ".webm", ".ogg", ".mov", ".m4v"].includes(extRaw) ? extRaw : ".mp4";
+    const targetFile = `${id}${safeExt}`;
+    const targetPath = path.join(videosDir, targetFile);
+
+    await fs.promises.writeFile(targetPath, file.buffer);
+    const stats = await fs.promises.stat(targetPath);
+
+    res.json({
+      ok: true,
+      url: `/uploads/videos/${targetFile}`,
+      name: file.originalname || targetFile,
+      size: stats.size,
+      type: file.mimetype,
+      id,
+    });
+  } catch (err) {
+    console.error("Video upload failed", err);
+    res.status(500).json({ error: "Video upload failed" });
+  }
+});
+
+app.post("/api/uploadModel", modelUpload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const maxSizeBytes = 64 * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return res
+      .status(413)
+      .json({ error: `File too large (max ${(maxSizeBytes / 1024 / 1024).toFixed(0)} MB)` });
+  }
+  const ext = (path.extname(file.originalname || "") || ".glb").toLowerCase();
+  const allowedExt = new Set([".glb", ".gltf", ".fbx"]);
+  if (!allowedExt.has(ext)) {
+    return res.status(400).json({ error: "Ungueltiger Dateityp (.glb/.gltf/.fbx erwartet)" });
+  }
+
+  try {
+    const nameInput = (req.body?.name || path.basename(file.originalname || "3d-model", ext)).toString();
+    const name = nameInput.trim() || "Custom 3D Modell";
+    const categoryRaw = typeof req.body?.category === "string" ? req.body.category.trim() : "";
+    const category = categoryRaw.length ? categoryRaw : undefined;
+    const basePrice = safeNumber(req.body?.price, undefined);
+    const clearance = safeNumber(req.body?.clearance, undefined);
+    const weight = safeNumber(req.body?.weight, undefined);
+    const snapPoints = parseSnapPoints(req.body?.snapPoints);
+    const type = req.body?.type === "lamp" ? "lamp" : "custom";
+    const lampIntensity = safeNumber(req.body?.intensity, undefined);
+    const lampDistance = safeNumber(req.body?.distance, undefined);
+    const lampAngle = safeNumber(req.body?.angle, undefined);
+    const lampDecay = safeNumber(req.body?.decay, undefined);
+    const lampSpot = String(req.body?.spot ?? "").toLowerCase() === "true";
+    const lampMount =
+      req.body?.mount === "wall" || req.body?.mount === "truss" || req.body?.mount === "floor"
+        ? req.body?.mount
+        : undefined;
+    const lampWallSide =
+      req.body?.wallSide === "back" || req.body?.wallSide === "left" || req.body?.wallSide === "right"
+        ? req.body?.wallSide
+        : undefined;
+    const heightFromFloor = safeNumber(req.body?.heightFromFloor, undefined);
+    const lampColor = typeof req.body?.color === "string" ? req.body.color : undefined;
+
+    const id = `${slugify(name)}-${Date.now().toString(36)}`;
+    const fileName = `${id}${ext}`;
+    const targetPath = path.join(modelsDir, fileName);
+    await fs.promises.writeFile(targetPath, file.buffer);
+
+    const measurement = await measureModelBuffer(file.buffer, ext);
+    const width = Number((measurement.size?.x ?? 0).toFixed(3));
+    const depth = Number((measurement.size?.z ?? 0).toFixed(3));
+    const height = Number((measurement.size?.y ?? 0).toFixed(3));
+    if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) {
+      return res.status(400).json({ error: "Bounding-Box konnte nicht ermittelt werden" });
+    }
+
+    const moduleEntry = {
+      id,
+      type,
+      name,
+      category,
+      modelPath: `/uploads/models/${fileName}`,
+      width,
+      depth,
+      height,
+      clearance: Number.isFinite(clearance) ? clearance : undefined,
+      attachmentPoints: snapPoints.length ? snapPoints : undefined,
+      weight: Number.isFinite(weight) ? weight : undefined,
+      price: Number.isFinite(basePrice) ? basePrice : undefined,
+      createdAt: Date.now(),
+      sourceFileName: file.originalname,
+      intensity: type === "lamp" ? lampIntensity : undefined,
+      distance: type === "lamp" ? lampDistance : undefined,
+      angle: type === "lamp" ? lampAngle : undefined,
+      decay: type === "lamp" ? lampDecay : undefined,
+      spot: type === "lamp" ? lampSpot : undefined,
+      mount: type === "lamp" ? lampMount : undefined,
+      wallSide: type === "lamp" ? lampWallSide : undefined,
+      heightFromFloor: type === "lamp" ? heightFromFloor : undefined,
+      color: type === "lamp" ? lampColor : undefined,
+    };
+
+    const catalog = await readModelCatalog();
+    const nextCatalog = [moduleEntry, ...catalog.filter((entry) => entry?.id !== moduleEntry.id)];
+    await writeModelCatalog(nextCatalog);
+
+    const center = measurement.center
+      ? {
+          x: Number((measurement.center.x ?? 0).toFixed(3)),
+          y: Number((measurement.center.y ?? 0).toFixed(3)),
+          z: Number((measurement.center.z ?? 0).toFixed(3)),
+        }
+      : undefined;
+
+    res.json({
+      ok: true,
+      module: moduleEntry,
+      url: moduleEntry.modelPath,
+      dimensions: { width, depth, height },
+      center,
+      snapPoints: moduleEntry.attachmentPoints,
+    });
+  } catch (err) {
+    console.error("Model upload failed", err);
+    res.status(500).json({
+      error: "Model upload failed",
+      details: err instanceof Error ? err.message : "Unknown error",
+    });
   }
 });
 
@@ -362,12 +851,20 @@ app.get("/api/runtime/pricing", async (req, res) => {
 app.get("/api/catalog/modules", async (req, res) => {
   const customerId = typeof req.query.customerId === "string" ? req.query.customerId : undefined;
   try {
-    const pricing = await loadPricingModel({ customerId });
+    const [moduleCatalog, pricing, modelCatalog] = await Promise.all([
+      loadModuleCatalogFromFile(),
+      loadPricingModel({ customerId }).catch(() => null),
+      readModelCatalog(),
+    ]);
+    const mergedCatalog = mergeCustomModulesIntoCatalog(moduleCatalog.catalog, modelCatalog);
     res.json({
-      modules: pricing.model.modules || {},
-      source: pricing.source,
-      customer: pricing.customer,
-      fetchedAt: pricing.fetchedAt,
+      modules: mergedCatalog.modules,
+      bundles: mergedCatalog.bundles ?? [],
+      source: moduleCatalog.source,
+      fetchedAt: moduleCatalog.fetchedAt,
+      customer: pricing?.customer,
+      pricingSource: pricing?.source,
+      customModelCount: modelCatalog.length,
     });
   } catch (err) {
     console.error("Failed to load module catalog", err);

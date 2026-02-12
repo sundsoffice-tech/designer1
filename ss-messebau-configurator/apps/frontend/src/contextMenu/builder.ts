@@ -1,9 +1,16 @@
-import { contextMenuConfig } from "../config/contextMenu";
+import { contextMenuConfig, contextMenuPresets } from "../config/contextMenu";
 import { canExecuteCommandForRole, isCommandVisibleForRole } from "../config/roles";
 import type { CommandId } from "../store/commandTypes";
 import { getCommandDefinition } from "../store/commandRegistry";
 import { getFrequentCommands } from "./analytics";
-import type { BuiltContextMenu, ContextMenuContext, ContextMenuItem } from "./types";
+import type {
+  BuiltContextMenu,
+  ContextMenuContext,
+  ContextMenuItem,
+  ContextMenuItemConfig,
+  ContextMenuPreset,
+  MenuSelectionFilter,
+} from "./types";
 
 const byGroup = (items: ContextMenuItem[]): ContextMenuItem[] => {
   const ordered: ContextMenuItem[] = [];
@@ -38,51 +45,58 @@ const toItem = (id: CommandId, overrides: Partial<ContextMenuItem>, context: Con
   };
 };
 
-const buildEmptyAreaMenu = (context: ContextMenuContext): ContextMenuItem[] => {
-  const items: (ContextMenuItem | null)[] = [
-    toItem("centerCameraHere", { icon: "camera", group: "scene" }, context),
-    toItem("selectAll", { icon: "select", group: "selection" }, context),
-    toItem("clearSelection", { icon: "select", group: "selection" }, context),
-  ];
-  return items.filter(Boolean) as ContextMenuItem[];
+const matchesSelection = (filter: MenuSelectionFilter | undefined, selectionCount: number) => {
+  if (filter === "none") return selectionCount === 0;
+  if (filter === "single") return selectionCount === 1;
+  if (filter === "multi") return selectionCount >= 2;
+  if (filter === "any") return selectionCount > 0;
+  return true;
 };
 
-const buildScreenMenu = (context: ContextMenuContext): ContextMenuItem[] => {
-  const items: (ContextMenuItem | null)[] = [
-    toItem("focusCamera", { icon: "focus", group: "object" }, context),
-    toItem("duplicate", { icon: "duplicate", group: "object" }, context),
-    toItem("delete", { icon: "delete", group: "object", destructive: true }, context),
-    toItem("changeScreenVideo", { icon: "screen", group: "object" }, context),
-    toItem("changeMaterial", { icon: "material", group: "object" }, context),
-    toItem("resetTransform", { icon: "reset", group: "object" }, context),
-    toItem("snapToGrid", { icon: "grid", group: "object" }, context),
-  ];
-  return items.filter(Boolean) as ContextMenuItem[];
+const matchesPreset = (preset: ContextMenuPreset, context: ContextMenuContext): boolean => {
+  const selectionCount = context.selectionCount ?? context.selectionIds.length;
+  if (!matchesSelection(preset.selection, selectionCount)) return false;
+  if (preset.objectTypes?.length) {
+    const type = context.objectType ?? context.selectionType;
+    if (!type) return false;
+    return preset.objectTypes.includes(type);
+  }
+  return true;
 };
 
-const buildCounterMenu = (context: ContextMenuContext): ContextMenuItem[] => {
-  const items: (ContextMenuItem | null)[] = [
-    toItem("focusCamera", { icon: "focus", group: "object" }, context),
-    toItem("duplicate", { icon: "duplicate", group: "object" }, context),
-    toItem("delete", { icon: "delete", group: "object", destructive: true }, context),
-    toItem("changeMaterial", { icon: "material", group: "object" }, context),
-    toItem("resetTransform", { icon: "reset", group: "object" }, context),
-    toItem("alignToGrid", { icon: "grid", group: "object" }, context),
-  ];
-  return items.filter(Boolean) as ContextMenuItem[];
+const resolvePreset = (context: ContextMenuContext): ContextMenuPreset | null => {
+  const selectionCount = context.selectionCount ?? context.selectionIds.length;
+  const typedContext = { ...context, selectionCount };
+  const directMatch = contextMenuPresets.find((preset) => matchesPreset(preset, typedContext));
+  if (directMatch) return directMatch;
+  const selectionFallback = contextMenuPresets.find(
+    (preset) => preset.selection === "any" && !preset.objectTypes?.length
+  );
+  if (selectionFallback) return selectionFallback;
+  const emptyFallback = contextMenuPresets.find((preset) => preset.selection === "none");
+  return emptyFallback ?? null;
 };
 
-const buildGenericSelectionMenu = (context: ContextMenuContext): ContextMenuItem[] => {
-  const items: (ContextMenuItem | null)[] = [
-    toItem("focusCamera", { icon: "focus", group: "selection" }, context),
-    toItem("duplicate", { icon: "duplicate", group: "selection" }, context),
-    toItem("delete", { icon: "delete", group: "selection", destructive: true }, context),
-    toItem("resetTransform", { icon: "reset", group: "selection" }, context),
-    toItem("snapToGrid", { icon: "grid", group: "selection" }, context),
-    toItem("clearSelection", { icon: "select", group: "selection" }, context),
-  ];
-  return items.filter(Boolean) as ContextMenuItem[];
+const fromConfig = (config: ContextMenuItemConfig, context: ContextMenuContext): ContextMenuItem | null => {
+  if (config.when && !config.when(context)) return null;
+  const item = toItem(
+    config.commandId,
+    {
+      id: config.id ?? config.commandId,
+      icon: config.icon,
+      group: config.group,
+      destructive: config.destructive,
+      separatorBefore: config.separatorBefore,
+    },
+    context
+  );
+  if (!item) return null;
+  const disabled = typeof config.disabled === "function" ? config.disabled(context) : config.disabled;
+  return disabled ? { ...item, disabled: true } : item;
 };
+
+const buildFromPreset = (preset: ContextMenuPreset, context: ContextMenuContext): ContextMenuItem[] =>
+  preset.items.map((cfg) => fromConfig(cfg, context)).filter(Boolean) as ContextMenuItem[];
 
 const buildFrequent = (context: ContextMenuContext): ContextMenuItem[] => {
   if (!contextMenuConfig.enablePersonalizedGroups) return [];
@@ -93,22 +107,14 @@ const buildFrequent = (context: ContextMenuContext): ContextMenuItem[] => {
 };
 
 export const buildContextMenu = (context: ContextMenuContext): BuiltContextMenu => {
-  const items: ContextMenuItem[] = [];
   const selectionCount = context.selectionCount ?? context.selectionIds.length;
   const baseContext: ContextMenuContext = { ...context, selectionCount };
-  const frequent = buildFrequent(baseContext);
-  items.push(...frequent);
-
-  if (context.objectType === "screen") {
-    items.push(...buildScreenMenu(baseContext));
-  } else if (context.objectType === "counter") {
-    items.push(...buildCounterMenu(baseContext));
-  } else if (!context.objectType && selectionCount === 0) {
-    items.push(...buildEmptyAreaMenu(baseContext));
-  } else {
-    items.push(...buildGenericSelectionMenu(baseContext));
+  const preset = resolvePreset(baseContext);
+  const items: ContextMenuItem[] = [];
+  items.push(...buildFrequent(baseContext));
+  if (preset) {
+    items.push(...buildFromPreset(preset, baseContext));
   }
-
   const ordered = byGroup(items);
   return {
     items: ordered,

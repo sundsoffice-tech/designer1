@@ -39,7 +39,7 @@
   "mode.guardBody": "Switch to admin mode to maintain the object catalog, import custom 3D assets or load the collision playground preset.",
   "mode.enableAdmin": "Switch to admin mode",
   "accessibility.contrastLabel": "Contrast",
-  "accessibility.prefersHigh": "Browser reports prefers-contrast: more \u2013 high contrast recommended.",
+  "accessibility.prefersHigh": "Browser reports prefers-contrast: more – high contrast recommended.",
   "accessibility.prefersStandard": "Browser reports normal contrast.",
   "accessibility.wcagHint": "High-contrast palette targets WCAG AA/AAA.",
   "accessibility.standard": "Standard",
@@ -49,7 +49,7 @@
   "accessibility.barrierFreeHint": "Marks a barrier-free ramp zone inside the 3D viewport.",
   "accessibility.rampLength": "Ramp length (m)",
   "accessibility.rampHint": "Keep at least 0.8 m clear for wheelchairs and carts.",
-  "accessibility.barrierFreeTag": "Accessible \u2022 ramp {{length}} m",
+  "accessibility.barrierFreeTag": "Accessible • ramp {{length}} m",
   "guided.title": "Guided Flow",
   "guided.subtitle": "Step-by-step",
   "guided.lead": "Start with area & type, then refine walls/floor and place modules. The guide price updates live.",
@@ -128,8 +128,8 @@
   "presets.collision.desc": "Mock stand with many objects",
   "presets.collision.tooltip": "Loads the mock stand with dense modules to test collisions",
   "collision.title": "Collision guard",
-  "collision.subtitle": "AABB + clearance",
-  "collision.body": "Moved objects (counters, screens, cabin, truss handle) bounce at a safety clearance. If overlap threatens, a red wireframe and hint appear. Minimum distance can be tuned via modules.collisionClearance in the store (playground: 0.25 m).",
+  "collision.subtitle": "OBB + per-type clearance",
+  "collision.body": "Moved objects use oriented bounding boxes with per-type clearance. Configure via modules.collisionClearance globally or per object clearance; overlapping shows red wireframe + hint.",
   "basic.title": "Basics",
   "basic.subtitle": "Area & stand type",
   "basic.width": "Width (m)",
@@ -592,4 +592,3 @@
   "contextMenu.toggleCollision": "Respect collisions",
   "contextMenu.separator": "---"
 }
-

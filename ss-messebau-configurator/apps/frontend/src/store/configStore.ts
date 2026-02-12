@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { calcPrice, calcPriceDetailed, type PriceBreakdown } from "../lib/pricing";
+import { runtimeApiDisabled } from "../lib/apiBase";
 
 import {
 
@@ -90,7 +91,7 @@ import { normalizeCounterPlacement } from "../lib/counters";
 
 
 
-const RUNTIME_API_DISABLED = import.meta.env.VITE_DISABLE_RUNTIME === "true";
+const RUNTIME_API_DISABLED = runtimeApiDisabled;
 
 const DEFAULT_CUSTOMER_ID = import.meta.env.VITE_CUSTOMER_ID;
 
@@ -117,6 +118,32 @@ const notifyWallListeners = (event: WallChangeEvent) => {
     }
   });
 };
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== typeof b) return false;
+  if (a === null || b === null) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== (b as unknown[]).length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (!deepEqual(a[i], (b as unknown[])[i])) return false;
+    }
+    return true;
+  }
+  if (typeof a === "object") {
+    const objA = a as Record<string, unknown>;
+    const objB = b as Record<string, unknown>;
+    const keysA = Object.keys(objA);
+    const keysB = Object.keys(objB);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+      if (!Object.prototype.hasOwnProperty.call(objB, key)) return false;
+      if (!deepEqual(objA[key], objB[key])) return false;
+    }
+    return true;
+  }
+  return false;
+}
 
 type BasePresetName = "small" | "medium" | "premium";
 type BundlePresetName = "starterBundle" | "proBundle" | "premiumBundle";
@@ -629,7 +656,7 @@ function buildWalls(
 
   const prev = modules.walls ?? {};
 
-  const baseHeight = cfg.height || 2.5;
+  const baseHeight = modules.wallHeight ?? (cfg.height || 2.5);
 
 
 
@@ -900,10 +927,16 @@ function sanitizeWallDetail(
       entry.surface && VALID_WALL_SURFACES.has(entry.surface) ? (entry.surface as WallSurface) : undefined;
 
     const finishId = entry.finishId;
+    const textureUrl = typeof entry.textureUrl === "string" ? entry.textureUrl : undefined;
+    const textureFit = entry.textureFit === "cover" || entry.textureFit === "stretch" ? entry.textureFit : undefined;
+    const textureRepeat =
+      Array.isArray(entry.textureRepeat) && entry.textureRepeat.length >= 2
+        ? ([Number(entry.textureRepeat[0]) || 1, Number(entry.textureRepeat[1]) || 1] as [number, number])
+        : undefined;
 
-    if (surface || height !== undefined || finishId !== undefined) {
+    if (surface || height !== undefined || finishId !== undefined || textureUrl || textureFit || textureRepeat) {
 
-      cleaned[side] = { ...entry, surface, height, finishId };
+      cleaned[side] = { ...entry, surface, height, finishId, textureUrl, textureFit, textureRepeat };
 
     }
 
@@ -1353,7 +1386,7 @@ function buildWallLightsFromCounts(
 
   const depth = cfg.depth;
 
-  const wallHeight = cfg.height || 2.5;
+  const wallHeight = modules.wallHeight ?? (cfg.height || 2.5);
 
   const defaultHeightFromFloor = Math.max(0.5, wallHeight - 0.3);
 
@@ -1513,6 +1546,8 @@ function mergeModules(
 
     "trussHeightOffset",
 
+    "trussSegmentLength",
+
     "trussLightsFront",
 
     "trussLightsBack",
@@ -1558,6 +1593,10 @@ function mergeModules(
     "raisedFloor",
 
     "collisionClearance",
+    "trussClearance",
+    "gridStep",
+    "snapStep",
+    "snapToStructure",
 
   ];
 
@@ -1897,7 +1936,15 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
   const cfgClamped: StandConfig = { ...cfg, width, depth };
 
-  const baseHeight = cfgClamped.height || 2.5;
+  const toNumberOrUndefined = (val: unknown) => {
+    if (typeof val === "number" && Number.isFinite(val)) return val;
+    const num = Number(val);
+    return Number.isFinite(num) ? num : undefined;
+  };
+
+  const baseHeight =
+    toNumberOrUndefined(cfgClamped.modules?.wallHeight) ??
+    (cfgClamped.height || 2.5);
 
 
 
@@ -1929,7 +1976,39 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
 
 
+  modules.wallHeight = toNumberOrUndefined(modules.wallHeight) ?? baseHeight;
+  modules.cabinSize = modules.cabinSize ?? undefined;
+  modules.cabinDoorPosition =
+    modules.cabinDoorPosition ?? (modules.cabin?.doorSide as WallSide | undefined) ?? (modules.storageDoorSide as WallSide | undefined);
+
   modules.countersWall = normalizeCounterPlacement(modules.countersWall);
+  const defaultTraverseHeight = baseHeight + 0.5;
+  const traverseHeightInput = toNumberOrUndefined(cfgClamped.traverseHeight);
+  const moduleHeightInput = toNumberOrUndefined(modules.trussHeight);
+  const prevTraverseHeight = toNumberOrUndefined(previous?.traverseHeight);
+  const prevModuleHeight = toNumberOrUndefined(previous?.modules?.trussHeight);
+  const rawTraverseHeight =
+    traverseHeightInput !== prevTraverseHeight
+      ? traverseHeightInput ?? defaultTraverseHeight
+      : moduleHeightInput !== prevModuleHeight
+      ? moduleHeightInput ?? defaultTraverseHeight
+      : traverseHeightInput ?? moduleHeightInput ?? defaultTraverseHeight;
+  const traverseHeight = clampNumber(rawTraverseHeight, baseHeight + 0.2, Math.max(baseHeight + 6, 8));
+  modules.trussHeight = traverseHeight;
+  const rawSegmentLength = toNumberOrUndefined((cfgClamped as unknown as { trussSegmentLength?: number }).trussSegmentLength) ??
+    toNumberOrUndefined(modules.trussSegmentLength);
+  const segmentLength = clampNumber(rawSegmentLength ?? 1, 0.4, 3);
+  modules.trussSegmentLength = segmentLength;
+  const rawCollisionClearance = toNumberOrUndefined(modules.collisionClearance);
+  modules.collisionClearance = rawCollisionClearance !== undefined ? Math.max(0, rawCollisionClearance) : modules.collisionClearance;
+  const rawTrussClearance = toNumberOrUndefined((modules as { trussClearance?: number }).trussClearance);
+  modules.trussClearance = rawTrussClearance !== undefined ? Math.max(0, rawTrussClearance) : undefined;
+  const gridStepRaw = toNumberOrUndefined((modules as { gridStep?: number }).gridStep);
+  const snapStepRaw = toNumberOrUndefined(modules.snapStep);
+  const resolvedGrid = clampNumber(gridStepRaw ?? snapStepRaw ?? 0.1, 0.01, 1);
+  modules.gridStep = resolvedGrid;
+  modules.snapStep = clampNumber(snapStepRaw ?? resolvedGrid, 0.01, 1);
+  modules.snapToStructure = modules.snapToStructure ?? true;
 
 
 
@@ -2191,7 +2270,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
   let cabin = modules.cabin as CabinWithPosition | undefined;
 
-  const baseCabin: CabinWithPosition =
+const baseCabin: CabinWithPosition =
 
     cabin ?? ({ enabled: storageActive, width: 1.5, depth: 1.5, height: baseHeight } as CabinWithPosition);
 
@@ -2207,7 +2286,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
 
 
-  const resolvedCabin: CabinWithPosition = {
+const resolvedCabin: CabinWithPosition = {
 
     ...baseCabin,
 
@@ -2219,6 +2298,8 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
   };
 
+  modules.cabinDoorPosition = cabinDoorSide ?? modules.cabinDoorPosition ?? storageDoorWall ?? "front";
+
 
 
   // Kabine positionieren (bewegbar, aber immer innerhalb der Standfläche)
@@ -2228,6 +2309,11 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
   cabin = { ...resolvedCabin, ...size };
 
   modules.cabin = cabin;
+  modules.cabinSize = {
+    width: cabin.width,
+    depth: cabin.depth,
+    height: cabin.height,
+  };
 
 
 
@@ -2516,6 +2602,22 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
   }
 
+  if (Array.isArray(modules.lamps)) {
+
+    modules.lamps = modules.lamps.map((lamp) => {
+
+      const w = Math.max(0, lamp.footprint?.w ?? 0.2);
+
+      const d = Math.max(0, lamp.footprint?.d ?? 0.2);
+
+      const pos = clampFootprintToStand(cfgClamped, lamp.position, w, d);
+
+      return { ...lamp, position: { ...lamp.position, ...pos } };
+
+    });
+
+  }
+
   if (Array.isArray(modules.chairsDetailed)) {
 
     modules.chairsDetailed = modules.chairsDetailed.slice(0, maxChairs);
@@ -2638,7 +2740,7 @@ function normalizeConfig(cfg: StandConfig, previous?: StandConfig): StandConfig 
 
 
 
-  return { ...cfgClamped, modules };
+  return { ...cfgClamped, traverseHeight, modules };
 
 }
 
@@ -3487,17 +3589,22 @@ const basePresetConfigs: Record<BasePresetName, StandConfig> = {
 
 };
 
-
+const presetFromBundle = (bundleKey: BundlePresetName, fallback: BasePresetName): StandConfig =>
+  bundlePresetMap[bundleKey]?.config ?? basePresetConfigs[fallback];
 
 const presetConfigs: Record<PresetName, StandConfig> = {
 
-  ...basePresetConfigs,
+  small: presetFromBundle("starterBundle", "small"),
 
-  starterBundle: bundlePresetMap.starterBundle?.config ?? basePresetConfigs.small,
+  medium: presetFromBundle("proBundle", "medium"),
 
-  proBundle: bundlePresetMap.proBundle?.config ?? basePresetConfigs.medium,
+  premium: presetFromBundle("premiumBundle", "premium"),
 
-  premiumBundle: bundlePresetMap.premiumBundle?.config ?? basePresetConfigs.premium,
+  starterBundle: presetFromBundle("starterBundle", "small"),
+
+  proBundle: presetFromBundle("proBundle", "medium"),
+
+  premiumBundle: presetFromBundle("premiumBundle", "premium"),
 
 };
 
@@ -3619,7 +3726,7 @@ function createRuntimeSync(get: () => ConfigState, set: (partial: Partial<Config
 
         validationIssues: [],
 
-        runtimeError: "Runtime-API deaktiviert (VITE_DISABLE_RUNTIME=true)",
+        runtimeError: "Runtime-API deaktiviert (kein Backend konfiguriert oder VITE_DISABLE_RUNTIME=true)",
 
         lastRuntimeSync: Date.now(),
 
@@ -3952,14 +4059,18 @@ export const useConfigStore = create<ConfigState>()(
   const applyFinal = (cfg: StandConfig, prev?: StandConfig) => {
     const normalized = normalizeConfig(cfg, prev);
     const guarded = applyBundleGuard(normalized);
+    const previousConfig = prev ?? get().config;
+    if (prev && deepEqual(guarded, previousConfig)) {
+      return;
+    }
     const compatibilityIssues = validateModuleSelection(guarded.modules);
-    const previousWalls = prev ? getAllowedWalls(prev.type) : getAllowedWalls(guarded.type);
+    const previousWalls = getAllowedWalls(previousConfig.type);
     const nextWalls = getAllowedWalls(guarded.type);
     if (wallsChanged(previousWalls, nextWalls)) {
       notifyWallListeners({
         previousWalls,
         nextWalls,
-        previousAttachmentIndex: prev?.modules.wallAttachmentIndex,
+        previousAttachmentIndex: previousConfig.modules.wallAttachmentIndex,
         nextAttachmentIndex: guarded.modules.wallAttachmentIndex,
         modules: guarded.modules,
       });
@@ -4330,7 +4441,10 @@ export const useConfigStore = create<ConfigState>()(
 
       };
 
-      const modulesPatch: DeepPartial<StandModules> = { cabin: cabinPatch };
+      const modulesPatch: DeepPartial<StandModules> = {
+        cabin: cabinPatch,
+        cabinSize: { width: clamped.width, depth: clamped.depth, height: cabin.height },
+      };
 
       get().patchModules(modulesPatch);
 

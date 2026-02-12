@@ -10,6 +10,7 @@ export type StandConfig = {
   region?: Region;
   rush?: boolean;
   modules: Record<string, unknown>;
+  traverseHeight?: number;
   bundleKey?: string;
   bundleLabel?: string;
   bundleDiscount?: number;
