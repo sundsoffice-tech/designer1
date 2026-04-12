@@ -10,7 +10,7 @@
     "dev:sales": "node -e \"process.env.VITE_ENABLE_CAMERA_TOOLS='true'; require('vite/bin/vite.js')\"",
     "build": "vite build",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
     "test": "jest",
     "test:unit": "jest",
@@ -59,7 +59,7 @@
     "typescript-eslint": "^8.46.3",
     "vite": "npm:rolldown-vite@7.2.2",
     "vite-plugin-pwa": "^1.1.0",
-    "@types/three": "^0.161.0"
+    "@types/three": "^0.181.0"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.2.2"

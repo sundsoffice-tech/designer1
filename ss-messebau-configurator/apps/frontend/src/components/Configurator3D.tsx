@@ -12,7 +12,7 @@ import {
   type MutableRefObject,
   type JSX,
 } from "react";
-import { Canvas, extend, invalidate, useFrame, useThree, type ReactThreeFiber, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, extend, invalidate, useFrame, useThree, type ThreeElement, type ThreeEvent } from "@react-three/fiber";
 import {
   CameraControls as DreiCameraControls,
   ContactShadows,
@@ -26,7 +26,12 @@ import {
   useTexture,
   useVideoTexture,
 } from "@react-three/drei";
-import { Bloom, DepthOfField, EffectComposer } from "@react-three/postprocessing";
+import { Bloom, DepthOfField, EffectComposer as EffectComposerImpl } from "@react-three/postprocessing";
+
+// EffectComposer declares children as JSX.Element (too restrictive).
+// Wrapper accepts ReactNode so conditional rendering works without casts.
+const EffectComposer = (props: Omit<React.ComponentProps<typeof EffectComposerImpl>, "children"> & { children: React.ReactNode }) =>
+  <EffectComposerImpl {...props as React.ComponentProps<typeof EffectComposerImpl>} />;
 import {
   Physics,
   RigidBody,
@@ -46,9 +51,13 @@ extend({ CameraControls });
 
 type CameraControlsImpl = InstanceType<typeof CameraControls>;
 
+// three-stdlib declares .object as private, but R3F exposes it at runtime
+const getTransformTarget = (ref: React.RefObject<TransformControlsImpl | null>): THREE.Object3D | undefined =>
+  (ref.current as Record<string, unknown> | null)?.["object"] as THREE.Object3D | undefined;
+
 declare module "@react-three/fiber" {
   interface ThreeElements {
-    cameraControls: ReactThreeFiber.Object3DNode<CameraControls, typeof CameraControls>;
+    cameraControls: ThreeElement<typeof CameraControls>;
   }
 }
 
@@ -72,12 +81,12 @@ import { buildContextMenu } from "../contextMenu";
 import { useContextMenuStore } from "../contextMenu/store";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { registerSceneCommandAdapter } from "../store/commandRegistry";
-import type { ChairConfig, CounterConfig, ScreenConfig, LampConfig } from "../lib/pricing";
+import type { ChairConfig, CounterConfig, ScreenConfig, LampConfig, WallSide } from "../lib/pricing";
 import { applyTextureFit, clampTextureFit } from "../lib/textureMapping";
 import Traverse from "./Traverse";
 import Cabin from "./Cabin";
 import { BoundingBoxOverlay } from "./BoundingBoxOverlay";
-type WallSide = "back" | "left" | "right";
+// WallSide importiert via pricing.ts (re-export aus @ss/shared)
 type CounterVariant = "basic" | "premium" | "corner";
 type CabinDoorSide = "front" | "left" | "right" | "back";
 type LightingToneMapping = "aces" | "agx" | "reinhard" | "neutral";
@@ -482,11 +491,13 @@ function ScreenPanel({
           {...materializeProps({ color: "#0f172a", roughness: 0.35, metalness: 0.4 })}
         />
       </mesh>
-      {hasVideo && videoTexture && (
+      {hasVideo && videoTexture ? (
         <mesh position={[0, 0, t / 2 + 0.0005]} frustumCulled>
           <planeGeometry args={[w * 0.92, h * 0.9]} />
           <meshBasicMaterial map={videoTexture} toneMapped={false} transparent opacity={0.98} />
         </mesh>
+      ) : (
+        <group />
       )}
     </Detailed>
   );
@@ -634,7 +645,7 @@ function Transformable({
       const body = rigidRef.current;
       const source =
         target ??
-        (tcRef.current?.object as THREE.Object3D | undefined) ??
+        getTransformTarget(tcRef) ??
         groupRef.current;
       if (!body || !source) return;
       source.updateWorldMatrix(true, false);
@@ -697,7 +708,7 @@ function Transformable({
       removeEventListener: (type: string, handler: (event: unknown) => void) => void;
     };
     const handleChange = () => {
-      const target = (tcRef.current?.object as THREE.Object3D | undefined) ?? groupRef.current;
+      const target = getTransformTarget(tcRef) ?? groupRef.current;
       if (!target) return;
       const override = onChange?.(target.position);
       if (override) {
@@ -933,15 +944,15 @@ function StandMesh({
   const enableOrbit = useCallback(() => setOrbitEnabled(true), [setOrbitEnabled]);
   // Basis-Module
   const {
-    wallsClosedSides,
-    storageRoom,
+    wallsClosedSides = 0,
+    storageRoom = false,
     storageDoorSide,
     ledFrames,
     ledWall,
-    counters,
+    counters = 0,
     countersWall,
     countersWithPower,
-    screens,
+    screens = 0,
     screensWall,
     ledFramesDetailed = [],
     cabin,
@@ -984,11 +995,10 @@ function StandMesh({
   const wallHeight = height;
   const wallCenterY = floorHeight + wallHeight / 2;
   const defaultTrussHeight = floorHeight + wallHeight + 0.5;
+  const rawTrussH = config.traverseHeight ?? modules.trussHeight;
   const trussHeight = Math.max(
     defaultTrussHeight,
-    typeof (config.traverseHeight ?? modules.trussHeight) === "number"
-      ? (config.traverseHeight ?? modules.trussHeight)
-      : defaultTrussHeight
+    typeof rawTrussH === "number" ? rawTrussH : defaultTrussHeight
   );
   const trussOffsetX: number = (modules.trussOffset?.x ?? 0) as number;
   const trussOffsetZ: number = (modules.trussOffset?.z ?? 0) as number;
@@ -1272,7 +1282,7 @@ function StandMesh({
       const variant: CounterVariant = ctr.variant ?? (modules.counterVariant ?? "basic");
       const dims = resolveCounterSize(variant, ctr.size);
       const colliders = variant === "corner" ? cornerCounterColliders(dims.w, dims.d) : [];
-      return { variant, ...dims, colliders };
+      return { ...dims, variant, colliders };
     },
     [modules.counterVariant]
   );
@@ -2510,7 +2520,7 @@ function StandMesh({
         const w = scr.size?.w ?? 0.9;
         const t = scr.size?.t ?? 0.02;
         const pos = scr.position ?? { x: 0, z: 0 };
-        const snapped = clampXZ(snapValue(pos.x, snapStep), snapValue(pos.z, snapStep), width, depth, w / 2, t / 2);
+        const snapped = clampXZ(snapValue(pos.x ?? 0, snapStep), snapValue(pos.z ?? 0, snapStep), width, depth, w / 2, t / 2);
         const next = screensDetailed.map((s) =>
           s.id === id ? { ...s, position: { x: snapped.x, z: snapped.z } } : s
         );
@@ -3820,7 +3830,7 @@ function StandMesh({
             (frame): frame is NonNullable<typeof frame> & { targetWall: WallSide; floating: boolean } =>
               Boolean(frame?.targetWall)
           );
-        const byWall: Record<WallSide, typeof prepared> = { back: [], left: [], right: [] };
+        const byWall: Record<WallSide, typeof prepared> = { back: [], left: [], right: [], front: [] };
         prepared.forEach((frame) => {
           byWall[frame.targetWall].push(frame);
         });
@@ -4038,14 +4048,14 @@ function StandMesh({
                           dist: number;
                         }
                       | null = null;
-                    snapTargets.forEach((target) => {
+                    for (const target of snapTargets) {
                       const dx = target.x - nextX;
                       const dz = target.z - nextZ;
                       const dist = Math.hypot(dx, dz);
                       if (dist < snapRadius && (!best || dist < best.dist)) {
                         best = { ...target, dist };
                       }
-                    });
+                    }
                     if (best) {
                       nextX = best.x;
                       nextZ = best.z;
@@ -4726,7 +4736,9 @@ function CameraRig({
           if (cancelled || activeActionRef.current !== action.id) break;
         }
       } else {
-        clearAction(action.id);
+        // Exhaustive check: if a new action type is added, TypeScript will error here
+        const _exhaustive: never = action;
+        void _exhaustive;
         restore();
         return;
       }
@@ -5074,8 +5086,8 @@ export default function Configurator3D() {
     const flyHeight = Math.max(config.height + floorHeight + 2.2, targetY + 1.4);
     return [
       { id: "overview", label: t("camera.quick.overview"), pose: undefined },
-      { id: "front", label: t("camera.quick.front"), pose: { position: [0, flyHeight, config.depth / 2 + orbitPadding], target: center } },
-      { id: "top", label: t("camera.quick.top"), pose: { position: [0, flyHeight + orbitPadding * 0.45, 0.001], target: center } },
+      { id: "front", label: t("camera.quick.front"), pose: { position: [0, flyHeight, config.depth / 2 + orbitPadding] as [number, number, number], target: center } },
+      { id: "top", label: t("camera.quick.top"), pose: { position: [0, flyHeight + orbitPadding * 0.45, 0.001] as [number, number, number], target: center } },
     ];
   }, [config.depth, config.height, config.width, floorHeight, t]);
 
@@ -5225,7 +5237,6 @@ export default function Configurator3D() {
       )}
       {postProcessingEnabled && (
         <EffectComposer>
-          {/* SSAO intentionally omitted unless a NormalPass gets added; see three.js examples if reintroducing. */}
           {bloomActive && (
             <Bloom
               mipmapBlur
@@ -5274,10 +5285,8 @@ export default function Configurator3D() {
           // Fallback-Deselect, falls obere Ebene Events nicht bekommt
           // (Selektion-Reset passiert primaer in StandMesh)
         }}
-        onDoubleClick={(event) => {
-          if (!event.intersections?.length) {
-            frameAll();
-          }
+        onDoubleClick={() => {
+          frameAll();
         }}
       >
         {/* PerformanceMonitor muss ein direktes Canvas-Kind bleiben, damit die R3F-Hooks einen gültigen Kontext finden. */}

@@ -16,7 +16,7 @@ export type CommandContext = {
   selectionCenter?: [number, number, number];
   role?: UserRole;
   mode?: string;
-  collision?: boolean | "soft" | "hard";
+  collision?: boolean | "none" | "soft" | "hard";
   extras?: Record<string, unknown>;
 };
 
@@ -43,6 +43,10 @@ type SceneCommandAdapter = {
   changeMaterial?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
   resetTransform?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
   snapToGrid?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
+  alignToGrid?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
+  alignLineX?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
+  alignLineZ?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
+  alignToBackWall?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
   changeScreenVideo?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
   selectAll?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
   clearSelection?: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;

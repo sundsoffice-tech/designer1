@@ -2,6 +2,13 @@
   "name": "@ss/shared",
   "version": "0.0.1",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./modules": "./src/modules.ts",
+    "./truss": "./src/truss.ts",
+    "./textures": "./src/textures.ts"
+  },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "files": ["src"],

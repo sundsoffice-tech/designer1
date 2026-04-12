@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import type { TextureEntry, TextureCategory, TextureFit } from "@ss/shared";
+import type { TextureEntry, TextureCategory, TextureFit, WallDetailConfig } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
 
 const categories: TextureCategory[] = ["wall", "floor", "banner", "generic"];
@@ -50,7 +50,7 @@ export function TextureUploadPanel() {
       }
       if (tex.category === "wall") {
         const current = useConfigStore.getState().config.modules.wallsDetail ?? {};
-        const patch: Partial<Record<"back" | "left" | "right", unknown>> = {};
+        const patch: Partial<Record<string, WallDetailConfig>> = {};
         (["back", "left", "right"] as const).forEach((side) => {
           patch[side] = { ...(current?.[side] ?? {}), textureUrl: tex.url, textureFit: tex.fit ?? "cover" };
         });

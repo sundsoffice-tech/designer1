@@ -21,8 +21,8 @@ export const useContextMenuStore = create<ContextMenuState>((set) => ({
   context: null,
   highlightedId: null,
   openMenu: (payload) => {
-    const normalized = "items" in payload ? payload : { items: payload.items, context: payload.context, position: payload.position };
-    const { position, items, context } = normalized;
+    const position = "position" in payload ? payload.position : DEFAULT_POS;
+    const { items, context } = payload;
     set({
       isOpen: true,
       position: position ?? DEFAULT_POS,

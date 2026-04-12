@@ -77,7 +77,7 @@ export const ContextMenuRoot = () => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         const item = items.find((i) => i.id === highlightedId && i.commandId && !i.disabled);
-        if (item && context) {
+        if (item?.commandId && context) {
           executeCommand(item.commandId, context).finally(() => closeMenu());
         }
       }

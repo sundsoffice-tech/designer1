@@ -1,5 +1,4 @@
 import { useMemo, type JSX } from "react";
-import * as THREE from "three";
 import type { Obb } from "../lib/collision";
 
 type BoundingBoxOverlayProps = {

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { TrussLayout, TrussProfile, applyGridSnap, buildAttachmentPoints } from "@ss/shared";
+import { type TrussLayout, type TrussProfile, applyGridSnap, buildAttachmentPoints } from "@ss/shared";
 import { bridgeOverFront, DEFAULT_TRUSS_PROFILE, rectOverStand, uShapeFrontOpen } from "../lib/trussLayout";
 
 export type TrussPreset = "rect" | "u-open" | "bridge";

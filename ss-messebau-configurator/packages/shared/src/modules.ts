@@ -82,9 +82,8 @@ export type ModuleCompatibilityIndex = Record<string, Record<string, string[]>>;
 
 export type ModelAttachmentPoint = { x: number; y?: number; z: number; label?: string };
 
-export type CustomModelModule = {
+type BaseModelModule = {
   id: string;
-  type: "custom";
   name: string;
   category?: string;
   modelPath: string;
@@ -99,9 +98,15 @@ export type CustomModelModule = {
   sourceFileName?: string;
 };
 
-export type CustomModelCatalog = CustomModelModule[];
+export type CustomModelModule = BaseModelModule & {
+  type: "custom";
+};
 
-export type LampModule = CustomModelModule & {
+export type CatalogEntry = CustomModelModule | LampModule;
+
+export type CustomModelCatalog = CatalogEntry[];
+
+export type LampModule = BaseModelModule & {
   type: "lamp";
   intensity?: number;
   color?: string;
@@ -109,6 +114,7 @@ export type LampModule = CustomModelModule & {
   angle?: number;
   decay?: number;
   mount?: "floor" | "truss" | "wall";
+  wallSide?: "back" | "left" | "right" | "front";
   heightFromFloor?: number;
   spot?: boolean;
 };

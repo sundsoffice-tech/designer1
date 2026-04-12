@@ -96,6 +96,7 @@ export function normalizeWallPanels(
     back: (modules.wallsClosedSides ?? 0) >= 1,
     left: (modules.wallsClosedSides ?? 0) >= 2,
     right: (modules.wallsClosedSides ?? 0) >= 3,
+    front: false,
   };
 
   sides.forEach((side) => {

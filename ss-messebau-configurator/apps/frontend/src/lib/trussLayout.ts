@@ -1,9 +1,9 @@
 import {
-  TrussLayout,
-  TrussMountingType,
-  TrussProfile,
-  TrussSegment,
-  Vec3,
+  type TrussLayout,
+  type TrussMountingType,
+  type TrussProfile,
+  type TrussSegment,
+  type Vec3,
   applyGridSnap,
   buildAttachmentPoints,
 } from "@ss/shared";

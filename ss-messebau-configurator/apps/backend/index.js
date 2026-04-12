@@ -50,6 +50,7 @@ const modelsCatalogPath = path.join(modelsDir, "catalog.json");
 const texturesDir = path.join(publicUploadsDir, "textures");
 const texturesCatalogPath = path.join(texturesDir, "catalog.json");
 const videosDir = path.join(publicUploadsDir, "videos");
+const configDir = path.resolve(__dirname, "shared", "data");
 const sharedTextureLibraryPath = path.resolve(__dirname, "..", "..", "packages", "shared", "src", "textures.ts");
 await fs.promises.mkdir(uploadDir, { recursive: true });
 await fs.promises.mkdir(modelsDir, { recursive: true });
@@ -318,6 +319,13 @@ app.use(
   })
 );
 app.use(express.json({ limit: "1mb" }));
+app.use(
+  "/config",
+  express.static(configDir, {
+    etag: true,
+    maxAge: "5m",
+  })
+);
 app.use("/uploads/models", express.static(modelsDir));
 app.use("/uploads/textures", express.static(texturesDir));
 app.use("/uploads", express.static(publicUploadsDir));

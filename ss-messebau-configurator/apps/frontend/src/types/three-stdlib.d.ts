@@ -1,1 +1,1 @@
-declare module "three-stdlib";
+// three-stdlib ships its own .d.ts files — no ambient override needed.

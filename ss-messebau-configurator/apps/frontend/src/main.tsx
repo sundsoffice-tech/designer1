@@ -4,6 +4,9 @@ import { I18nextProvider } from "react-i18next";
 import App from "./App";
 import i18n from "./i18n";
 import "./styles.css";
+import { cleanupPwaArtifactsForDev } from "./pwaDevCleanup";
+
+cleanupPwaArtifactsForDev();
 
 const adminEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_PANEL === "true";
 const isAdminRoute =

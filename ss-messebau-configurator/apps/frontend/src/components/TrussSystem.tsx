@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import * as THREE from "three";
-import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { TrussLayout, TrussSegment, buildAttachmentPoints } from "@ss/shared";
+import { type GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { type TrussLayout, type TrussSegment, buildAttachmentPoints } from "@ss/shared";
 import { DEFAULT_TRUSS_PROFILE } from "../lib/trussLayout";
 
 type TrussSystemProps = {

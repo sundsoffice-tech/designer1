@@ -1,9 +1,11 @@
+import type { StandType, StandModules } from "./config.js";
+
 export type LayoutPreset = {
   width: number;
   depth: number;
   height?: number;
-  type?: string;
-  modules: Record<string, unknown>;
+  type?: StandType;
+  modules: Partial<StandModules>;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));

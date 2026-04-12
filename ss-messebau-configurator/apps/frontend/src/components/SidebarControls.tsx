@@ -1,8 +1,8 @@
 ﻿// src/components/SidebarControls.tsx
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { DEFAULT_LIGHTING, useConfigStore, type DeepPartial } from "../store/configStore";
-import { generateRectangleLayout, generateUShapeLayout, generateBridgeLayout, generateRearCabinLayout } from "@ss/shared";
-import type { CabinConfig, StandModules, WallDetailConfig, StandType, Region, ScreenConfig } from "../lib/pricing";
+import { generateRectangleLayout, generateUShapeLayout, generateBridgeLayout, generateRearCabinLayout, type LayoutPreset } from "@ss/shared";
+import type { CabinConfig, StandConfig, StandModules, WallDetailConfig, StandType, Region, ScreenConfig, WallSide } from "../lib/pricing";
 import { isValidEmail, type ContactRequest } from "@ss/shared";
 import { collisionPlayground } from "../lib/playgrounds";
 import { normalizeCounterPlacement } from "../lib/counters";
@@ -11,8 +11,6 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
-
-type WallSide = "back" | "left" | "right" | "front";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -72,7 +70,7 @@ export default function SidebarControls({
     .map((id) => id.replace("scr-d-", ""))
     .filter(Boolean);
   const applyLayout = useCallback(
-  (build: (w: number, d: number, h: number) => Partial<StandConfig>) => {
+  (build: (w: number, d: number, h?: number) => LayoutPreset | Partial<StandConfig>) => {
     const layout = build(config.width, config.depth, config.height);
     replaceConfig({
       ...config,
@@ -173,7 +171,6 @@ export default function SidebarControls({
       ? detailedScreens.find((scr) => selectedScreenIds.includes(scr.id ?? ""))
       : detailedScreens[0];
   const screenVideoMuted = selectedScreen?.videoMuted ?? true;
-  const screenVideoPaused = selectedScreen?.videoPaused ?? false;
   const screenVideoVolume = selectedScreen?.videoVolume ?? 0;
 
   const fixedWalls =
@@ -569,7 +566,7 @@ export default function SidebarControls({
   };
 
   const summarizeLedFrames = useCallback(() => {
-    const counts: Record<WallSide, number> = { back: 0, left: 0, right: 0 };
+    const counts: Record<WallSide, number> = { back: 0, left: 0, right: 0, front: 0 };
     let total = 0;
 
     if (Array.isArray(ledFramesDetailed) && ledFramesDetailed.length) {

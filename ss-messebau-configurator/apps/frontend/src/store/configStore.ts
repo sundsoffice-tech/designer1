@@ -150,20 +150,16 @@ type BundlePresetName = "starterBundle" | "proBundle" | "premiumBundle";
 type PresetName = BasePresetName | BundlePresetName;
 
 
-/** Rekursives Partial fÃ¼r verschachtelte Patches (auch Arrays) */
-
+/** Rekursives Partial fuer verschachtelte Patches (auch Arrays).
+ *  Tuples (feste Laenge) werden erhalten, nur regulaere Arrays rekursiv gemappt. */
 export type DeepPartial<T> = {
-
-  [K in keyof T]?: T[K] extends (infer U)[]
-
+  [K in keyof T]?: NonNullable<T[K]> extends readonly [unknown, ...unknown[]]
+    ? T[K]
+    : T[K] extends (infer U)[]
     ? DeepPartial<U>[]
-
     : NonNullable<T[K]> extends object
-
     ? DeepPartial<NonNullable<T[K]>>
-
     : T[K];
-
 };
 
 
@@ -436,87 +432,50 @@ const screenVariantKey = (mount: string | undefined, size?: string) => {
 
 
 
-const hasVector2 = (value: { x?: number; z?: number } | undefined): value is { x: number; z: number } =>
+const hasVector2 = (value: unknown): value is { x: number; z: number } => {
+  const v = value as { x?: unknown; z?: unknown } | null | undefined;
+  return typeof v?.x === "number" && typeof v?.z === "number";
+};
 
-  typeof value?.x === "number" && typeof value?.z === "number";
+const hasShape = <T>(value: unknown, check: (v: Record<string, unknown>) => boolean): value is T => {
+  const v = value as Record<string, unknown> | null | undefined;
+  return Boolean(v && typeof v.id === "string" && check(v));
+};
 
+const isScreenConfig = (value: unknown): value is ScreenConfig =>
+  hasShape<ScreenConfig>(value, (v) => !v.mount || typeof v.mount === "string");
 
+const isCounterConfig = (value: unknown): value is CounterConfig =>
+  hasShape<CounterConfig>(value, (v) => typeof v.variant === "string" && hasVector2(v.position));
 
-const isScreenConfig = (value: DeepPartial<ScreenConfig> | null | undefined): value is ScreenConfig =>
+const isChairConfig = (value: unknown): value is ChairConfig =>
+  hasShape<ChairConfig>(value, (v) => hasVector2(v.position));
 
-  Boolean(value && typeof value.id === "string");
+const isTrussLightConfig = (value: unknown): value is TrussLightConfig =>
+  hasShape<TrussLightConfig>(value, (v) => typeof v.side === "string");
 
+const isWallLightConfig = (value: unknown): value is WallLightConfig =>
+  hasShape<WallLightConfig>(value, (v) => typeof v.side === "string");
 
+const isWallPanelConfig = (value: unknown): value is WallPanelConfig =>
+  hasShape<WallPanelConfig>(value, (v) => typeof v.width === "number");
 
-const isCounterConfig = (value: DeepPartial<CounterConfig> | null | undefined): value is CounterConfig =>
+const isRoundTableConfig = (value: unknown): value is RoundTableConfig =>
+  hasShape<RoundTableConfig>(value, (v) => hasVector2(v.position));
 
-  Boolean(value && typeof value.id === "string" && typeof value.variant === "string" && hasVector2(value.position));
+const isCustomObjectConfig = (value: unknown): value is CustomObjectConfig =>
+  hasShape<CustomObjectConfig>(value, (v) => typeof v.assetUrl === "string" && hasVector2(v.position));
 
-
-
-const isChairConfig = (value: DeepPartial<ChairConfig> | null | undefined): value is ChairConfig =>
-
-  Boolean(value && typeof value.id === "string" && hasVector2(value.position));
-
-
-
-const isTrussLightConfig = (value: DeepPartial<TrussLightConfig> | null | undefined): value is TrussLightConfig =>
-
-  Boolean(value && typeof value.id === "string" && typeof value.side === "string");
-
-
-
-const isWallLightConfig = (value: DeepPartial<WallLightConfig> | null | undefined): value is WallLightConfig =>
-
-  Boolean(value && typeof value.id === "string" && typeof value.side === "string");
-
-
-
-const isWallPanelConfig = (value: DeepPartial<WallPanelConfig> | null | undefined): value is WallPanelConfig =>
-
-  Boolean(value && typeof value.id === "string" && typeof value.width === "number");
-
-
-
-const isRoundTableConfig = (value: DeepPartial<RoundTableConfig> | null | undefined): value is RoundTableConfig =>
-
-  Boolean(value && typeof value.id === "string" && hasVector2(value.position));
-
-
-
-const isCustomObjectConfig = (
-
-  value: DeepPartial<CustomObjectConfig> | null | undefined
-
-): value is CustomObjectConfig =>
-
-  Boolean(
-
-    value &&
-
-      typeof value.id === "string" &&
-
-      typeof value.assetUrl === "string" &&
-
-      hasVector2(value.position)
-
-  );
-
-
-
-const isLedFrameConfig = (
-
-  value: NonNullable<StandModules["ledFramesDetailed"]>[number] | null | undefined
-
-): value is NonNullable<StandModules["ledFramesDetailed"]>[number] => Boolean(value && typeof value === "object");
+const isLedFrameConfig = (value: unknown): value is NonNullable<StandModules["ledFramesDetailed"]>[number] =>
+  Boolean(value && typeof value === "object");
 
 
 
 const normalizeArrayPatch = <T>(
 
-  incoming: Array<DeepPartial<T>> | undefined,
+  incoming: Array<unknown> | undefined,
 
-  predicate: (item: DeepPartial<T>) => item is T
+  predicate: (item: unknown) => item is T
 
 ): T[] | undefined => {
 
@@ -530,7 +489,7 @@ const normalizeArrayPatch = <T>(
 
 const normalizeWallPanelsPatch = (
 
-  panels?: Partial<Record<WallSide, DeepPartial<WallPanelConfig>[]>>
+  panels?: Partial<Record<WallSide, DeepPartial<WallPanelConfig>[]>> | DeepPartial<Partial<Record<WallSide, WallPanelConfig[]>>>
 
 ): Partial<Record<WallSide, WallPanelConfig[]>> | undefined => {
 
@@ -538,7 +497,7 @@ const normalizeWallPanelsPatch = (
 
   const normalized: Partial<Record<WallSide, WallPanelConfig[]>> = {};
 
-  (["back", "left", "right"] as WallSide[]).forEach((side) => {
+  (["back", "left", "right", "front"] as WallSide[]).forEach((side) => {
 
     const list = panels[side];
 
@@ -1061,7 +1020,7 @@ function normalizeWallAttachments(
   const neutralWall = allowedWalls[0];
   const byId: Record<string, WallAttachmentBinding> = {};
   const index: WallAttachmentIndex = {
-    byWall: { back: [], left: [], right: [] },
+    byWall: { back: [], left: [], right: [], front: [] },
     floating: [],
     neutralWall,
     byId,
@@ -1085,7 +1044,7 @@ function normalizeWallAttachments(
 
   if (Array.isArray(modules.detailedScreens)) {
     const capped: ScreenConfig[] = [];
-    const wallCounts: Record<WallSide, number> = { back: 0, left: 0, right: 0 };
+    const wallCounts: Record<WallSide, number> = { back: 0, left: 0, right: 0, front: 0 };
     modules.detailedScreens.forEach((scr, idx) => {
       const id = scr.id ?? `screen-${idx}`;
       const mount = scr.mount ?? "wall";
@@ -2488,13 +2447,15 @@ const resolvedCabin: CabinWithPosition = {
 
   const wallCleaned = (modules.wallLightsDetailed ?? []).filter((w) => allowedWallSides.has(w.side));
 
-  const maxWallLights = {
+  const maxWallLights: Record<WallSide, number> = {
 
     back: Math.max(0, Math.floor(cfgClamped.width * 1.5)),
 
     left: Math.max(0, Math.floor(cfgClamped.depth * 1.5)),
 
     right: Math.max(0, Math.floor(cfgClamped.depth * 1.5)),
+
+    front: 0,
 
   };
 
@@ -2804,9 +2765,17 @@ const bundlePresets: BundlePresetDefinition[] = ((bundlePresetsData as BundlePre
 
 
 
-const bundlePresetMap = Object.fromEntries(
-  bundlePresets.map((preset) => [preset.key, preset] as const)
-) satisfies Record<BundlePresetName, BundlePresetDefinition>;
+function typedFromEntries<K extends string, V>(entries: readonly (readonly [K, V])[]): Record<K, V> {
+  return Object.fromEntries(entries) as Record<K, V>;
+}
+
+function singleKey<K extends keyof StandModules>(key: K, value: DeepPartial<StandModules[K]>): DeepPartial<StandModules> {
+  return { [key]: value } as DeepPartial<StandModules>;
+}
+
+const bundlePresetMap = typedFromEntries(
+  bundlePresets.map((p) => [p.key, p] as const)
+);
 
 const isBundlePresetKey = (value: unknown): value is BundlePresetName =>
   typeof value === "string" && value in bundlePresetMap;
@@ -4344,9 +4313,7 @@ export const useConfigStore = create<ConfigState>()(
 
 
     setModule: (key, value) => {
-      const partial: DeepPartial<StandModules> = {};
-      partial[key] = value;
-      get().setConfig({ modules: partial });
+      get().setConfig({ modules: singleKey(key, value) });
     },
 
 
@@ -4532,9 +4499,19 @@ export const useConfigStore = create<ConfigState>()(
 
       name: CONFIG_STORAGE_KEY,
 
+      version: 2,
+
       storage: createJSONStorage(() => localStorage),
 
       partialize: (state) => ({ config: state.config }),
+
+      migrate: (persisted, version) => {
+        if (version < 2) {
+          // Veraltete Config verwerfen — Default-Preset laden
+          return { config: initialBase };
+        }
+        return persisted as { config: StandConfig };
+      },
 
       onRehydrateStorage: () => (state) => {
 

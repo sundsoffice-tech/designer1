@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import type { CustomModelModule, LampModule } from "@ss/shared";
+import type { CatalogEntry, LampModule } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
 
 type UploadResponse = {
   ok?: boolean;
-  module?: CustomModelModule | LampModule;
+  module?: CatalogEntry;
   url?: string;
   dimensions?: { width?: number; depth?: number; height?: number };
   error?: string;
@@ -32,8 +32,8 @@ export function ModelUploadPanel() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<(CustomModelModule | LampModule)[]>([]);
-  const [lastUploaded, setLastUploaded] = useState<CustomModelModule | LampModule | null>(null);
+  const [catalog, setCatalog] = useState<(CatalogEntry)[]>([]);
+  const [lastUploaded, setLastUploaded] = useState<CatalogEntry | null>(null);
   const [asLamp, setAsLamp] = useState(false);
   const [lampIntensity, setLampIntensity] = useState("1.2");
   const [lampColor, setLampColor] = useState("#ffffff");
@@ -50,7 +50,7 @@ export function ModelUploadPanel() {
       const res = await fetch("/api/models");
       const json = await res.json();
       if (Array.isArray(json?.models)) {
-        setCatalog(json.models as CustomModelModule[]);
+        setCatalog(json.models as CatalogEntry[]);
       }
     } catch {
       // ignore – backend optional
@@ -61,7 +61,7 @@ export function ModelUploadPanel() {
     void fetchCatalog();
   }, []);
 
-  const placeOnStand = useCallback((module: CustomModelModule | LampModule) => {
+  const placeOnStand = useCallback((module: CatalogEntry) => {
     const objects = config.modules.customObjects ?? [];
     const angle = objects.length * 1.1;
     const radius = Math.max(0.5, Math.min(config.width, config.depth) / 3);
@@ -182,7 +182,7 @@ export function ModelUploadPanel() {
       void refreshModuleCatalog();
       setCatalog((prev) => {
         const filtered = prev.filter((item) => item.id !== json.module?.id);
-        return [json.module as CustomModelModule, ...filtered];
+        return [json.module as CatalogEntry, ...filtered];
       });
       setStatus(
         `Hochgeladen: ${json.module.name} (${json.dimensions?.width ?? "?"} x ${json.dimensions?.depth ?? "?"} m)`
