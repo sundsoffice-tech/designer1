@@ -10,12 +10,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 defaults:
   run:
     working-directory: ss-messebau-configurator
 
 jobs:
-  test-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -41,52 +46,24 @@ jobs:
         run: pnpm --filter @ss/frontend typecheck
 
       - name: Build frontend
+        env:
+          GITHUB_PAGES: "true"
         run: pnpm --filter @ss/frontend build
 
-  deploy-vercel:
-    needs: test-and-build
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ss-messebau-configurator/apps/frontend/dist
+
+  deploy:
+    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ss-messebau-configurator
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: ss-messebau-configurator/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --filter @ss/frontend build
-
-      - name: Install Vercel CLI
-        run: pnpm add -g vercel
-
-      - name: Deploy to Vercel
-        working-directory: ss-messebau-configurator/apps/frontend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "Vercel secrets not configured, skipping deploy"
-            exit 0
-          fi
-          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-          vercel build --prod --token=$VERCEL_TOKEN
-          vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
