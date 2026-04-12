@@ -3,9 +3,11 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "node:url";
 
+const basePath = process.env.GITHUB_PAGES === "true" ? "/designer1/" : "/";
+
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.GITHUB_PAGES === "true" ? "/designer1/" : "/",
+  base: basePath,
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -48,8 +50,8 @@ export default defineConfig({
         name: "Designer1 Standkonfigurator",
         short_name: "Designer1",
         description: "Konfiguriere Messestaende offline und mobil",
-        start_url: "/",
-        scope: "/",
+        start_url: basePath,
+        scope: basePath,
         display: "standalone",
         theme_color: "#0f172a",
         background_color: "#ffffff",

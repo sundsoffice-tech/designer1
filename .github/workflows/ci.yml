@@ -48,6 +48,7 @@ jobs:
       - name: Build frontend
         env:
           GITHUB_PAGES: "true"
+          VITE_DISABLE_RUNTIME: "true"
         run: pnpm --filter @ss/frontend build
 
       - name: Upload Pages artifact

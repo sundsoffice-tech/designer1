@@ -1,0 +1,257 @@
+{
+  "modules": [
+    {
+      "module": "ledFrame",
+      "label": "LED-Rahmen",
+      "kind": "frame",
+      "description": "SEG-Rahmen mit optionaler LED-Wand-Vorbereitung",
+      "variants": [
+        {
+          "key": "ledFrame_octalumina",
+          "name": "Octalumina",
+          "sizes": [2.5, 3.0, 4.0],
+          "colors": ["black", "white", "silver"],
+          "dimensions": { "width": 3.0, "height": 2.5, "depth": 0.12 },
+          "basePrice": 1284,
+          "collider": "aabb",
+          "defaultColor": "#1f2937",
+          "tags": ["frame", "seg", "led-ready"]
+        },
+        {
+          "key": "ledFrame_basic",
+          "name": "Basic",
+          "sizes": [2.0, 2.5],
+          "colors": ["white"],
+          "dimensions": { "width": 2.5, "height": 2.3, "depth": 0.12 },
+          "basePrice": 950,
+          "collider": "aabb",
+          "defaultColor": "#e5e7eb",
+          "tags": ["frame", "seg"]
+        }
+      ],
+      "compatibleWith": {
+        "ledWall": ["ledFrame_octalumina"],
+        "powerFeed": ["ledFrame_octalumina"]
+      }
+    },
+    {
+      "module": "counter",
+      "label": "Counter",
+      "kind": "counter",
+      "variants": [
+        {
+          "key": "counter_basic",
+          "name": "Basic",
+          "variant": "basic",
+          "clearance": 0.12,
+          "dimensions": { "width": 1.0, "depth": 0.55, "height": 1.05 },
+          "colors": ["white", "lightGray"],
+          "basePrice": 500,
+          "collider": "aabb",
+          "defaultColor": "#1d4ed8",
+          "tags": ["counter", "frontdesk"]
+        },
+        {
+          "key": "counter_premium",
+          "name": "Premium",
+          "variant": "premium",
+          "clearance": 0.12,
+          "dimensions": { "width": 1.5, "depth": 0.62, "height": 1.1 },
+          "colors": ["black", "white", "oak"],
+          "basePrice": 650,
+          "collider": "aabb",
+          "defaultColor": "#0f172a",
+          "tags": ["counter", "premium"]
+        },
+        {
+          "key": "counter_corner",
+          "name": "Corner",
+          "variant": "corner",
+          "clearance": 0.12,
+          "dimensions": { "width": 1.5, "depth": 0.62, "height": 1.1 },
+          "colors": ["black", "white"],
+          "basePrice": 700,
+          "collider": "obb",
+          "defaultColor": "#1e293b",
+          "tags": ["counter", "corner"]
+        }
+      ],
+      "compatibleWith": {
+        "powerAddon": ["counter_basic", "counter_premium"],
+        "cornerBridge": ["counter_corner"]
+      }
+    },
+    {
+      "module": "screen",
+      "label": "Screens",
+      "kind": "screen",
+      "variants": [
+        {
+          "key": "screen_wall_55",
+          "name": "55\" Wall",
+          "variant": "55",
+          "screenSize": "55",
+          "mount": "wall",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.23, "height": 0.69, "depth": 0.06 },
+          "basePrice": 800,
+          "collider": "aabb",
+          "tags": ["screen", "wall"]
+        },
+        {
+          "key": "screen_wall_65",
+          "name": "65\" Wall",
+          "variant": "65",
+          "screenSize": "65",
+          "mount": "wall",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.45, "height": 0.82, "depth": 0.065 },
+          "basePrice": 920,
+          "collider": "aabb",
+          "tags": ["screen", "wall"]
+        },
+        {
+          "key": "screen_wall_75",
+          "name": "75\" Wall",
+          "variant": "75",
+          "screenSize": "75",
+          "mount": "wall",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.6, "height": 0.9, "depth": 0.055 },
+          "basePrice": 1050,
+          "collider": "aabb",
+          "tags": ["screen", "wall"]
+        },
+        {
+          "key": "screen_truss_55",
+          "name": "55\" Truss",
+          "variant": "55",
+          "screenSize": "55",
+          "mount": "truss",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.23, "height": 0.69, "depth": 0.1 },
+          "basePrice": 840,
+          "collider": "aabb",
+          "tags": ["screen", "truss"]
+        },
+        {
+          "key": "screen_truss_65",
+          "name": "65\" Truss",
+          "variant": "65",
+          "screenSize": "65",
+          "mount": "truss",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.45, "height": 0.82, "depth": 0.1 },
+          "basePrice": 960,
+          "collider": "aabb",
+          "tags": ["screen", "truss"]
+        },
+        {
+          "key": "screen_truss_75",
+          "name": "75\" Truss",
+          "variant": "75",
+          "screenSize": "75",
+          "mount": "truss",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.6, "height": 0.9, "depth": 0.11 },
+          "basePrice": 1090,
+          "collider": "aabb",
+          "tags": ["screen", "truss"]
+        },
+        {
+          "key": "screen_floor_55",
+          "name": "55\" Floor",
+          "variant": "55",
+          "screenSize": "55",
+          "mount": "floor",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.23, "height": 0.69, "depth": 0.4 },
+          "basePrice": 880,
+          "collider": "aabb",
+          "tags": ["screen", "floor"]
+        },
+        {
+          "key": "screen_floor_65",
+          "name": "65\" Floor",
+          "variant": "65",
+          "screenSize": "65",
+          "mount": "floor",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.45, "height": 0.82, "depth": 0.45 },
+          "basePrice": 995,
+          "collider": "aabb",
+          "tags": ["screen", "floor"]
+        },
+        {
+          "key": "screen_floor_75",
+          "name": "75\" Floor",
+          "variant": "75",
+          "screenSize": "75",
+          "mount": "floor",
+          "clearance": 0.05,
+          "dimensions": { "width": 1.6, "height": 0.9, "depth": 0.45 },
+          "basePrice": 1125,
+          "collider": "aabb",
+          "tags": ["screen", "floor"]
+        }
+      ],
+      "compatibleWith": {
+        "truss": ["screen_truss_55", "screen_truss_65", "screen_truss_75"],
+        "ledWall": ["screen_wall_55", "screen_wall_65", "screen_wall_75"],
+        "floorStands": ["screen_floor_55", "screen_floor_65", "screen_floor_75"]
+      }
+    },
+    {
+      "module": "truss",
+      "label": "Truss",
+      "kind": "truss",
+      "variants": [
+        {
+          "key": "truss_square",
+          "name": "Truss Square",
+          "dimensions": { "width": 3.0, "depth": 3.0, "height": 3.5 },
+          "basePrice": 1200,
+          "collider": "obb",
+          "defaultColor": "#d1d5db",
+          "clearance": 0.1,
+          "tags": ["truss"]
+        }
+      ],
+      "compatibleWith": {
+        "trussScreens": ["screen_truss_55", "screen_truss_65", "screen_truss_75"],
+        "trussLighting": ["truss_square"]
+      }
+    },
+    {
+      "module": "traverse",
+      "label": "Traverse",
+      "kind": "truss",
+      "description": "Parametrische Traverse ohne Banner",
+      "variants": [
+        {
+          "key": "traverse_basic",
+          "name": "Traverse Basic",
+          "dimensions": { "width": 6.0, "depth": 4.0, "height": 4.0 },
+          "basePrice": 1250,
+          "collider": "aabb",
+          "defaultColor": "#cbd5e1",
+          "clearance": 0.1,
+          "tags": ["traverse", "rigging"]
+        }
+      ]
+    }
+  ],
+  "bundles": [
+    {
+      "key": "bundle_premium_led_set",
+      "label": "Premium LED Set",
+      "description": "Premium-Tresen + Octalumina LED-Rahmen + 75\" Screen",
+      "discountPercent": 12,
+      "items": [
+        { "variantKey": "counter_premium", "quantity": 1 },
+        { "variantKey": "ledFrame_octalumina", "quantity": 1 },
+        { "variantKey": "screen_wall_75", "quantity": 1 }
+      ]
+    }
+  ]
+}
