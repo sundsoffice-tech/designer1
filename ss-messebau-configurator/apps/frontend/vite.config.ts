@@ -56,16 +56,16 @@ export default defineConfig({
         theme_color: "#0f172a",
         background_color: "#ffffff",
         icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+          { src: `${basePath}icons/icon-192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${basePath}icons/icon-512.png`, sizes: "512x512", type: "image/png" },
+          { src: `${basePath}apple-touch-icon.png`, sizes: "180x180", type: "image/png" },
         ],
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/data/") || url.pathname.endsWith(".json"),
+            urlPattern: ({ url }) => url.pathname.startsWith(`${basePath}data/`) || url.pathname.endsWith(".json"),
             handler: "NetworkFirst",
             options: {
               cacheName: "designer-data",

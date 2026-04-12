@@ -115,7 +115,9 @@ const resolveUrl = (value: string) => {
   if (!runtimeApiDisabled) {
     return buildApiUrl(value);
   }
-  return value.startsWith("/") ? value : `/${value}`;
+  const base = import.meta.env.BASE_URL || "/";
+  const clean = value.startsWith("/") ? value.slice(1) : value;
+  return `${base}${clean}`;
 };
 
 type LoadResult = {
