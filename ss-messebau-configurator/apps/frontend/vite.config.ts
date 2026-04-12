@@ -65,7 +65,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith(`${basePath}data/`) || url.pathname.endsWith(".json"),
+            urlPattern: ({ url }) => url.pathname.includes("/data/") || url.pathname.endsWith(".json"),
             handler: "NetworkFirst",
             options: {
               cacheName: "designer-data",
