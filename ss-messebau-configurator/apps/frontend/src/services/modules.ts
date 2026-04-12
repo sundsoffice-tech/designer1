@@ -159,7 +159,8 @@ export const loadModuleCatalog = async (): Promise<LoadResult> => {
   if (inflight) return inflight;
 
   inflight = (async () => {
-    const sources = uniqueSources([EXPLICIT_ENDPOINT || DEFAULT_ENDPOINT, LOCAL_FALLBACK]);
+    const apiSource = runtimeApiDisabled ? "" : (EXPLICIT_ENDPOINT || DEFAULT_ENDPOINT);
+    const sources = uniqueSources([apiSource, LOCAL_FALLBACK]);
     for (const source of sources) {
       try {
         const catalog = await fetchCatalog(source);

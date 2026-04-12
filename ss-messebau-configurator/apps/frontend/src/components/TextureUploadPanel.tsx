@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { TextureEntry, TextureCategory, TextureFit, WallDetailConfig } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
+import { runtimeApiDisabled, buildApiUrl } from "../lib/apiBase";
 
 const categories: TextureCategory[] = ["wall", "floor", "banner", "generic"];
 const aspectOptions: { value: TextureFit; label: string; description: string }[] = [
@@ -20,8 +21,9 @@ export function TextureUploadPanel() {
   const [library, setLibrary] = useState<TextureEntry[]>([]);
 
   const fetchLibrary = async () => {
+    if (runtimeApiDisabled) return;
     try {
-      const res = await fetch("/api/textures");
+      const res = await fetch(buildApiUrl("/api/textures"));
       const json = await res.json();
       if (Array.isArray(json?.textures)) {
         setLibrary(json.textures as TextureEntry[]);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { CatalogEntry, LampModule } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
+import { runtimeApiDisabled, buildApiUrl } from "../lib/apiBase";
 
 type UploadResponse = {
   ok?: boolean;
@@ -46,8 +47,9 @@ export function ModelUploadPanel() {
   const [lampHeight, setLampHeight] = useState("3.5");
 
   const fetchCatalog = async () => {
+    if (runtimeApiDisabled) return;
     try {
-      const res = await fetch("/api/models");
+      const res = await fetch(buildApiUrl("/api/models"));
       const json = await res.json();
       if (Array.isArray(json?.models)) {
         setCatalog(json.models as CatalogEntry[]);
@@ -173,7 +175,7 @@ export function ModelUploadPanel() {
         if (h !== undefined) body.append("heightFromFloor", String(h));
       }
 
-      const res = await fetch("/api/uploadModel", { method: "POST", body });
+      const res = await fetch(buildApiUrl("/api/uploadModel"), { method: "POST", body });
       const json: UploadResponse = await res.json().catch(() => ({}));
       if (!res.ok || !json?.module) {
         throw new Error(json?.error || json?.details || "Upload fehlgeschlagen");

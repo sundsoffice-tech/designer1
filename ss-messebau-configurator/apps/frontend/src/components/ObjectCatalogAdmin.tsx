@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CustomModelModule } from "@ss/shared";
 import { useConfigStore } from "../store/configStore";
+import { buildApiUrl } from "../lib/apiBase";
 import {
   DEFAULT_OBJECT_TEMPLATES,
   templateToCounterConfig,
@@ -166,7 +167,7 @@ const uploadModelToBackend = async (
   if (meta.category) body.append("category", meta.category);
   if (meta.price != null) body.append("price", String(meta.price));
 
-  const res = await fetch("/api/uploadModel", { method: "POST", body });
+  const res = await fetch(buildApiUrl("/api/uploadModel"), { method: "POST", body });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json?.module) {
     throw new Error(json?.error || json?.details || "Upload fehlgeschlagen");
