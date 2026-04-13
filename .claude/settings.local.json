@@ -1,0 +1,159 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/sunds/Desktop/Designer/ss-messebau-configurator/packages/shared/src -type f -exec head -30 {} +)",
+      "Bash(head:*)",
+      "Bash(pnpm run:*)",
+      "Bash(ls -la node_modules/.tmp/tsconfig.app.tsbuildinfo)",
+      "Bash(wc -c node_modules/.tmp/tsconfig.app.tsbuildinfo)",
+      "Bash(pnpm --filter @ss/frontend exec tsc --noEmit --project tsconfig.app.json)",
+      "Bash(git fsck:*)",
+      "Bash(GIT_DIR=/c/Users/sunds/Desktop/Designer/.git git fetch:*)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(git clone:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(find \"C:\\\\Users\\\\sunds\\\\Desktop\\\\Designer\\\\ss-messebau-configurator\\\\apps\\\\frontend\\\\node_modules\\\\vite\" -name \"*.d.ts\" -exec grep -l \"ImportMeta\" {} \\\\;)",
+      "Bash(git -C /c/Users/sunds/Desktop/Designer remote -v)",
+      "Bash(git -C /c/Users/sunds/Desktop/Designer status)",
+      "Bash(git -C /c/Users/sunds/Desktop/Designer diff -- ss-messebau-configurator/apps/backend/index.js)",
+      "Bash(git -C /c/Users/sunds/Desktop/Designer diff -- ss-messebau-configurator/apps/frontend/src/main.tsx)",
+      "Bash(pnpm --filter @ss/frontend exec tsc -p apps/frontend/tsconfig.app.json --noEmit)",
+      "Bash(pnpm --filter @ss/frontend exec tsc -p tsconfig.app.json --noEmit)",
+      "Bash(pnpm install:*)",
+      "Bash(timeout 10 node --env-file=.env apps/backend/index.js)",
+      "Bash(ls \"C:/Users/sunds/Desktop/Designer/ss-messebau-configurator/node_modules/.pnpm/openai@6.9.1\"*)",
+      "Bash(ls:*)",
+      "Bash(npx npm-remote-ls:*)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Read(//c/tmp/**)",
+      "Bash(curl -sL \"https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.27.1.tgz\")",
+      "Bash(tar tz:*)",
+      "Bash(curl -sL \"https://registry.npmjs.org/openai/-/openai-6.9.1.tgz\")",
+      "Read(//c/Users/sunds/AppData/Local/pnpm/store/v3/**)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm store:*)",
+      "Bash(npm view:*)",
+      "Bash(grep -r \"onDoubleClick\" node_modules/@react-three/fiber/dist/*.d.ts)",
+      "Bash(grep -r \"children\" node_modules/@react-three/postprocessing/dist/*.d.ts)",
+      "Bash(timeout 8 node --env-file=.env apps/backend/index.js)",
+      "Bash(cat:*)",
+      "Bash(node --env-file=.env apps/backend/index.js)",
+      "Bash(curl -s http://localhost:4000/api/runtime/health)",
+      "Bash(curl -s http://localhost:4000/api/ai/health)",
+      "Bash(curl -s http://localhost:4000/api/catalog/modules)",
+      "Bash(git diff:*)",
+      "Read(//tmp/**)",
+      "Bash(git checkout:*)",
+      "Bash(echo \"Backend PID: $!\")",
+      "Bash(git remote:*)",
+      "Bash(git fetch:*)",
+      "Bash(git reflog:*)",
+      "Bash(git branch:*)",
+      "Bash(node -e \"const p = require\\('./node_modules/@react-three/postprocessing/package.json'\\); console.log\\('postprocessing version:', p.version\\)\")",
+      "Bash(grep -c \"from.*lib/pricing\" /c/Users/sunds/Desktop/Designer/ss-messebau-configurator/apps/frontend/src/**/*.ts /c/Users/sunds/Desktop/Designer/ss-messebau-configurator/apps/frontend/src/**/*.tsx)",
+      "Bash(grep -v \":0$\")",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:5173/src/main.tsx)",
+      "Bash(curl -s http://localhost:5173/src/App.tsx)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Read(//c/Users/sunds/Desktop/Designer/ss-messebau-configurator/**)",
+      "Bash(echo \"Backend: $\\(curl -s http://localhost:4000/api/runtime/health\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/)",
+      "Bash(echo \"Frontend: $\\(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:5174/)",
+      "Bash(curl -s http://localhost:5173/src/components/Configurator3D.tsx)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'modules: {len\\(d[\\\\\"modules\\\\\"]\\)}'\\)\")",
+      "Bash(grep -v \"^-//\")",
+      "Bash(grep -v \"^-$\")",
+      "Bash(grep -v \"type\\\\|^\\\\-$\\\\|^\\\\-  \\\\|^\\\\-}\\\\|^\\\\-//\")",
+      "Bash(curl:*)",
+      "Bash(git stash:*)",
+      "Bash(find:*)",
+      "Bash(git pull:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(gh run:*)",
+      "Bash(git add:*)",
+      "Bash(gh api:*)",
+      "Bash(npx vercel:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(where vercel:*)",
+      "Bash(npm install:*)",
+      "Bash(vercel login:*)",
+      "Bash(vercel link:*)",
+      "Bash(vercel tokens:*)",
+      "WebFetch(domain:sundsoffice-tech.github.io)",
+      "Bash(notebooklm status:*)",
+      "Bash(pip install:*)",
+      "Bash(where python:*)",
+      "Bash(\"/c/Users/sunds/scoop/apps/python/current/python.exe\" --version)",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python313/python.exe\" --version)",
+      "Read(//c/Users/sunds/scoop/apps/python/**)",
+      "Read(//c/Users/sunds/AppData/Local/Programs/Python//**)",
+      "Bash(cmd.exe:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/python.exe:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe status:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe list:*)",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" use:*)",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" source:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe ask:*)",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" ask:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe create:*)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe research:*)",
+      "Bash(PYTHONIOENCODING=utf-8 \"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" source list --notebook a10f1bea-5454-4e64-ae4b-99009797c94a --json)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Total sources: {len\\(d[\\\\\"sources\\\\\"]\\)}'\\); [print\\(f'  {i+1}. [{s[\\\\\"status\\\\\"]}] {s[\\\\\"title\\\\\"][:80]}'\\) for i,s in enumerate\\(d['sources']\\)]\")",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python312/python.exe\" -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Total sources: {len\\(d[\\\\\"sources\\\\\"]\\)}'\\); [print\\(f'  {i+1}. [{s[\\\\\"status\\\\\"]}] {s[\\\\\"title\\\\\"][:80]}'\\) for i,s in enumerate\\(d['sources']\\)]\")",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONLEGACYWINDOWSSTDIO=1 /c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe research:*)",
+      "Bash(PYTHONIOENCODING=utf-8 \"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" use ebfc4768-fc9b-408f-8640-09a75d6ba54c)",
+      "Bash(PYTHONIOENCODING=utf-8 \"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" source list --json)",
+      "Bash(PYTHONIOENCODING=utf-8 \"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" source list --notebook ebfc4768-fc9b-408f-8640-09a75d6ba54c --json)",
+      "Bash(PYTHONIOENCODING=utf-8 /c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe ask:*)",
+      "Bash(export PYTHONIOENCODING=utf-8)",
+      "Bash(/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe source:*)",
+      "Bash(pnpm --filter @ss/frontend typecheck)",
+      "Bash(PYTHONIOENCODING=utf-8 /c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe login:*)",
+      "Bash(PYTHONIOENCODING=utf-8 bash:*)",
+      "Bash(PYTHONIOENCODING=utf-8 \"/c/Users/sunds/AppData/Local/Programs/Python/Python312/Scripts/notebooklm.exe\" list --json)",
+      "Bash(\"/c/Users/sunds/AppData/Local/Programs/Python/Python312/python.exe\" -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Authentifiziert: {len\\(d[\\\\\"notebooks\\\\\"]\\)} Notebooks sichtbar'\\)\")"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; if echo \"$CMD\" | grep -qE \"rm\\s+-rf\\s+/|git\\s+push\\s+--force\\s+.*main|DROP\\s+TABLE|DROP\\s+DATABASE\"; then echo \"BLOCKED: Destructive command detected\" >&2; exit 2; fi; exit 0'",
+            "statusMessage": "Security check..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=\"$CLAUDE_FILE_PATH\"; if [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx ]]; then cd \"$CLAUDE_PROJECT_DIR/ss-messebau-configurator\" && npx eslint --fix \"$FILE\" 2>/dev/null; fi; exit 0'",
+            "statusMessage": "Auto-linting...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cd \"$CLAUDE_PROJECT_DIR/ss-messebau-configurator\" && pnpm --filter @ss/frontend typecheck 2>&1 || (echo \"VETO: TypeScript-Fehler! Fixe diese bevor du beendest.\" >&2 && exit 2)'",
+            "statusMessage": "TypeScript Sentinel validating..."
+          }
+        ]
+      }
+    ]
+  }
+}
