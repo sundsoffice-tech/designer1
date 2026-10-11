@@ -11,6 +11,14 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
+import {
+  buildLeadPayload,
+  ERFOLG_SATZ,
+  formatStandgroesse,
+  MAIL_HINWEIS,
+  openMailto,
+  submitStandRequest,
+} from "../lib/leadRelay";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -158,6 +166,11 @@ export default function SidebarControls({
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
+  const [sendState, setSendState] = useState<"idle" | "sending" | "relay" | "mailto" | "fehler">("idle");
+  // Künstler 0215 SOLLTE 5: Text der vorbereiteten Mail, falls sich kein Mailprogramm öffnet
+  const [mailText, setMailText] = useState("");
+  // Programmierer 0300 SOLLTE 6: fehlende oder abgelehnte Zwischenablage sichtbar melden
+  const [copyState, setCopyState] = useState<"offen" | "kopiert" | "fehler">("offen");
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
@@ -744,8 +757,11 @@ export default function SidebarControls({
     }
   };
 
-  const sendEmailRequest = (contact: ContactRequest) => {
+  const buildMailtoUrl = (contact: ContactRequest) => {
     const lines = [
+      // Spieltheoretiker 0130 S3, Künstler 0215 MUSS 3: sonst kommt die Anfrage doppelt an (Endpunkt und Mail)
+      MAIL_HINWEIS,
+      "",
       "Neue Standanfrage über den 3D-Konfigurator:",
       "",
       "=== Standdaten ===",
@@ -757,11 +773,51 @@ export default function SidebarControls({
     const subject = encodeURIComponent(
       `Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`
     );
+    setMailText(lines.join("\n"));
+    setCopyState("offen");
     const body = encodeURIComponent(lines.join("\n"));
     // Keep this on one line to avoid breaking the email address
-    const mailto = `mailto:sunds-messebau@gmx.de?subject=${subject}&body=${body}`;
-    if (typeof window !== "undefined" && typeof window.location !== "undefined") {
-      window.location.href = mailto;
+    return `mailto:sunds-messebau@gmx.de?subject=${subject}&body=${body}`;
+  };
+
+  // Kopiert den Text der vorbereiteten Mail; ohne oder bei abgelehnter Zwischenablage steht das am Knopf.
+  const copyRequest = () => {
+    if (!mailText) return;
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    if (!clipboard?.writeText) {
+      setCopyState("fehler");
+      return;
+    }
+    try {
+      clipboard.writeText(mailText).then(
+        () => setCopyState("kopiert"),
+        () => setCopyState("fehler")
+      );
+    } catch {
+      setCopyState("fehler");
+    }
+  };
+
+  // Relay an den Lead-Endpunkt und mailto parallel. Erfolg nur, wenn der Endpunkt die Anfrage annimmt
+  // (Spieltheoretiker 0130 S2): ein geöffnetes Mailprogramm ist keine gesendete Mail.
+  const sendStandRequest = async (contact: ContactRequest) => {
+    setSendState("sending");
+    try {
+      const payload = buildLeadPayload({
+        contact,
+        standdaten: buildStandSummary({ includePrice: true }),
+        standgroesse: formatStandgroesse(config.width, config.depth),
+      });
+      const result = await submitStandRequest({ payload, mailtoUrl: buildMailtoUrl(contact) });
+      setSendState(result.relay.ok ? "relay" : result.mailto ? "mailto" : "fehler");
+    } catch {
+      // Nutzlast oder mailto-Text nicht baubar: wenigstens das Mailprogramm versuchen.
+      try {
+        openMailto(buildMailtoUrl(contact));
+        setSendState("mailto");
+      } catch {
+        setSendState("fehler");
+      }
     }
   };
 
@@ -798,7 +854,9 @@ export default function SidebarControls({
     }
 
     setContactErrors({});
-    sendEmailRequest(contact);
+    // Spieltheoretiker 0130 K3: nach angenommener Anfrage kein zweiter Lead per erneutem Klick
+    if (sendState === "sending" || sendState === "relay") return;
+    void sendStandRequest(contact);
   };
 
   return (
@@ -2287,9 +2345,43 @@ export default function SidebarControls({
           </label>
 
           <div className="form-actions">
-            <button className="btn-primary full-width" type="submit">
-              Anfrage per E-Mail erstellen
+            <button
+              className="btn-primary full-width"
+              type="submit"
+              disabled={sendState === "sending" || sendState === "relay"}
+              aria-busy={sendState === "sending"}
+            >
+              {sendState === "sending"
+                ? "Anfrage wird gesendet …"
+                : sendState === "relay"
+                  ? "✓ Anfrage gesendet"
+                  : "Anfrage per E-Mail erstellen"}
             </button>
+            {sendState === "relay" ? (
+              <p className="form-success" role="status">
+                {ERFOLG_SATZ} Sie müssen nichts weiter tun. Die geöffnete E-Mail können Sie schließen.
+              </p>
+            ) : null}
+            {sendState === "mailto" ? (
+              <p className="form-helper" role="status">
+                Bitte senden Sie die vorbereitete E-Mail in Ihrem E-Mail-Programm ab, damit Ihre Anfrage bei uns
+                ankommt. Hat sich kein E-Mail-Programm geöffnet, kopieren Sie die Anfrage und schreiben Sie uns an
+                sunds-messebau@gmx.de.{" "}
+                <button type="button" className="btn-secondary" onClick={copyRequest}>
+                  {copyState === "kopiert"
+                    ? "Kopiert"
+                    : copyState === "fehler"
+                      ? "Kopieren nicht möglich"
+                      : "Anfrage kopieren"}
+                </button>
+              </p>
+            ) : null}
+            {sendState === "fehler" ? (
+              <p className="form-error" role="alert">
+                Das hat nicht geklappt. Bitte klicken Sie noch einmal auf den Knopf oder schreiben Sie uns an
+                sunds-messebau@gmx.de.
+              </p>
+            ) : null}
             <p className="form-helper" aria-live="polite">
               Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.
             </p>
