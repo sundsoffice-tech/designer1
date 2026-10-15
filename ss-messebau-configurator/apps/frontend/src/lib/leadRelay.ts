@@ -84,6 +84,22 @@ export function ohneEinzelSurrogat(text: string): string {
   return aus;
 }
 
+const aenderungsKopf = (aenderungZu?: string) => (aenderungZu ? [`Änderung zu Vorgang ${aenderungZu}`] : []);
+
+// Text fuer den Weg ueber das Mailprogramm (mailto und Kopieren). Eine geaenderte Anfrage
+// nennt auch dort ihren Vorgang (programmierer Runde 3, Kann-Fund).
+export function buildAnfrageMailText(standLines: string[], kontaktLines: string[], aenderungZu?: string): string {
+  return [
+    ...aenderungsKopf(aenderungZu),
+    "Neue Standanfrage über den 3D-Konfigurator:",
+    "",
+    "=== Standdaten ===",
+    ...standLines,
+    "",
+    ...kontaktLines,
+  ].join("\n");
+}
+
 // aenderungZu: Vorgang einer schon angekommenen Anfrage; die Nachricht beginnt dann mit
 // "Änderung zu Vorgang X" (Runde 3, K1). Sie unterscheidet sich damit vom ersten Lead,
 // der Endpunkt fuehrt sie nicht mit ihm zusammen.
@@ -96,7 +112,7 @@ export function buildLeadPayload(
   const telefonRoh = (contact.phone ?? "").trim();
   const telefon = SERVER_TELEFON.test(telefonRoh) ? kappe(telefonRoh, 60) : "";
   const kopf = [
-    ...(aenderungZu ? [`Änderung zu Vorgang ${aenderungZu}`] : []),
+    ...aenderungsKopf(aenderungZu),
     "Standanfrage aus dem 3D-Konfigurator",
     ...(contact.fair ? [`Messe / Event: ${contact.fair}`] : []),
     ...(telefonRoh && !telefon ? [`Telefon (Freitext): ${telefonRoh}`] : []),

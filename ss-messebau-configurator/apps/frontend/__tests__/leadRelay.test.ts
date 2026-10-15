@@ -1,6 +1,7 @@
 import {
   LEAD_ENDPOINT,
   LEAD_KUNDE,
+  buildAnfrageMailText,
   buildLeadPayload,
   leadAusgang,
   ohneEinzelSurrogat,
@@ -125,6 +126,33 @@ describe("buildLeadPayload", () => {
     expect(p.nachricht.startsWith("Änderung zu Vorgang a1b2c3d4e5\nStandanfrage aus dem 3D-Konfigurator")).toBe(true);
     const ohne = buildLeadPayload(kontakt, stand, "/designer1/");
     expect(ohne.nachricht.startsWith("Standanfrage aus dem 3D-Konfigurator")).toBe(true);
+  });
+});
+
+// programmierer Runde 3, Kann-Fund: Scheitert die geaenderte Anfrage am Endpunkt und geht
+// ueber das Mailprogramm, muss auch die Mail den Vorgang nennen.
+describe("buildAnfrageMailText", () => {
+  const kontaktZeilen = ["=== Kontakt ===", "Name: Erika Muster"];
+
+  it("nennt bei einer Aenderung den Vorgang in der ersten Zeile", () => {
+    const text = buildAnfrageMailText(stand, kontaktZeilen, "a1b2c3d4e5");
+    expect(text.split("\n")[0]).toBe("Änderung zu Vorgang a1b2c3d4e5");
+    expect(text).toContain("Neue Standanfrage über den 3D-Konfigurator:");
+    expect(text).toContain("Fläche: 6 x 4 m (24 m²)");
+    expect(text).toContain("Name: Erika Muster");
+  });
+
+  it("bleibt ohne Vorgang wie bisher", () => {
+    expect(buildAnfrageMailText(stand, kontaktZeilen)).toBe(
+      [
+        "Neue Standanfrage über den 3D-Konfigurator:",
+        "",
+        "=== Standdaten ===",
+        ...stand,
+        "",
+        ...kontaktZeilen,
+      ].join("\n")
+    );
   });
 });
 

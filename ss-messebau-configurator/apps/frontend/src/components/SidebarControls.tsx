@@ -12,6 +12,7 @@ import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
 import {
+  buildAnfrageMailText,
   buildLeadPayload,
   leadAusgang,
   ohneEinzelSurrogat,
@@ -780,22 +781,20 @@ export default function SidebarControls({
     }
   };
 
-  const buildAnfrageText = (contact: ContactRequest) =>
-    [
-      "Neue Standanfrage über den 3D-Konfigurator:",
-      "",
-      "=== Standdaten ===",
-      ...buildStandSummary({ includeFair: true, includePrice: true }),
-      "",
-      ...buildContactSection(contact),
-    ].join("\n");
+  // aenderungZu: Vorgang, wenn eine geaenderte Anfrage ueber das Mailprogramm geht.
+  const buildAnfrageText = (contact: ContactRequest, aenderungZu?: string) =>
+    buildAnfrageMailText(
+      buildStandSummary({ includeFair: true, includePrice: true }),
+      buildContactSection(contact),
+      aenderungZu
+    );
 
-  const sendEmailRequest = (contact: ContactRequest) => {
+  const sendEmailRequest = (contact: ContactRequest, aenderungZu?: string) => {
     // Ohne einzelne Surrogate, sonst wirft encodeURIComponent und nichts oeffnet sich (K3).
     const subject = encodeURIComponent(
       ohneEinzelSurrogat(`Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`)
     );
-    const body = encodeURIComponent(ohneEinzelSurrogat(buildAnfrageText(contact)));
+    const body = encodeURIComponent(ohneEinzelSurrogat(buildAnfrageText(contact, aenderungZu)));
     // Keep this on one line to avoid breaking the email address
     const mailto = `mailto:${RUECKFALL_ADRESSE}?subject=${subject}&body=${body}`;
     if (typeof window !== "undefined" && typeof window.location !== "undefined") {
@@ -813,7 +812,8 @@ export default function SidebarControls({
 
   // Ausweg, wenn sich kein Mailprogramm oeffnet oder der Eingang unklar ist (Kuenstler 1).
   const kopiere = (was: "adresse" | "anfrage") => {
-    const text = was === "adresse" ? RUECKFALL_ADRESSE : buildAnfrageText(aktuellerKontakt());
+    // bezugRef bleibt nach einer gescheiterten Aenderung gesetzt, also auch hier der Vorgang.
+    const text = was === "adresse" ? RUECKFALL_ADRESSE : buildAnfrageText(aktuellerKontakt(), bezugRef.current);
     if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
       setKopiert("fehler");
       return;
@@ -905,7 +905,7 @@ export default function SidebarControls({
     const ausgang = leadAusgang(ergebnis);
     setLeadStatus(ausgang);
     if (ausgang.art === "mailprogramm") {
-      sendEmailRequest(contact);
+      sendEmailRequest(contact, bezug);
     }
   };
 
