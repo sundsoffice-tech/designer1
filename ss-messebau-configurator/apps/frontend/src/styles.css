@@ -1206,6 +1206,11 @@ button {
   outline-offset: 2px;
 }
 
+/* 14 px bis zur Datenschutzzeile: 6 px Luecke von .form-actions plus 8 px (Runde 4, K9). */
+.lead-meldung:not(.lead-meldung--leer) {
+  margin-bottom: 8px;
+}
+
 /* Leer bleibt die Live-Region im Baum, sonst sagen Screenreader den Wechsel nicht an. */
 .lead-meldung--leer {
   border: 0;
