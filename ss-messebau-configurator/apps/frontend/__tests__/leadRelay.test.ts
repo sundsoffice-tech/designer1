@@ -3,6 +3,7 @@ import {
   LEAD_KUNDE,
   buildLeadPayload,
   leadAusgang,
+  ohneEinzelSurrogat,
   relayLeadToHub,
 } from "../src/lib/leadRelay";
 
@@ -116,6 +117,36 @@ describe("buildLeadPayload", () => {
       expect(utf8Bytes(JSON.stringify(p))).toBeLessThan(16 * 1024);
       expect(p.nachricht.startsWith("Standanfrage aus dem 3D-Konfigurator")).toBe(true);
     }
+  });
+
+  // Runde 3, K1: Die geaenderte Anfrage nennt den Vorgang, auf den sie sich bezieht.
+  it("beginnt eine geaenderte Anfrage mit 'Änderung zu Vorgang X'", () => {
+    const p = buildLeadPayload(kontakt, stand, "/designer1/", "a1b2c3d4e5");
+    expect(p.nachricht.startsWith("Änderung zu Vorgang a1b2c3d4e5\nStandanfrage aus dem 3D-Konfigurator")).toBe(true);
+    const ohne = buildLeadPayload(kontakt, stand, "/designer1/");
+    expect(ohne.nachricht.startsWith("Standanfrage aus dem 3D-Konfigurator")).toBe(true);
+  });
+});
+
+// Runde 3, K3: encodeURIComponent wirft bei einem einzelnen Surrogat (URIError),
+// dann oeffnete der mailto-Weg nichts.
+describe("ohneEinzelSurrogat", () => {
+  const hoch = String.fromCharCode(0xd83d);
+  const tief = String.fromCharCode(0xde00);
+  const ersatz = String.fromCharCode(0xfffd);
+
+  it("ersetzt einzelne Surrogate und laesst ganze Emoji stehen", () => {
+    expect(ohneEinzelSurrogat("a" + hoch + "b")).toBe("a" + ersatz + "b");
+    expect(ohneEinzelSurrogat("a" + tief)).toBe("a" + ersatz);
+    expect(ohneEinzelSurrogat("x" + hoch)).toBe("x" + ersatz);
+    expect(ohneEinzelSurrogat(hoch + tief + "ä")).toBe(hoch + tief + "ä");
+    expect(ohneEinzelSurrogat(tief + hoch)).toBe(ersatz + ersatz);
+  });
+
+  it("macht jeden Text fuer encodeURIComponent tauglich", () => {
+    const kaputt = "Halle 5 " + hoch + " Stand " + tief;
+    expect(() => encodeURIComponent(kaputt)).toThrow(URIError);
+    expect(() => encodeURIComponent(ohneEinzelSurrogat(kaputt))).not.toThrow();
   });
 });
 
