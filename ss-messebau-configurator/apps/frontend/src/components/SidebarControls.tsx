@@ -11,7 +11,7 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
-import { buildLeadPayload, relayLeadToHub } from "../lib/leadRelay";
+import { buildLeadPayload, leadAusgang, relayLeadToHub, type LeadAusgang } from "../lib/leadRelay";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -167,13 +167,9 @@ export default function SidebarControls({
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
-  const [leadStatus, setLeadStatus] = useState<
-    | { art: "ruhe" }
-    | { art: "sendet" }
-    | { art: "angekommen"; vorgang: string }
-    | { art: "mailprogramm" }
-    | { art: "unklar" }
-  >({ art: "ruhe" });
+  const [leadStatus, setLeadStatus] = useState<{ art: "ruhe" } | { art: "sendet" } | LeadAusgang>({
+    art: "ruhe",
+  });
   const [kopiert, setKopiert] = useState<"adresse" | "anfrage" | "fehler" | null>(null);
   const leadMeldungRef = useRef<HTMLDivElement>(null);
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
@@ -807,7 +803,12 @@ export default function SidebarControls({
 
   // Erfolg, Rueckfall und unklarer Ausgang bekommen den Fokus (Kuenstler 3).
   useEffect(() => {
-    if (leadStatus.art === "angekommen" || leadStatus.art === "mailprogramm" || leadStatus.art === "unklar") {
+    if (
+      leadStatus.art === "angekommen" ||
+      leadStatus.art === "mailprogramm" ||
+      leadStatus.art === "unklar" ||
+      leadStatus.art === "abgelehnt"
+    ) {
       leadMeldungRef.current?.focus();
     }
   }, [leadStatus.art]);
@@ -830,10 +831,19 @@ export default function SidebarControls({
     return errors;
   }, []);
 
-  const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Während des Sendens und nach angekommener Anfrage kein zweiter Lead.
-    if (leadStatus.art === "sendet" || leadStatus.art === "angekommen") {
+    // Nach angekommener Anfrage kein zweiter Lead über Enter oder den Hauptknopf;
+    // eine geänderte Anfrage geht nur über ihren eigenen Knopf (Kuenstler 5).
+    if (leadStatus.art === "angekommen") {
+      return;
+    }
+    void sendeAnfrage();
+  };
+
+  const sendeAnfrage = async () => {
+    // Während des Sendens kein zweiter Lead.
+    if (leadStatus.art === "sendet") {
       return;
     }
 
@@ -854,17 +864,13 @@ export default function SidebarControls({
     const ergebnis = await relayLeadToHub(
       buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seite)
     );
-    if (ergebnis.ok) {
-      setLeadStatus({ art: "angekommen", vorgang: ergebnis.vorgang });
-      return;
+    // Unklar: kein mailto, der Lead kann schon gespeichert sein (Kuenstler 2, Spieltheoretiker 4).
+    // Abgelehnt (400/429): Text des Servers statt sofort Mailprogramm (Kuenstler 12).
+    const ausgang = leadAusgang(ergebnis);
+    setLeadStatus(ausgang);
+    if (ausgang.art === "mailprogramm") {
+      sendEmailRequest(contact);
     }
-    if (ergebnis.unklar) {
-      // Kein mailto: Der Lead kann schon gespeichert sein (Kuenstler 2, Spieltheoretiker 4).
-      setLeadStatus({ art: "unklar" });
-      return;
-    }
-    setLeadStatus({ art: "mailprogramm" });
-    sendEmailRequest(contact);
   };
 
   return (
@@ -2286,7 +2292,7 @@ export default function SidebarControls({
 
         <form className="form-grid contact-form" onSubmit={handleContactSubmit} noValidate>
           <label htmlFor="contact-name">
-            Name
+            Name (Pflicht)
             <input
               id="contact-name"
               type="text"
@@ -2314,7 +2320,7 @@ export default function SidebarControls({
             />
           </label>
           <label htmlFor="contact-email">
-            E-Mail
+            E-Mail (Pflicht)
             <input
               id="contact-email"
               type="email"
@@ -2374,16 +2380,39 @@ export default function SidebarControls({
               className={
                 leadStatus.art === "angekommen"
                   ? "lead-meldung lead-meldung--ok"
-                  : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar"
+                  : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" || leadStatus.art === "abgelehnt"
                     ? "lead-meldung lead-meldung--warnung"
                     : "lead-meldung lead-meldung--leer"
               }
             >
               {leadStatus.art === "angekommen" ? (
-                <p className="lead-meldung-titel">
-                  <span aria-hidden="true">✓ </span>
-                  {`Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`}
-                </p>
+                <>
+                  <p className="lead-meldung-titel">
+                    <span aria-hidden="true">✓ </span>
+                    {`Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`}
+                  </p>
+                  {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5). */}
+                  <div className="lead-meldung-knoepfe">
+                    <button type="button" className="btn-secondary" onClick={() => void sendeAnfrage()}>
+                      Geänderte Anfrage senden
+                    </button>
+                  </div>
+                </>
+              ) : leadStatus.art === "abgelehnt" ? (
+                <>
+                  <p className="lead-meldung-titel">
+                    <span aria-hidden="true">! </span>
+                    {leadStatus.text}
+                  </p>
+                  {leadStatus.status === 429 ? (
+                    <p>
+                      {"Telefon: "}
+                      <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
+                      {", E-Mail: "}
+                      <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
+                    </p>
+                  ) : null}
+                </>
               ) : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" ? (
                 <>
                   <p className="lead-meldung-titel">
