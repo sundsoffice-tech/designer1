@@ -47,6 +47,10 @@ const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
 const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
+// "Ihre Nummer: 7471" (Runde 4, S1) erst zeigen, wenn die Leadmaschine die Kurznummer in
+// Mail und Register fuehrt; bis dahin findet niemand im Haus einen Anruf mit dieser Nummer
+// (Kuenstler und Spieltheoretiker vor live, 15.10.2026). S1 laesst "sonst keine" zu.
+const KURZNUMMER_ZEIGEN = false;
 // Warndreieck statt "!" vor dem Titel jedes Warnkastens (Runde 4, S6); als SVG, damit es
 // nicht je nach Schrift als buntes Emoji oder gar nicht erscheint.
 const WARNZEICHEN = (
@@ -2479,7 +2483,8 @@ export default function SidebarControls({
                       : "Danke, Ihre Anfrage ist angekommen."}
                   </p>
                   <p>Wir melden uns mit einem Angebot.</p>
-                  {((nummer) => (nummer ? <p>{`Ihre Nummer: ${nummer}`}</p> : null))(kurzeNummer(leadStatus.vorgang))}
+                  {KURZNUMMER_ZEIGEN &&
+                    ((nummer) => (nummer ? <p>{`Ihre Nummer: ${nummer}`}</p> : null))(kurzeNummer(leadStatus.vorgang))}
                   {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
                       ohne Änderung kein zweiter Lead (Runde 3, K1). Kein eigener Knopf mehr: nach
                       einer Änderung heisst der Hauptknopf "Änderung senden" (Runde 4, S2 und K8). */}

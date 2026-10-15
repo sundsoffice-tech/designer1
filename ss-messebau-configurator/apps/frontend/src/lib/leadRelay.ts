@@ -164,7 +164,7 @@ export function leadAusgang(ergebnis: LeadRelayResult): LeadAusgang {
 }
 
 // Kurze lesbare Nummer fuer den Dankessatz statt der Maschinennummer des Vorgangs
-// (Runde 4, Kuenstler S1). Stabil: FNV-1a 32 Bit ueber die UTF-8-Bytes, dann
+// (Runde 4, Kuenstler S1); angezeigt erst, wenn KURZNUMMER_ZEIGEN in SidebarControls an ist. Stabil: FNV-1a 32 Bit ueber die UTF-8-Bytes, dann
 // 1000 + h % 9000, also immer vier Ziffern. Ohne Vorgang keine Nummer.
 // Stand 15.10.2026 zeigt der Endpunkt diese Nummer noch nirgends; sie ist nachrechenbar
 // (Python-Gegenrechnung im Test), eindeutig ist sie nur zusammen mit Name oder E-Mail
