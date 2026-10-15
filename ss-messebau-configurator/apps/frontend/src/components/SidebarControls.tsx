@@ -187,7 +187,7 @@ export default function SidebarControls({
   const [leadStatus, setLeadStatus] = useState<{ art: "ruhe" } | { art: "sendet" } | LeadAusgang>({
     art: "ruhe",
   });
-  const [kopiert, setKopiert] = useState<"adresse" | "anfrage" | "fehler" | null>(null);
+  const [kopiert, setKopiert] = useState<"anfrage" | "fehler" | null>(null);
   const leadMeldungRef = useRef<HTMLDivElement>(null);
   // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Geänderte Anfrage senden" geht
   // nur, wenn sich Stand oder Angaben seitdem geaendert haben (Runde 3, K1).
@@ -813,15 +813,15 @@ export default function SidebarControls({
   });
 
   // Ausweg, wenn sich kein Mailprogramm oeffnet oder der Eingang unklar ist (Kuenstler 1).
-  const kopiere = (was: "adresse" | "anfrage") => {
+  const kopiereAnfrage = () => {
     // bezugRef bleibt nach einer gescheiterten Aenderung gesetzt, also auch hier der Vorgang.
-    const text = was === "adresse" ? RUECKFALL_ADRESSE : buildAnfrageText(aktuellerKontakt(), bezugRef.current);
+    const text = buildAnfrageText(aktuellerKontakt(), bezugRef.current);
     if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
       setKopiert("fehler");
       return;
     }
     navigator.clipboard.writeText(text).then(
-      () => setKopiert(was),
+      () => setKopiert("anfrage"),
       () => setKopiert("fehler")
     );
   };
@@ -2482,15 +2482,16 @@ export default function SidebarControls({
                         Per E-Mail senden
                       </button>
                     ) : null}
-                    <button type="button" className="btn-secondary" onClick={() => kopiere("adresse")}>
-                      {kopiert === "adresse" ? "Adresse kopiert" : "Adresse kopieren"}
-                    </button>
-                    <button type="button" className="btn-secondary" onClick={() => kopiere("anfrage")}>
+                    {/* Anrufen statt "Adresse kopieren"; die Nummer steht darueber als Text (Runde 4, S5). */}
+                    <a className="btn-secondary" href={RUECKFALL_TELEFON_LINK}>
+                      Anrufen
+                    </a>
+                    <button type="button" className="btn-secondary" onClick={kopiereAnfrage}>
                       {kopiert === "anfrage" ? "Anfrage kopiert" : "Anfrage kopieren"}
                     </button>
                   </div>
                   {kopiert === "fehler" ? (
-                    <p>Kopieren ist in diesem Browser nicht möglich. Bitte markieren Sie die Adresse von Hand.</p>
+                    <p>Kopieren ist in diesem Browser nicht möglich. Bitte schreiben Sie uns an die Adresse oben.</p>
                   ) : null}
                 </>
               ) : null}

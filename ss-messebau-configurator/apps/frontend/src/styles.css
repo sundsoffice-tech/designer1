@@ -1243,6 +1243,11 @@ button {
   gap: 8px;
 }
 
+/* "Anrufen" ist ein tel:-Link im Knopfkleid (Runde 4, S5). */
+.lead-meldung-knoepfe a.btn-secondary {
+  text-decoration: none;
+}
+
 .full-width {
   width: 100%;
 }
