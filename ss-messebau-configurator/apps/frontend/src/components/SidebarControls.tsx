@@ -2369,7 +2369,9 @@ export default function SidebarControls({
                 ? "Anfrage wird gesendet …"
                 : leadStatus.art === "angekommen"
                   ? "Anfrage gesendet"
-                  : "Anfrage senden"}
+                  : leadStatus.art === "unklar"
+                    ? "Anfrage erneut senden"
+                    : "Anfrage senden"}
             </button>
             {/* Eigener Kasten statt Hilfszeile, Fokus springt hierher (Kuenstler 3). */}
             <div
@@ -2423,7 +2425,7 @@ export default function SidebarControls({
                   </p>
                   <p>
                     {leadStatus.art === "unklar"
-                      ? "Möglicherweise ist sie trotzdem angekommen. Wenn Sie sichergehen möchten, schreiben Sie an "
+                      ? "Möglicherweise ist sie trotzdem angekommen; erneutes Senden kann sie doppelt schicken. Wenn Sie sichergehen möchten, schreiben Sie an "
                       : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie an "}
                     <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
                     {" oder rufen Sie an: "}
