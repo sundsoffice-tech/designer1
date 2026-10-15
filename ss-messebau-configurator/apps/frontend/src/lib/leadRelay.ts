@@ -24,9 +24,11 @@ export type LeadPayload = {
 };
 
 // Drei Ausgaenge: gespeichert, vom Server abgelehnt (Status bekannt) oder unklar.
-// Unklar heisst: keine lesbare Antwort (Zeitgrenze, Netz, CORS). Der Lead kann
-// dann trotzdem gespeichert sein, deshalb kein automatischer Rueckfall auf mailto,
-// sonst entsteht ein Doppel-Lead (Rollen 15.10.2026, Spieltheoretiker 4, Wissenschaftler 2).
+// Unklar heisst: keine lesbare Antwort (Zeitgrenze, Netz, CORS). Weil der Endpunkt
+// direkt nach dem Speichern antwortet, ist der Lead dann fast immer nie gespeichert;
+// das Formular bittet um erneutes Senden und bietet mailto per Knopf an, nicht
+// automatisch. Gleiche Leads fuehrt der Endpunkt 15 Minuten lang zusammen
+// (Runde 3, Spieltheoretiker 1, Wissenschaftler 1).
 export type LeadRelayResult =
   | { ok: true; vorgang: string }
   | { ok: false; unklar?: false; status: number; fehler?: string }
@@ -92,7 +94,8 @@ export function buildLeadPayload(
 
 // Was das Formular nach dem Senden zeigt (SidebarControls.tsx):
 // - angekommen: gespeichert, mit Vorgang;
-// - unklar: keine lesbare Antwort, kein mailto, Adresse und Kopierknoepfe (Kuenstler 2);
+// - unklar: keine lesbare Antwort, Bitte um erneutes Senden, Knopf "Per E-Mail senden",
+//   Adresse und Kopierknoepfe (Runde 3, M1);
 // - abgelehnt: 400/429 mit Text des Servers, kein mailto (Kuenstler 12);
 // - mailprogramm: jede andere Ablehnung, Rueckfall auf mailto mit Ausweg (Kuenstler 1).
 export type LeadAusgang =
@@ -143,8 +146,9 @@ export async function relayLeadToHub(
     }
     return { ok: false, status: antwort.status, fehler: daten?.fehler };
   } catch {
-    // Zeitgrenze, Netzfehler oder vom Browser verworfene Antwort: Der Server kann
-    // den Lead schon gespeichert haben.
+    // Zeitgrenze, Netzfehler oder vom Browser verworfene Antwort (Preflight, 403/502
+    // ohne CORS-Kopf): meist nie gespeichert, selten schon gespeichert. Erneutes Senden
+    // ist gefahrlos, der Endpunkt fuehrt gleiche Leads zusammen.
     return { ok: false, unklar: true };
   } finally {
     clearTimeout(uhr);
