@@ -114,8 +114,8 @@ export function leadAusgang(ergebnis: LeadRelayResult): LeadAusgang {
   return { art: "mailprogramm" };
 }
 
-// Wirft nie: jeder Fehler wird zu { ok: false }. Nur bei bekanntem Status faellt der
-// Aufrufer auf mailto zurueck; bei { unklar: true } zeigt er Adresse und Kopierknoepfe.
+// Wirft nie: jeder Fehler wird zu { ok: false }. Was der Aufrufer daraus macht
+// (mailto, Servertext, unklar), entscheidet leadAusgang().
 export async function relayLeadToHub(
   payload: LeadPayload,
   fetchImpl: typeof fetch = fetch,
