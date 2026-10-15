@@ -36,7 +36,26 @@ export type LeadRelayResult =
 // mit 400 ab. Dann geht sie als Freitext in die Nachricht, der Lead kommt trotzdem an.
 const SERVER_TELEFON = /^[0-9+()/\s.-]{6,}$/;
 
-const kappe = (text: string, grenze: number) => text.slice(0, grenze);
+// Nach Zeichen schneiden, nicht nach UTF-16-Einheiten: slice() trennte ein Emoji an
+// der Grenze, das halbe Surrogat brachte den Endpunkt auf 500 (Wissenschaftler 4).
+// Der Endpunkt zaehlt ebenfalls Codepoints (Python len).
+const kappe = (text: string, grenze: number) => Array.from(text).slice(0, grenze).join("");
+
+// Der Endpunkt nimmt hoechstens MAX_KOERPER = 16384 Byte (dienst.py) und antwortet sonst 413.
+// Nach Zeichen gekappt passen 4000 Emoji (16000 Byte) in die Nachricht, Steuerzeichen werden
+// in JSON zu sechs Byte (Wissenschaftler 5). Deshalb kuerzt buildLeadPayload die Nachricht,
+// bis der Koerper mit Reserve unter der Grenze liegt.
+const KOERPER_BYTES = 15 * 1024;
+
+// UTF-8-Laenge ohne TextEncoder (fehlt je nach Testumgebung).
+const utf8Laenge = (text: string) => {
+  let n = 0;
+  for (const zeichen of text) {
+    const cp = zeichen.codePointAt(0) ?? 0;
+    n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+  }
+  return n;
+};
 
 export function buildLeadPayload(
   contact: ContactRequest,
@@ -52,7 +71,7 @@ export function buildLeadPayload(
     ...(contact.message ? ["", contact.message] : []),
     "",
   ];
-  return {
+  const payload: LeadPayload = {
     kunde: LEAD_KUNDE,
     name: kappe(contact.name.trim(), 120),
     telefon,
@@ -63,6 +82,12 @@ export function buildLeadPayload(
     seite: kappe(seite, 300),
     botcheck: "",
   };
+  let zeichen = Array.from(payload.nachricht);
+  while (zeichen.length > 0 && utf8Laenge(JSON.stringify(payload)) > KOERPER_BYTES) {
+    zeichen = zeichen.slice(0, Math.floor(zeichen.length * 0.9));
+    payload.nachricht = zeichen.join("");
+  }
+  return payload;
 }
 
 // Wirft nie: jeder Fehler wird zu { ok: false }. Nur bei bekanntem Status faellt der

@@ -82,6 +82,40 @@ describe("buildLeadPayload", () => {
     );
     expect(utf8Bytes(JSON.stringify(p))).toBeLessThan(16 * 1024);
   });
+
+  // Rollen 15.10.2026, Wissenschaftler 4: slice() schnitt nach UTF-16-Einheiten. Ein Emoji
+  // an Stelle 120 (Name) oder 4000 (Nachricht) liess ein halbes Surrogat stehen, der
+  // Endpunkt antwortete 500, kein Lead.
+  it("schneidet nie ein Emoji an der Grenze entzwei", () => {
+    const halbesSurrogat = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    const emoji = "\u{1F600}";
+    const p = buildLeadPayload(
+      { name: "x".repeat(119) + emoji + "y", email: "a@b.de", company: "x".repeat(159) + emoji, phone: "" },
+      ["z".repeat(4000) + emoji],
+      "/" + "s".repeat(298) + emoji
+    );
+    for (const feld of [p.name, p.firma, p.nachricht, p.seite]) {
+      expect(halbesSurrogat.test(feld)).toBe(false);
+    }
+    expect(p.name).toBe("x".repeat(119) + emoji);
+    expect(Array.from(p.name).length).toBe(120);
+    expect(Array.from(p.nachricht).length).toBeLessThanOrEqual(4000);
+  });
+
+  // Mit der Kappe nach Zeichen passen 4000 Emoji (16000 Byte) in die Nachricht; Steuerzeichen
+  // werden in JSON zu \u00XX (sechs Byte). Beides darf den Endpunkt nicht auf 413 bringen.
+  it("bleibt auch mit Emoji und Steuerzeichen unter der Bytegrenze des Endpunkts", () => {
+    for (const z of ["\u{1F600}", "\u0001"]) {
+      const lang = z.repeat(10000);
+      const p = buildLeadPayload(
+        { name: lang, email: "a@b.de", company: lang, phone: "", fair: lang },
+        [lang],
+        "/" + lang
+      );
+      expect(utf8Bytes(JSON.stringify(p))).toBeLessThan(16 * 1024);
+      expect(p.nachricht.startsWith("Standanfrage aus dem 3D-Konfigurator")).toBe(true);
+    }
+  });
 });
 
 describe("relayLeadToHub", () => {
