@@ -2495,11 +2495,14 @@ export default function SidebarControls({
                     <a className="btn-secondary" href={RUECKFALL_TELEFON_LINK}>
                       Anrufen
                     </a>
-                    <button type="button" className="btn-secondary" onClick={kopiereAnfrage}>
-                      {kopiert === "anfrage" ? "Anfrage kopiert" : "Anfrage kopieren"}
-                    </button>
+                    {/* Unklar: zwei Nebenwege reichen, "Anfrage kopieren" nur im Rueckfall (Runde 4, K7). */}
+                    {leadStatus.art === "mailprogramm" ? (
+                      <button type="button" className="btn-secondary" onClick={kopiereAnfrage}>
+                        {kopiert === "anfrage" ? "Anfrage kopiert" : "Anfrage kopieren"}
+                      </button>
+                    ) : null}
                   </div>
-                  {kopiert === "fehler" ? (
+                  {leadStatus.art === "mailprogramm" && kopiert === "fehler" ? (
                     <p>Kopieren ist in diesem Browser nicht möglich. Bitte schreiben Sie uns an die Adresse oben.</p>
                   ) : null}
                 </>
