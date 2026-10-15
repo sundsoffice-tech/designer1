@@ -11,6 +11,7 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
+import { buildLeadPayload, relayLeadToHub } from "../lib/leadRelay";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -158,6 +159,9 @@ export default function SidebarControls({
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
+  const [leadStatus, setLeadStatus] = useState<
+    { art: "ruhe" } | { art: "sendet" } | { art: "angekommen"; vorgang: string } | { art: "mailprogramm" }
+  >({ art: "ruhe" });
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
@@ -770,6 +774,9 @@ export default function SidebarControls({
 
     if (!contact.name?.trim()) {
       errors.name = "Name ist ein Pflichtfeld.";
+    } else if ([...contact.name.trim()].length < 2) {
+      // Der Lead-Endpunkt lehnt kürzere Namen ab (dienst.py, len(name) < 2, zählt Codepoints).
+      errors.name = "Bitte den vollständigen Namen angeben.";
     }
     if (!contact.email?.trim()) {
       errors.email = "E-Mail ist erforderlich.";
@@ -780,8 +787,12 @@ export default function SidebarControls({
     return errors;
   }, []);
 
-  const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Während des Sendens und nach angekommener Anfrage kein zweiter Lead.
+    if (leadStatus.art === "sendet" || leadStatus.art === "angekommen") {
+      return;
+    }
 
     const contact: ContactRequest = {
       name: customerName.trim(),
@@ -798,6 +809,18 @@ export default function SidebarControls({
     }
 
     setContactErrors({});
+    // Zuerst an den Lead-Endpunkt (speichert, mailt, landet im Anfragen-Register).
+    // Scheitert das, bleibt der bisherige Weg: Mailprogramm mit vorbereiteter Anfrage.
+    setLeadStatus({ art: "sendet" });
+    const seite = typeof window !== "undefined" ? window.location.pathname : "";
+    const ergebnis = await relayLeadToHub(
+      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seite)
+    );
+    if (ergebnis.ok) {
+      setLeadStatus({ art: "angekommen", vorgang: ergebnis.vorgang });
+      return;
+    }
+    setLeadStatus({ art: "mailprogramm" });
     sendEmailRequest(contact);
   };
 
@@ -2287,11 +2310,24 @@ export default function SidebarControls({
           </label>
 
           <div className="form-actions">
-            <button className="btn-primary full-width" type="submit">
-              Anfrage per E-Mail erstellen
+            <button
+              className="btn-primary full-width"
+              type="submit"
+              disabled={leadStatus.art === "sendet" || leadStatus.art === "angekommen"}
+              aria-busy={leadStatus.art === "sendet"}
+            >
+              {leadStatus.art === "sendet"
+                ? "Anfrage wird gesendet …"
+                : leadStatus.art === "angekommen"
+                  ? "Anfrage gesendet"
+                  : "Anfrage senden"}
             </button>
             <p className="form-helper" aria-live="polite">
-              Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.
+              {leadStatus.art === "angekommen"
+                ? `Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`
+                : leadStatus.art === "mailprogramm"
+                  ? "Die direkte Übermittlung hat nicht geklappt. Wir haben Ihre Anfrage im Mailprogramm vorbereitet, bitte dort absenden."
+                  : "Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung."}
             </p>
           </div>
         </form>
