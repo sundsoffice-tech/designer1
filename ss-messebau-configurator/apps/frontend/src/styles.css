@@ -1170,6 +1170,76 @@ button {
   margin: 0;
 }
 
+.form-helper a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Ergebnis der Anfrage: eigener Kasten, nicht in der Hilfszeile (Kuenstler 3). */
+.lead-meldung {
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.4));
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--panel-strong);
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lead-meldung p {
+  margin: 0;
+}
+
+.lead-meldung:focus {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+/* Leer bleibt die Live-Region im Baum, sonst sagen Screenreader den Wechsel nicht an. */
+.lead-meldung--leer {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.lead-meldung--ok {
+  border-left-color: var(--success);
+}
+
+.lead-meldung--warnung {
+  border-left-color: var(--danger);
+}
+
+.lead-meldung-titel {
+  font-weight: 600;
+}
+
+/* Ganze Adresse in die naechste Zeile statt "info@sundsmessebau.co | m"; nur wenn sie
+   allein nicht passt, darf sie brechen (Sichtpruefung Runde 3, 390 px und 1440 px). */
+.lead-meldung-adresse {
+  overflow-wrap: anywhere;
+}
+
+.lead-meldung a[href^="tel:"] {
+  white-space: nowrap;
+}
+
+.lead-meldung-knoepfe .btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.lead-meldung-knoepfe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .full-width {
   width: 100%;
 }
