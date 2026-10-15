@@ -1225,12 +1225,14 @@ button {
   font-weight: 600;
 }
 
-/* Ganze Adresse in die naechste Zeile statt "info@sundsmessebau.co | m"; nur wenn sie
-   allein nicht passt, darf sie brechen (Sichtpruefung Runde 3, 390 px und 1440 px). */
-.lead-meldung-adresse {
-  overflow-wrap: anywhere;
+/* Adresse und Nummer je in eigener Zeile, beide ungebrochen (Runde 4, S4). */
+.lead-meldung-kontakt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
+.lead-meldung-adresse,
 .lead-meldung a[href^="tel:"] {
   white-space: nowrap;
 }

@@ -47,14 +47,13 @@ const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
 const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
-// Anzeige mit Umbruchstelle nach dem @: im schmalen Kasten bricht sie dort und nicht
-// mitten in ".com" (Sichtpruefung Runde 3, 390 px). Kopieren nimmt RUECKFALL_ADRESSE.
-const [ADRESSE_NAME, ADRESSE_DOMAIN] = RUECKFALL_ADRESSE.split("@");
-const RUECKFALL_ADRESSE_ANZEIGE = (
-  <>
-    {ADRESSE_NAME}@<wbr />
-    {ADRESSE_DOMAIN}
-  </>
+// Adresse und Nummer je in einer eigenen Zeile, die Adresse ungebrochen; vorher brach sie
+// nach dem @ mitten im Satz (Runde 4, S4).
+const RUECKFALL_KONTAKT = (
+  <p className="lead-meldung-kontakt">
+    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
+    <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
+  </p>
 );
 
 export default function SidebarControls({
@@ -2456,14 +2455,7 @@ export default function SidebarControls({
                     <span aria-hidden="true">! </span>
                     {leadStatus.text}
                   </p>
-                  {leadStatus.status === 429 ? (
-                    <p>
-                      {"Telefon: "}
-                      <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
-                      {", E-Mail: "}
-                      <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
-                    </p>
-                  ) : null}
+                  {leadStatus.status === 429 ? RUECKFALL_KONTAKT : null}
                 </>
               ) : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" ? (
                 <>
@@ -2475,12 +2467,10 @@ export default function SidebarControls({
                   </p>
                   <p>
                     {leadStatus.art === "unklar"
-                      ? "Bitte senden Sie die Anfrage noch einmal. Kommt sie doppelt an, ist das kein Problem. Sie können sie auch per E-Mail an "
-                      : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie an "}
-                    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
-                    {leadStatus.art === "unklar" ? " senden oder anrufen: " : " oder rufen Sie an: "}
-                    <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>.
+                      ? "Bitte senden Sie die Anfrage noch einmal. Kommt sie doppelt an, ist das kein Problem. Sie können uns auch schreiben oder anrufen:"
+                      : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie uns oder rufen Sie an:"}
                   </p>
+                  {RUECKFALL_KONTAKT}
                   <div className="lead-meldung-knoepfe">
                     {/* Neben "Anfrage erneut senden" (Hauptknopf darueber) der zweite Weg (M1). */}
                     {leadStatus.art === "unklar" ? (
