@@ -31,11 +31,11 @@ const LazyAiAssistantPanel = aiAssistantEnabled
 
 const LazyVoiceAssistant = voiceAssistantEnabled ? lazy(() => import("./VoiceAssistant")) : null;
 
-// Rueckfall, wenn der Lead-Endpunkt nicht bestaetigt. Die Adresse ist das bisherige
-// mailto-Ziel; ein Wechsel (etwa auf Info@) entscheidet Fabrice (Rollen 15.10.2026,
-// Spieltheoretiker 5, Kuenstler 7). Die Nummer steht so auf sunds-messebau.de
+// Rueckfall, wenn der Lead-Endpunkt nicht bestaetigt. Adresse und Nummer hat Fabrice
+// am 15.10.2026 festgelegt (Auswahlfrage, F1/F2): info@ statt der frueheren GMX-Adresse,
+// gilt fuer Anzeige, Kopierknopf und mailto. Die Nummer steht so auf sunds-messebau.de
 // (Start, Kontakt, Impressum: tel:+4915140368754, gemessen 15.10.2026).
-const RUECKFALL_ADRESSE = "sunds-messebau@gmx.de";
+const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
 
