@@ -23,9 +23,14 @@ export type LeadPayload = {
   botcheck: string;
 };
 
+// Drei Ausgaenge: gespeichert, vom Server abgelehnt (Status bekannt) oder unklar.
+// Unklar heisst: keine lesbare Antwort (Zeitgrenze, Netz, CORS). Der Lead kann
+// dann trotzdem gespeichert sein, deshalb kein automatischer Rueckfall auf mailto,
+// sonst entsteht ein Doppel-Lead (Rollen 15.10.2026, Spieltheoretiker 4, Wissenschaftler 2).
 export type LeadRelayResult =
   | { ok: true; vorgang: string }
-  | { ok: false; status?: number; fehler?: string };
+  | { ok: false; unklar?: false; status: number; fehler?: string }
+  | { ok: false; unklar: true };
 
 // Wie TELEFON in dienst.py: eine Nummer, die das nicht erfuellt, lehnt der Endpunkt
 // mit 400 ab. Dann geht sie als Freitext in die Nachricht, der Lead kommt trotzdem an.
@@ -60,7 +65,8 @@ export function buildLeadPayload(
   };
 }
 
-// Wirft nie: jeder Fehler wird zu { ok: false }, der Aufrufer faellt dann auf mailto zurueck.
+// Wirft nie: jeder Fehler wird zu { ok: false }. Nur bei bekanntem Status faellt der
+// Aufrufer auf mailto zurueck; bei { unklar: true } zeigt er Adresse und Kopierknoepfe.
 export async function relayLeadToHub(
   payload: LeadPayload,
   fetchImpl: typeof fetch = fetch,
@@ -82,9 +88,15 @@ export async function relayLeadToHub(
     if (antwort.ok && daten?.ok === true && typeof daten.vorgang === "string" && daten.vorgang) {
       return { ok: true, vorgang: daten.vorgang };
     }
+    // 2xx ohne lesbaren Vorgang (Antwort abgebrochen): Ob gespeichert, wissen wir nicht.
+    if (antwort.ok && daten === null) {
+      return { ok: false, unklar: true };
+    }
     return { ok: false, status: antwort.status, fehler: daten?.fehler };
   } catch {
-    return { ok: false };
+    // Zeitgrenze, Netzfehler oder vom Browser verworfene Antwort: Der Server kann
+    // den Lead schon gespeichert haben.
+    return { ok: false, unklar: true };
   } finally {
     clearTimeout(uhr);
   }
