@@ -57,10 +57,29 @@ const WARNZEICHEN = (
 );
 
 // Adresse und Nummer je in einer eigenen Zeile, die Adresse ungebrochen; vorher brach sie
-// nach dem @ mitten im Satz (Runde 4, S4).
+// nach dem @ mitten im Satz (Runde 4, S4). Die <wbr> wirken nur, wenn sie bei grosser
+// Schrift ganz nicht passt: dann Bruch nach dem @ und vor ".com" statt mitten im Wort
+// (Kuenstler vor live, "sundsmesse/bau.com" bei 390 px).
+// Ohne @ oder ohne Punkt in der Domain bleibt die Adresse ungeteilt (programmierer vor live, Fund 2).
+const adresseMitUmbruchstellen = (adresse: string) => {
+  const at = adresse.indexOf("@");
+  const punkt = adresse.lastIndexOf(".");
+  if (at < 1 || punkt <= at + 1) {
+    return adresse;
+  }
+  return (
+    <>
+      {adresse.slice(0, at + 1)}
+      <wbr />
+      {adresse.slice(at + 1, punkt)}
+      <wbr />
+      {adresse.slice(punkt)}
+    </>
+  );
+};
 const RUECKFALL_KONTAKT = (
   <p className="lead-meldung-kontakt">
-    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
+    <strong className="lead-meldung-adresse">{adresseMitUmbruchstellen(RUECKFALL_ADRESSE)}</strong>
     <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
   </p>
 );
@@ -193,7 +212,10 @@ export default function SidebarControls({
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
-  const [leadStatus, setLeadStatus] = useState<{ art: "ruhe" } | { art: "sendet" } | LeadAusgang>({
+  // aenderung: Die angekommene Sendung war eine Aenderung zu einem Vorgang (eigener Dank).
+  const [leadStatus, setLeadStatus] = useState<
+    { art: "ruhe" } | { art: "sendet" } | (LeadAusgang & { aenderung?: boolean })
+  >({
     art: "ruhe",
   });
   const [kopiert, setKopiert] = useState<"anfrage" | "fehler" | null>(null);
@@ -921,7 +943,7 @@ export default function SidebarControls({
     // dieselbe, und jede weitere Aenderung bezieht sich auf die erste Anfrage
     // (programmierer Runde 4, Fund 2; der Endpunkt vergibt der Aenderung einen eigenen Vorgang).
     const ausgang = leadAusgang(ergebnis);
-    setLeadStatus(ausgang.art === "angekommen" && bezug ? { ...ausgang, vorgang: bezug } : ausgang);
+    setLeadStatus(ausgang.art === "angekommen" && bezug ? { ...ausgang, vorgang: bezug, aenderung: true } : ausgang);
     if (ausgang.art === "mailprogramm") {
       sendEmailRequest(contact, bezug);
     }
@@ -2450,7 +2472,11 @@ export default function SidebarControls({
                   {/* Kurze Ueberschrift, darunter normal; keine Maschinennummer im Satz (Runde 4, S1). */}
                   <p className="lead-meldung-titel">
                     <span aria-hidden="true">✓ </span>
-                    Danke, Ihre Anfrage ist angekommen.
+                    {/* Nach einer gesendeten Aenderung eigener Dank, sonst sieht der Kunde
+                        denselben Text wie vorher (Kuenstler vor live, Fund 5). */}
+                    {leadStatus.aenderung
+                      ? "Danke, Ihre Änderung ist angekommen."
+                      : "Danke, Ihre Anfrage ist angekommen."}
                   </p>
                   <p>Wir melden uns mit einem Angebot.</p>
                   {((nummer) => (nummer ? <p>{`Ihre Nummer: ${nummer}`}</p> : null))(kurzeNummer(leadStatus.vorgang))}
