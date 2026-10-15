@@ -282,7 +282,7 @@ describe("leadAusgang", () => {
 
 // Runde 4, Kuenstler S1: kurze lesbare Nummer statt Maschinennummer im Dankessatz.
 // Erwartete Werte unabhaengig in Python gerechnet (FNV-1a 32 Bit ueber UTF-8, 1000 + h % 9000),
-// damit der Endpunkt dieselbe Nummer nachrechnen kann.
+// damit eine Gegenstelle (etwa die Leadmaschine) dieselbe Nummer nachrechnen koennte.
 describe("kurzeNummer", () => {
   it("leitet aus dem Vorgang stabil eine vierstellige Nummer ab", () => {
     expect(kurzeNummer("a1b2c3d4e5")).toBe("7471");

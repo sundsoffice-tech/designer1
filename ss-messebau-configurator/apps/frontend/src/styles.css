@@ -1236,14 +1236,19 @@ button {
   margin-right: 6px;
 }
 
-/* Adresse und Nummer je in eigener Zeile, beide ungebrochen (Runde 4, S4). */
+/* Adresse und Nummer je in eigener Zeile (Runde 4, S4). Die Adresse steht allein in ihrer
+   Zeile und bricht deshalb nur, wenn sie ganz nicht passt (Zoom, grosse Schrift), statt
+   aus dem Kasten zu ragen (programmierer Runde 4, Fund 3). */
 .lead-meldung-kontakt {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.lead-meldung-adresse,
+.lead-meldung-adresse {
+  overflow-wrap: anywhere;
+}
+
 .lead-meldung a[href^="tel:"] {
   white-space: nowrap;
 }

@@ -41,7 +41,7 @@ const LazyVoiceAssistant = voiceAssistantEnabled ? lazy(() => import("./VoiceAss
 
 // Rueckfall, wenn der Lead-Endpunkt nicht bestaetigt. Adresse und Nummer hat Fabrice
 // am 15.10.2026 festgelegt (Auswahlfrage, F1/F2): info@ statt der frueheren GMX-Adresse,
-// gilt fuer Anzeige, Kopierknopf und mailto. Die Nummer steht so auf sunds-messebau.de
+// gilt fuer Anzeige und mailto. Die Nummer steht so auf sunds-messebau.de
 // (Start, Kontakt, Impressum: tel:+4915140368754, gemessen 15.10.2026).
 const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
@@ -198,7 +198,7 @@ export default function SidebarControls({
   });
   const [kopiert, setKopiert] = useState<"anfrage" | "fehler" | null>(null);
   const leadMeldungRef = useRef<HTMLDivElement>(null);
-  // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Geänderte Anfrage senden" geht
+  // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Änderung senden" (Hauptknopf) geht
   // nur, wenn sich Stand oder Angaben seitdem geaendert haben (Runde 3, K1).
   const gesendetRef = useRef("");
   // Bezug einer geaenderten Anfrage, bis sie angekommen ist: scheitert sie, sendet
@@ -821,7 +821,8 @@ export default function SidebarControls({
     fair: fair.trim() || undefined,
   });
 
-  // Ausweg, wenn sich kein Mailprogramm oeffnet oder der Eingang unklar ist (Kuenstler 1).
+  // Ausweg, wenn sich im Rueckfall kein Mailprogramm oeffnet (Kuenstler 1; seit Runde 4, K7,
+  // nur noch im Zustand "mailprogramm").
   const kopiereAnfrage = () => {
     // bezugRef bleibt nach einer gescheiterten Aenderung gesetzt, also auch hier der Vorgang.
     const text = buildAnfrageText(aktuellerKontakt(), bezugRef.current);
@@ -916,8 +917,11 @@ export default function SidebarControls({
     // unklar heisst also fast immer "nie gespeichert"; die Meldung bittet um erneutes
     // Senden, gleiche Leads fuehrt der Server 15 Minuten lang zusammen (Runde 3, M1/S3).
     // Abgelehnt (400/429): Text des Servers statt sofort Mailprogramm (Kuenstler 12).
+    // Eine angekommene Aenderung behaelt den ersten Vorgang: Die Nummer im Kasten bleibt
+    // dieselbe, und jede weitere Aenderung bezieht sich auf die erste Anfrage
+    // (programmierer Runde 4, Fund 2; der Endpunkt vergibt der Aenderung einen eigenen Vorgang).
     const ausgang = leadAusgang(ergebnis);
-    setLeadStatus(ausgang);
+    setLeadStatus(ausgang.art === "angekommen" && bezug ? { ...ausgang, vorgang: bezug } : ausgang);
     if (ausgang.art === "mailprogramm") {
       sendEmailRequest(contact, bezug);
     }
@@ -2449,7 +2453,7 @@ export default function SidebarControls({
                     Danke, Ihre Anfrage ist angekommen.
                   </p>
                   <p>Wir melden uns mit einem Angebot.</p>
-                  {kurzeNummer(leadStatus.vorgang) ? <p>{`Ihre Nummer: ${kurzeNummer(leadStatus.vorgang)}`}</p> : null}
+                  {((nummer) => (nummer ? <p>{`Ihre Nummer: ${nummer}`}</p> : null))(kurzeNummer(leadStatus.vorgang))}
                   {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
                       ohne Änderung kein zweiter Lead (Runde 3, K1). Kein eigener Knopf mehr: nach
                       einer Änderung heisst der Hauptknopf "Änderung senden" (Runde 4, S2 und K8). */}
@@ -2465,7 +2469,12 @@ export default function SidebarControls({
                     {WARNZEICHEN}
                     {leadStatus.text}
                   </p>
-                  {leadStatus.status === 429 ? RUECKFALL_KONTAKT : null}
+                  {leadStatus.status === 429 ? (
+                    <>
+                      <p>Sie erreichen uns auch direkt:</p>
+                      {RUECKFALL_KONTAKT}
+                    </>
+                  ) : null}
                 </>
               ) : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" ? (
                 <>

@@ -141,7 +141,7 @@ export function buildLeadPayload(
 // Was das Formular nach dem Senden zeigt (SidebarControls.tsx):
 // - angekommen: gespeichert, mit Vorgang;
 // - unklar: keine lesbare Antwort, Bitte um erneutes Senden, Knopf "Per E-Mail senden",
-//   Adresse und Kopierknoepfe (Runde 3, M1);
+//   Adresse, Nummer und Knopf "Anrufen" (Runde 3, M1; Runde 4, S5 und K7);
 // - abgelehnt: 400/429 mit Text des Servers, kein mailto (Kuenstler 12);
 // - mailprogramm: jede andere Ablehnung, Rueckfall auf mailto mit Ausweg (Kuenstler 1).
 export type LeadAusgang =
@@ -165,8 +165,11 @@ export function leadAusgang(ergebnis: LeadRelayResult): LeadAusgang {
 
 // Kurze lesbare Nummer fuer den Dankessatz statt der Maschinennummer des Vorgangs
 // (Runde 4, Kuenstler S1). Stabil: FNV-1a 32 Bit ueber die UTF-8-Bytes, dann
-// 1000 + h % 9000, also immer vier Ziffern. Der Endpunkt kann sie so nachrechnen
-// (Gegenrechnung in Python im Test). Ohne Vorgang keine Nummer.
+// 1000 + h % 9000, also immer vier Ziffern. Ohne Vorgang keine Nummer.
+// Stand 15.10.2026 zeigt der Endpunkt diese Nummer noch nirgends; sie ist nachrechenbar
+// (Python-Gegenrechnung im Test), eindeutig ist sie nur zusammen mit Name oder E-Mail
+// (9000 Werte). Bis die Leadmaschine sie in Mail und Register fuehrt, findet das Haus
+// einen Anruf mit dieser Nummer nur ueber Name oder E-Mail.
 export function kurzeNummer(vorgang: string): string | null {
   const v = vorgang.trim();
   if (!v) {
