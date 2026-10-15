@@ -38,6 +38,7 @@ const LazyVoiceAssistant = voiceAssistantEnabled ? lazy(() => import("./VoiceAss
 const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
+const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
 
 export default function SidebarControls({
   drawerOpen,
@@ -2445,7 +2446,13 @@ export default function SidebarControls({
                 </>
               ) : null}
             </div>
-            <p className="form-helper">Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.</p>
+            {/* Neuer Tab, damit das ausgefuellte Formular stehen bleibt (F3, Fabrice 15.10.2026). */}
+            <p className="form-helper">
+              Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.{" "}
+              <a href={DATENSCHUTZ_LINK} target="_blank" rel="noopener noreferrer">
+                Datenschutz
+              </a>
+            </p>
           </div>
         </form>
       </div>
