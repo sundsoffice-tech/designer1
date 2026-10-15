@@ -782,14 +782,16 @@ export default function SidebarControls({
   };
 
   // aenderungZu: Vorgang, wenn eine geaenderte Anfrage ueber das Mailprogramm geht.
-  const buildAnfrageText = (contact: ContactRequest, aenderungZu?: string) =>
+  // Pflichtparameter, damit der Typecheck jeden Aufrufer meldet, der ihn vergisst
+  // (programmierer Folgelauf 3, Fund 1 und 2: der Knopf "Per E-Mail senden" hatte ihn nicht).
+  const buildAnfrageText = (contact: ContactRequest, aenderungZu: string | undefined) =>
     buildAnfrageMailText(
       buildStandSummary({ includeFair: true, includePrice: true }),
       buildContactSection(contact),
       aenderungZu
     );
 
-  const sendEmailRequest = (contact: ContactRequest, aenderungZu?: string) => {
+  const sendEmailRequest = (contact: ContactRequest, aenderungZu: string | undefined) => {
     // Ohne einzelne Surrogate, sonst wirft encodeURIComponent und nichts oeffnet sich (K3).
     const subject = encodeURIComponent(
       ohneEinzelSurrogat(`Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`)
@@ -2484,7 +2486,7 @@ export default function SidebarControls({
                       <button
                         type="button"
                         className="btn-secondary"
-                        onClick={() => sendEmailRequest(aktuellerKontakt())}
+                        onClick={() => sendEmailRequest(aktuellerKontakt(), bezugRef.current)}
                       >
                         Per E-Mail senden
                       </button>
