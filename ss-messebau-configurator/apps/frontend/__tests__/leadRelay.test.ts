@@ -122,16 +122,29 @@ describe("relayLeadToHub", () => {
 
   it("wirft nie, auch nicht bei Netzfehler oder kaputter Antwort", async () => {
     const netz = jest.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    await expect(relayLeadToHub(payload, netz as unknown as typeof fetch)).resolves.toMatchObject({ ok: false });
+    await expect(relayLeadToHub(payload, netz as unknown as typeof fetch)).resolves.toEqual({ ok: false, unklar: true });
     const kaputt = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new Error("x"); } });
-    await expect(relayLeadToHub(payload, kaputt as unknown as typeof fetch)).resolves.toMatchObject({ ok: false });
+    await expect(relayLeadToHub(payload, kaputt as unknown as typeof fetch)).resolves.toEqual({ ok: false, unklar: true });
   });
 
-  it("bricht nach der Zeitgrenze ab", async () => {
+  // Rollen 15.10.2026 (Spieltheoretiker 4, Wissenschaftler 2): Der Abbruch nach der
+  // Zeitgrenze hiess "gescheitert", das Formular oeffnete mailto, obwohl der Server den
+  // Lead oft schon gespeichert hatte -> Doppel-Lead. Jetzt ist der Ausgang unklar,
+  // und der Aufrufer faellt NICHT automatisch auf mailto zurueck.
+  it("meldet nach der Zeitgrenze einen unklaren Ausgang, keinen Fehlschlag", async () => {
     const haengt = jest.fn((_url: string, init: { signal: AbortSignal }) =>
       new Promise((_res, rej) => init.signal.addEventListener("abort", () => rej(new Error("abgebrochen"))))
     );
     const r = await relayLeadToHub(payload, haengt as unknown as typeof fetch, 20);
-    expect(r.ok).toBe(false);
+    expect(r).toEqual({ ok: false, unklar: true });
+  });
+
+  it("eine Ablehnung mit Status ist kein unklarer Ausgang", async () => {
+    for (const status of [400, 413, 429, 500]) {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: false, status, json: async () => ({ ok: false }) });
+      const r = await relayLeadToHub(payload, fetchMock as unknown as typeof fetch);
+      expect(r).toEqual({ ok: false, status, fehler: undefined });
+      expect("unklar" in r && r.unklar).toBeFalsy();
+    }
   });
 });
