@@ -90,6 +90,30 @@ export function buildLeadPayload(
   return payload;
 }
 
+// Was das Formular nach dem Senden zeigt (SidebarControls.tsx):
+// - angekommen: gespeichert, mit Vorgang;
+// - unklar: keine lesbare Antwort, kein mailto, Adresse und Kopierknoepfe (Kuenstler 2);
+// - abgelehnt: 400/429 mit Text des Servers, kein mailto (Kuenstler 12);
+// - mailprogramm: jede andere Ablehnung, Rueckfall auf mailto mit Ausweg (Kuenstler 1).
+export type LeadAusgang =
+  | { art: "angekommen"; vorgang: string }
+  | { art: "unklar" }
+  | { art: "abgelehnt"; text: string; status: number }
+  | { art: "mailprogramm" };
+
+export function leadAusgang(ergebnis: LeadRelayResult): LeadAusgang {
+  if (ergebnis.ok) {
+    return { art: "angekommen", vorgang: ergebnis.vorgang };
+  }
+  if (ergebnis.unklar) {
+    return { art: "unklar" };
+  }
+  if ((ergebnis.status === 400 || ergebnis.status === 429) && ergebnis.fehler) {
+    return { art: "abgelehnt", text: ergebnis.fehler, status: ergebnis.status };
+  }
+  return { art: "mailprogramm" };
+}
+
 // Wirft nie: jeder Fehler wird zu { ok: false }. Nur bei bekanntem Status faellt der
 // Aufrufer auf mailto zurueck; bei { unklar: true } zeigt er Adresse und Kopierknoepfe.
 export async function relayLeadToHub(

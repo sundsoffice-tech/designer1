@@ -2,6 +2,7 @@ import {
   LEAD_ENDPOINT,
   LEAD_KUNDE,
   buildLeadPayload,
+  leadAusgang,
   relayLeadToHub,
 } from "../src/lib/leadRelay";
 
@@ -179,6 +180,42 @@ describe("relayLeadToHub", () => {
       const r = await relayLeadToHub(payload, fetchMock as unknown as typeof fetch);
       expect(r).toEqual({ ok: false, status, fehler: undefined });
       expect("unklar" in r && r.unklar).toBeFalsy();
+    }
+  });
+});
+
+// Was das Formular nach dem Senden zeigt (Rollen 15.10.2026, Kuenstler 1, 2, 12).
+describe("leadAusgang", () => {
+  it("gespeichert -> angekommen mit Vorgang", () => {
+    expect(leadAusgang({ ok: true, vorgang: "a1b2c3d4e5" })).toEqual({ art: "angekommen", vorgang: "a1b2c3d4e5" });
+  });
+
+  it("unklar -> kein Mailprogramm", () => {
+    expect(leadAusgang({ ok: false, unklar: true })).toEqual({ art: "unklar" });
+  });
+
+  it("400 und 429 mit Text des Servers -> Text zeigen, kein Mailprogramm", () => {
+    expect(leadAusgang({ ok: false, status: 400, fehler: "Bitte geben Sie Ihren Namen an." })).toEqual({
+      art: "abgelehnt",
+      text: "Bitte geben Sie Ihren Namen an.",
+      status: 400,
+    });
+    expect(leadAusgang({ ok: false, status: 429, fehler: "Zu viele Anfragen." })).toMatchObject({
+      art: "abgelehnt",
+      status: 429,
+    });
+  });
+
+  it("jede andere Ablehnung oder 400 ohne Text -> Mailprogramm", () => {
+    for (const r of [
+      { ok: false as const, status: 400 },
+      { ok: false as const, status: 413, fehler: "Anfrage zu groß" },
+      { ok: false as const, status: 403, fehler: "Herkunft nicht freigegeben" },
+      { ok: false as const, status: 404, fehler: "unbekannter Kunde" },
+      { ok: false as const, status: 500, fehler: "Technischer Fehler." },
+      { ok: false as const, status: 200 },
+    ]) {
+      expect(leadAusgang(r)).toEqual({ art: "mailprogramm" });
     }
   });
 });
