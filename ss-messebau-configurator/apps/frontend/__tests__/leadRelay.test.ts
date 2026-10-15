@@ -3,6 +3,7 @@ import {
   LEAD_KUNDE,
   buildAnfrageMailText,
   buildLeadPayload,
+  kurzeNummer,
   leadAusgang,
   ohneEinzelSurrogat,
   relayLeadToHub,
@@ -276,5 +277,32 @@ describe("leadAusgang", () => {
     ]) {
       expect(leadAusgang(r)).toEqual({ art: "mailprogramm" });
     }
+  });
+});
+
+// Runde 4, Kuenstler S1: kurze lesbare Nummer statt Maschinennummer im Dankessatz.
+// Erwartete Werte unabhaengig in Python gerechnet (FNV-1a 32 Bit ueber UTF-8, 1000 + h % 9000),
+// damit der Endpunkt dieselbe Nummer nachrechnen kann.
+describe("kurzeNummer", () => {
+  it("leitet aus dem Vorgang stabil eine vierstellige Nummer ab", () => {
+    expect(kurzeNummer("a1b2c3d4e5")).toBe("7471");
+    expect(kurzeNummer("0f9e8d7c6b")).toBe("7611");
+    expect(kurzeNummer("Vorgäng")).toBe("3009");
+    expect(kurzeNummer("a1b2c3d4e5")).toBe(kurzeNummer("a1b2c3d4e5"));
+  });
+
+  it("liefert immer vier Ziffern ohne fuehrende Null und streut", () => {
+    const nummern = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const n = kurzeNummer(i.toString(16).padStart(10, "0"));
+      expect(n).toMatch(/^[1-9][0-9]{3}$/);
+      nummern.add(n as string);
+    }
+    expect(nummern.size).toBeGreaterThan(190);
+  });
+
+  it("zeigt ohne Vorgang keine Nummer", () => {
+    expect(kurzeNummer("")).toBeNull();
+    expect(kurzeNummer("   ")).toBeNull();
   });
 });

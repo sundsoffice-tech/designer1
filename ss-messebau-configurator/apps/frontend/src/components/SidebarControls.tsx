@@ -14,6 +14,7 @@ import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
 import {
   buildAnfrageMailText,
   buildLeadPayload,
+  kurzeNummer,
   leadAusgang,
   ohneEinzelSurrogat,
   relayLeadToHub,
@@ -2429,10 +2430,13 @@ export default function SidebarControls({
             >
               {leadStatus.art === "angekommen" ? (
                 <>
+                  {/* Kurze Ueberschrift, darunter normal; keine Maschinennummer im Satz (Runde 4, S1). */}
                   <p className="lead-meldung-titel">
                     <span aria-hidden="true">✓ </span>
-                    {`Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`}
+                    Danke, Ihre Anfrage ist angekommen.
                   </p>
+                  <p>Wir melden uns mit einem Angebot.</p>
+                  {kurzeNummer(leadStatus.vorgang) ? <p>{`Ihre Nummer: ${kurzeNummer(leadStatus.vorgang)}`}</p> : null}
                   {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
                       ohne Änderung kein zweiter Lead (Runde 3, K1). */}
                   <div className="lead-meldung-knoepfe">

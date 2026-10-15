@@ -163,6 +163,26 @@ export function leadAusgang(ergebnis: LeadRelayResult): LeadAusgang {
   return { art: "mailprogramm" };
 }
 
+// Kurze lesbare Nummer fuer den Dankessatz statt der Maschinennummer des Vorgangs
+// (Runde 4, Kuenstler S1). Stabil: FNV-1a 32 Bit ueber die UTF-8-Bytes, dann
+// 1000 + h % 9000, also immer vier Ziffern. Der Endpunkt kann sie so nachrechnen
+// (Gegenrechnung in Python im Test). Ohne Vorgang keine Nummer.
+export function kurzeNummer(vorgang: string): string | null {
+  const v = vorgang.trim();
+  if (!v) {
+    return null;
+  }
+  let h = 0x811c9dc5;
+  const bytes = encodeURIComponent(ohneEinzelSurrogat(v)).replace(/%([0-9A-F]{2})|./g, (teil, hex) =>
+    String.fromCharCode(hex ? parseInt(hex, 16) : teil.charCodeAt(0))
+  );
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return String(1000 + (h % 9000));
+}
+
 // Wirft nie: jeder Fehler wird zu { ok: false }. Was der Aufrufer daraus macht
 // (mailto, Servertext, unklar), entscheidet leadAusgang().
 export async function relayLeadToHub(
