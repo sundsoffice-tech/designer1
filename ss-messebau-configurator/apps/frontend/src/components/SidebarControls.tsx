@@ -191,6 +191,9 @@ export default function SidebarControls({
   // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Geänderte Anfrage senden" geht
   // nur, wenn sich Stand oder Angaben seitdem geaendert haben (Runde 3, K1).
   const gesendetRef = useRef("");
+  // Bezug einer geaenderten Anfrage, bis sie angekommen ist: scheitert sie, sendet
+  // "Anfrage erneut senden" sie wieder als Aenderung (programmierer Runde 3, Fund 1).
+  const bezugRef = useRef<string | undefined>(undefined);
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
@@ -886,11 +889,14 @@ export default function SidebarControls({
     // Lehnt er ab, bleibt der bisherige Weg: Mailprogramm mit vorbereiteter Anfrage.
     setLeadStatus({ art: "sendet" });
     const abdruck = anfrageAbdruck();
+    const bezug = aenderungZu ?? bezugRef.current;
+    bezugRef.current = bezug;
     const ergebnis = await relayLeadToHub(
-      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seitenPfad(), aenderungZu)
+      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seitenPfad(), bezug)
     );
     if (ergebnis.ok) {
       gesendetRef.current = abdruck;
+      bezugRef.current = undefined;
     }
     // Unklar: kein automatisches mailto. Der Server antwortet direkt nach dem Speichern,
     // unklar heisst also fast immer "nie gespeichert"; die Meldung bittet um erneutes
