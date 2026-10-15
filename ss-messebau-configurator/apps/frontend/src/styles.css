@@ -1243,9 +1243,15 @@ button {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  container-type: inline-size;
 }
 
+/* Die Adresse ist bei 14 px fett 188 px breit, der Kasten innen bei 320 px Bildschirm nur
+   156 px (gemessen). Ihre Schrift folgt deshalb der Kastenbreite (7,2 % davon, hoechstens
+   14 px), damit sie ganz in einer Zeile bleibt; bricht sie trotzdem, dann nur, wenn sie
+   ganz nicht passt, statt aus dem Kasten zu ragen. */
 .lead-meldung-adresse {
+  font-size: min(1em, 7.2cqi);
   overflow-wrap: anywhere;
 }
 
