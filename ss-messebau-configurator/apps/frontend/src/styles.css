@@ -1170,6 +1170,12 @@ button {
   margin: 0;
 }
 
+.form-helper a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Ergebnis der Anfrage: eigener Kasten, nicht in der Hilfszeile (Kuenstler 3). */
 .lead-meldung {
   border: 1px solid var(--border, rgba(148, 163, 184, 0.4));
@@ -1213,8 +1219,19 @@ button {
   font-weight: 600;
 }
 
+/* Ganze Adresse in die naechste Zeile statt "info@sundsmessebau.co | m"; nur wenn sie
+   allein nicht passt, darf sie brechen (Sichtpruefung Runde 3, 390 px und 1440 px). */
 .lead-meldung-adresse {
-  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.lead-meldung a[href^="tel:"] {
+  white-space: nowrap;
+}
+
+.lead-meldung-knoepfe .btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .lead-meldung-knoepfe {

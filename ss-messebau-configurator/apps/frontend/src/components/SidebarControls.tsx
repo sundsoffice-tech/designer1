@@ -45,6 +45,15 @@ const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
 const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
+// Anzeige mit Umbruchstelle nach dem @: im schmalen Kasten bricht sie dort und nicht
+// mitten in ".com" (Sichtpruefung Runde 3, 390 px). Kopieren nimmt RUECKFALL_ADRESSE.
+const [ADRESSE_NAME, ADRESSE_DOMAIN] = RUECKFALL_ADRESSE.split("@");
+const RUECKFALL_ADRESSE_ANZEIGE = (
+  <>
+    {ADRESSE_NAME}@<wbr />
+    {ADRESSE_DOMAIN}
+  </>
+);
 
 export default function SidebarControls({
   drawerOpen,
@@ -2443,7 +2452,7 @@ export default function SidebarControls({
                       {"Telefon: "}
                       <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
                       {", E-Mail: "}
-                      <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
+                      <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
                     </p>
                   ) : null}
                 </>
@@ -2459,7 +2468,7 @@ export default function SidebarControls({
                     {leadStatus.art === "unklar"
                       ? "Bitte senden Sie die Anfrage noch einmal. Kommt sie doppelt an, ist das kein Problem. Sie können sie auch per E-Mail an "
                       : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie an "}
-                    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
+                    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
                     {leadStatus.art === "unklar" ? " senden oder anrufen: " : " oder rufen Sie an: "}
                     <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>.
                   </p>
