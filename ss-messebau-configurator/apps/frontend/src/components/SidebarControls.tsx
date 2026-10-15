@@ -865,7 +865,9 @@ export default function SidebarControls({
     const ergebnis = await relayLeadToHub(
       buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seite)
     );
-    // Unklar: kein mailto, der Lead kann schon gespeichert sein (Kuenstler 2, Spieltheoretiker 4).
+    // Unklar: kein automatisches mailto. Der Server antwortet direkt nach dem Speichern,
+    // unklar heisst also fast immer "nie gespeichert"; die Meldung bittet um erneutes
+    // Senden, gleiche Leads fuehrt der Server 15 Minuten lang zusammen (Runde 3, M1/S3).
     // Abgelehnt (400/429): Text des Servers statt sofort Mailprogramm (Kuenstler 12).
     const ausgang = leadAusgang(ergebnis);
     setLeadStatus(ausgang);
@@ -2426,13 +2428,23 @@ export default function SidebarControls({
                   </p>
                   <p>
                     {leadStatus.art === "unklar"
-                      ? "Möglicherweise ist sie trotzdem angekommen; erneutes Senden kann sie doppelt schicken. Wenn Sie sichergehen möchten, schreiben Sie an "
+                      ? "Bitte senden Sie die Anfrage noch einmal. Kommt sie doppelt an, ist das kein Problem. Sie können sie auch per E-Mail an "
                       : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie an "}
                     <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE}</strong>
-                    {" oder rufen Sie an: "}
+                    {leadStatus.art === "unklar" ? " senden oder anrufen: " : " oder rufen Sie an: "}
                     <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>.
                   </p>
                   <div className="lead-meldung-knoepfe">
+                    {/* Neben "Anfrage erneut senden" (Hauptknopf darueber) der zweite Weg (M1). */}
+                    {leadStatus.art === "unklar" ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => sendEmailRequest(aktuellerKontakt())}
+                      >
+                        Per E-Mail senden
+                      </button>
+                    ) : null}
                     <button type="button" className="btn-secondary" onClick={() => kopiere("adresse")}>
                       {kopiert === "adresse" ? "Adresse kopiert" : "Adresse kopieren"}
                     </button>
