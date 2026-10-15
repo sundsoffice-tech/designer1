@@ -47,6 +47,15 @@ const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
 const RUECKFALL_TELEFON = "+49 1514 0368754";
 const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
 const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
+// Warndreieck statt "!" vor dem Titel jedes Warnkastens (Runde 4, S6); als SVG, damit es
+// nicht je nach Schrift als buntes Emoji oder gar nicht erscheint.
+const WARNZEICHEN = (
+  <svg className="lead-meldung-zeichen" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+    <path d="M12 2.5 22.8 21.5H1.2Z" fill="currentColor" />
+    <path d="M11 9h2v6.5h-2zM11 17h2v2h-2z" fill="#fff" />
+  </svg>
+);
+
 // Adresse und Nummer je in einer eigenen Zeile, die Adresse ungebrochen; vorher brach sie
 // nach dem @ mitten im Satz (Runde 4, S4).
 const RUECKFALL_KONTAKT = (
@@ -2452,7 +2461,7 @@ export default function SidebarControls({
               ) : leadStatus.art === "abgelehnt" ? (
                 <>
                   <p className="lead-meldung-titel">
-                    <span aria-hidden="true">! </span>
+                    {WARNZEICHEN}
                     {leadStatus.text}
                   </p>
                   {leadStatus.status === 429 ? RUECKFALL_KONTAKT : null}
@@ -2460,9 +2469,9 @@ export default function SidebarControls({
               ) : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" ? (
                 <>
                   <p className="lead-meldung-titel">
-                    <span aria-hidden="true">! </span>
+                    {WARNZEICHEN}
                     {leadStatus.art === "unklar"
-                      ? "Wir konnten den Eingang nicht bestätigen."
+                      ? "Ihre Anfrage ist vielleicht nicht angekommen."
                       : "Die Anfrage ist noch nicht bei uns."}
                   </p>
                   <p>

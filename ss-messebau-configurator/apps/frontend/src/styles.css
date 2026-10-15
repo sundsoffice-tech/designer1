@@ -1225,6 +1225,12 @@ button {
   font-weight: 600;
 }
 
+.lead-meldung-zeichen {
+  color: var(--danger);
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+
 /* Adresse und Nummer je in eigener Zeile, beide ungebrochen (Runde 4, S4). */
 .lead-meldung-kontakt {
   display: flex;
