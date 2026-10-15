@@ -1229,11 +1229,6 @@ button {
   white-space: nowrap;
 }
 
-.lead-meldung-knoepfe .btn-secondary:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .lead-meldung-knoepfe {
   display: flex;
   flex-wrap: wrap;

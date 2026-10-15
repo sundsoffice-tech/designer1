@@ -2438,20 +2438,17 @@ export default function SidebarControls({
                   <p>Wir melden uns mit einem Angebot.</p>
                   {kurzeNummer(leadStatus.vorgang) ? <p>{`Ihre Nummer: ${kurzeNummer(leadStatus.vorgang)}`}</p> : null}
                   {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
-                      ohne Änderung kein zweiter Lead (Runde 3, K1). */}
-                  <div className="lead-meldung-knoepfe">
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      disabled={!anfrageGeaendert}
-                      onClick={() => void sendeAnfrage(leadStatus.vorgang)}
-                    >
-                      Geänderte Anfrage senden
-                    </button>
-                  </div>
-                  {!anfrageGeaendert ? (
+                      ohne Änderung kein zweiter Lead (Runde 3, K1). Der Knopf erscheint erst nach
+                      einer Änderung, vorher nur der Satz; kein blasser gesperrter Knopf (Runde 4, S2). */}
+                  {anfrageGeaendert ? (
+                    <div className="lead-meldung-knoepfe">
+                      <button type="button" className="btn-secondary" onClick={() => void sendeAnfrage(leadStatus.vorgang)}>
+                        Geänderte Anfrage senden
+                      </button>
+                    </div>
+                  ) : (
                     <p>Wenn Sie Stand oder Angaben ändern, können Sie die Änderung hier nachschicken.</p>
-                  ) : null}
+                  )}
                 </>
               ) : leadStatus.art === "abgelehnt" ? (
                 <>
