@@ -59,14 +59,44 @@ const utf8Laenge = (text: string) => {
   return n;
 };
 
+// encodeURIComponent wirft URIError bei einem einzelnen Surrogat (halbes Emoji aus
+// einer Kopie); dann oeffnete der mailto-Weg nichts (Runde 3, K3). Ersetzt jedes
+// einzelne Surrogat durch U+FFFD, ganze Paare bleiben.
+const ERSATZZEICHEN = String.fromCharCode(0xfffd);
+export function ohneEinzelSurrogat(text: string): string {
+  let aus = "";
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const n = text.charCodeAt(i + 1);
+      if (n >= 0xdc00 && n <= 0xdfff) {
+        aus += text[i] + text[i + 1];
+        i++;
+      } else {
+        aus += ERSATZZEICHEN;
+      }
+    } else if (c >= 0xdc00 && c <= 0xdfff) {
+      aus += ERSATZZEICHEN;
+    } else {
+      aus += text[i];
+    }
+  }
+  return aus;
+}
+
+// aenderungZu: Vorgang einer schon angekommenen Anfrage; die Nachricht beginnt dann mit
+// "Änderung zu Vorgang X" (Runde 3, K1). Sie unterscheidet sich damit vom ersten Lead,
+// der Endpunkt fuehrt sie nicht mit ihm zusammen.
 export function buildLeadPayload(
   contact: ContactRequest,
   standLines: string[],
-  seite: string
+  seite: string,
+  aenderungZu?: string
 ): LeadPayload {
   const telefonRoh = (contact.phone ?? "").trim();
   const telefon = SERVER_TELEFON.test(telefonRoh) ? kappe(telefonRoh, 60) : "";
   const kopf = [
+    ...(aenderungZu ? [`Änderung zu Vorgang ${aenderungZu}`] : []),
     "Standanfrage aus dem 3D-Konfigurator",
     ...(contact.fair ? [`Messe / Event: ${contact.fair}`] : []),
     ...(telefonRoh && !telefon ? [`Telefon (Freitext): ${telefonRoh}`] : []),

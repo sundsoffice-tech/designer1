@@ -11,7 +11,13 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
-import { buildLeadPayload, leadAusgang, relayLeadToHub, type LeadAusgang } from "../lib/leadRelay";
+import {
+  buildLeadPayload,
+  leadAusgang,
+  ohneEinzelSurrogat,
+  relayLeadToHub,
+  type LeadAusgang,
+} from "../lib/leadRelay";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -173,6 +179,9 @@ export default function SidebarControls({
   });
   const [kopiert, setKopiert] = useState<"adresse" | "anfrage" | "fehler" | null>(null);
   const leadMeldungRef = useRef<HTMLDivElement>(null);
+  // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Geänderte Anfrage senden" geht
+  // nur, wenn sich Stand oder Angaben seitdem geaendert haben (Runde 3, K1).
+  const gesendetRef = useRef("");
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
@@ -770,10 +779,11 @@ export default function SidebarControls({
     ].join("\n");
 
   const sendEmailRequest = (contact: ContactRequest) => {
+    // Ohne einzelne Surrogate, sonst wirft encodeURIComponent und nichts oeffnet sich (K3).
     const subject = encodeURIComponent(
-      `Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`
+      ohneEinzelSurrogat(`Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`)
     );
-    const body = encodeURIComponent(buildAnfrageText(contact));
+    const body = encodeURIComponent(ohneEinzelSurrogat(buildAnfrageText(contact)));
     // Keep this on one line to avoid breaking the email address
     const mailto = `mailto:${RUECKFALL_ADRESSE}?subject=${subject}&body=${body}`;
     if (typeof window !== "undefined" && typeof window.location !== "undefined") {
@@ -842,7 +852,12 @@ export default function SidebarControls({
     void sendeAnfrage();
   };
 
-  const sendeAnfrage = async () => {
+  const seitenPfad = () => (typeof window !== "undefined" ? window.location.pathname : "");
+  const anfrageAbdruck = () =>
+    JSON.stringify(buildLeadPayload(aktuellerKontakt(), buildStandSummary({ includePrice: true }), seitenPfad()));
+
+  // aenderungZu: Vorgang der angekommenen Anfrage, wenn eine geaenderte nachgeschickt wird (K1).
+  const sendeAnfrage = async (aenderungZu?: string) => {
     // Während des Sendens kein zweiter Lead.
     if (leadStatus.art === "sendet") {
       return;
@@ -861,10 +876,13 @@ export default function SidebarControls({
     // Zuerst an den Lead-Endpunkt (speichert, mailt, landet im Anfragen-Register).
     // Lehnt er ab, bleibt der bisherige Weg: Mailprogramm mit vorbereiteter Anfrage.
     setLeadStatus({ art: "sendet" });
-    const seite = typeof window !== "undefined" ? window.location.pathname : "";
+    const abdruck = anfrageAbdruck();
     const ergebnis = await relayLeadToHub(
-      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seite)
+      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seitenPfad(), aenderungZu)
     );
+    if (ergebnis.ok) {
+      gesendetRef.current = abdruck;
+    }
     // Unklar: kein automatisches mailto. Der Server antwortet direkt nach dem Speichern,
     // unklar heisst also fast immer "nie gespeichert"; die Meldung bittet um erneutes
     // Senden, gleiche Leads fuehrt der Server 15 Minuten lang zusammen (Runde 3, M1/S3).
@@ -875,6 +893,8 @@ export default function SidebarControls({
       sendEmailRequest(contact);
     }
   };
+
+  const anfrageGeaendert = leadStatus.art === "angekommen" && anfrageAbdruck() !== gesendetRef.current;
 
   return (
     <aside
@@ -2396,12 +2416,21 @@ export default function SidebarControls({
                     <span aria-hidden="true">✓ </span>
                     {`Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`}
                   </p>
-                  {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5). */}
+                  {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
+                      ohne Änderung kein zweiter Lead (Runde 3, K1). */}
                   <div className="lead-meldung-knoepfe">
-                    <button type="button" className="btn-secondary" onClick={() => void sendeAnfrage()}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={!anfrageGeaendert}
+                      onClick={() => void sendeAnfrage(leadStatus.vorgang)}
+                    >
                       Geänderte Anfrage senden
                     </button>
                   </div>
+                  {!anfrageGeaendert ? (
+                    <p>Wenn Sie Stand oder Angaben ändern, können Sie die Änderung hier nachschicken.</p>
+                  ) : null}
                 </>
               ) : leadStatus.art === "abgelehnt" ? (
                 <>
