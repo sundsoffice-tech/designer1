@@ -867,9 +867,12 @@ export default function SidebarControls({
 
   const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Nach angekommener Anfrage kein zweiter Lead über Enter oder den Hauptknopf;
-    // eine geänderte Anfrage geht nur über ihren eigenen Knopf (Kuenstler 5).
+    // Nach angekommener Anfrage kein zweiter gleicher Lead; erst nach einer Änderung
+    // sendet der Hauptknopf (dann "Änderung senden") sie mit Bezug auf den Vorgang (Runde 4, K8).
     if (leadStatus.art === "angekommen") {
+      if (anfrageGeaendert) {
+        void sendeAnfrage(leadStatus.vorgang);
+      }
       return;
     }
     void sendeAnfrage();
@@ -2411,13 +2414,15 @@ export default function SidebarControls({
             <button
               className="btn-primary full-width"
               type="submit"
-              disabled={leadStatus.art === "sendet" || leadStatus.art === "angekommen"}
+              disabled={leadStatus.art === "sendet" || (leadStatus.art === "angekommen" && !anfrageGeaendert)}
               aria-busy={leadStatus.art === "sendet"}
             >
               {leadStatus.art === "sendet"
                 ? "Anfrage wird gesendet …"
                 : leadStatus.art === "angekommen"
-                  ? "Anfrage gesendet"
+                  ? anfrageGeaendert
+                    ? "Änderung senden"
+                    : "Anfrage gesendet"
                   : leadStatus.art === "unklar"
                     ? "Anfrage erneut senden"
                     : "Anfrage senden"}
@@ -2446,17 +2451,13 @@ export default function SidebarControls({
                   <p>Wir melden uns mit einem Angebot.</p>
                   {kurzeNummer(leadStatus.vorgang) ? <p>{`Ihre Nummer: ${kurzeNummer(leadStatus.vorgang)}`}</p> : null}
                   {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
-                      ohne Änderung kein zweiter Lead (Runde 3, K1). Der Knopf erscheint erst nach
-                      einer Änderung, vorher nur der Satz; kein blasser gesperrter Knopf (Runde 4, S2). */}
-                  {anfrageGeaendert ? (
-                    <div className="lead-meldung-knoepfe">
-                      <button type="button" className="btn-secondary" onClick={() => void sendeAnfrage(leadStatus.vorgang)}>
-                        Geänderte Anfrage senden
-                      </button>
-                    </div>
-                  ) : (
-                    <p>Wenn Sie Stand oder Angaben ändern, können Sie die Änderung hier nachschicken.</p>
-                  )}
+                      ohne Änderung kein zweiter Lead (Runde 3, K1). Kein eigener Knopf mehr: nach
+                      einer Änderung heisst der Hauptknopf "Änderung senden" (Runde 4, S2 und K8). */}
+                  <p>
+                    {anfrageGeaendert
+                      ? "Ihre Änderung ist noch nicht bei uns. Senden Sie sie mit dem Knopf oben."
+                      : "Wenn Sie Stand oder Angaben ändern, können Sie die Änderung oben nachschicken."}
+                  </p>
                 </>
               ) : leadStatus.art === "abgelehnt" ? (
                 <>
