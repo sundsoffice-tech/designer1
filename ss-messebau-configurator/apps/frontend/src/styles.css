@@ -1236,9 +1236,9 @@ button {
   margin-right: 6px;
 }
 
-/* Adresse und Nummer je in eigener Zeile (Runde 4, S4). Die Adresse steht allein in ihrer
-   Zeile und bricht deshalb nur, wenn sie ganz nicht passt (Zoom, grosse Schrift), statt
-   aus dem Kasten zu ragen (programmierer Runde 4, Fund 3). */
+/* Adresse und Nummer je in eigener Zeile (Runde 4, S4). Passt die Adresse nicht in ihre
+   Zeile (320 und 360 px, Zoom, grosse Schrift), bricht sie nach dem @ (Fabrice 17.10.2026),
+   statt aus dem Kasten zu ragen (programmierer Runde 4, Fund 3). */
 .lead-meldung-kontakt {
   display: flex;
   flex-direction: column;
@@ -1247,13 +1247,20 @@ button {
 }
 
 /* Die Adresse ist bei 14 px fett 188 px breit, der Kasten innen bei 320 px Bildschirm nur
-   156 px (gemessen). Ihre Schrift folgt deshalb der Kastenbreite (7,2 % davon, hoechstens
-   14 px), damit sie ganz in einer Zeile bleibt, aber nie unter 0,8 em: Bei grosser Schrift
-   waechst sie mit, statt bei 11 px stehen zu bleiben (Kuenstler vor live, Fund 2). Passt sie
-   dann nicht mehr, bricht sie an den <wbr> nach dem @ und vor dem Punkt, erst zuletzt im Wort. */
+   156 px (gemessen). Sie bleibt trotzdem bei 14 px (1em des Kastens) und bricht dann nach
+   dem @ (Fabrice 17.10.2026 00:5x, statt 11,2 px einzeilig): Die Domain ist ein eigener
+   Inline-Block und springt nur als Ganzes in die zweite Zeile. Bei grosser Schrift waechst die
+   Adresse mit, aber nur so weit, dass "sundsmessebau" (rund 8 Schriftgroessen breit) in den
+   Kasten passt: hoechstens 11 % der Kastenbreite, nie unter 14 px. Ohne diese Grenze brach sie
+   bei 22 px und 320 px mitten im Wort ("sundsmesseb/au.com", Sichtlauf 17.10.2026). Ist die
+   Domain dann noch zu breit, bricht sie am <wbr> vor dem Punkt, erst zuletzt im Wort. */
 .lead-meldung-adresse {
-  font-size: clamp(0.8em, 7.2cqi, 1em);
+  font-size: min(1em, max(11cqi, 14px));
   overflow-wrap: anywhere;
+}
+
+.lead-meldung-domain {
+  display: inline-block;
 }
 
 /* Kein nowrap: Bei grosser Schrift bricht die Nummer zwischen den Gruppen, statt die letzte

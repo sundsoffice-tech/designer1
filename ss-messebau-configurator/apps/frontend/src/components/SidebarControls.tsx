@@ -60,9 +60,10 @@ const WARNZEICHEN = (
   </svg>
 );
 
-// Adresse und Nummer je in einer eigenen Zeile, die Adresse ungebrochen; vorher brach sie
-// nach dem @ mitten im Satz (Runde 4, S4). Die <wbr> wirken nur, wenn sie bei grosser
-// Schrift ganz nicht passt: dann Bruch nach dem @ und vor ".com" statt mitten im Wort
+// Adresse und Nummer je in einer eigenen Zeile. Die Adresse steht immer in 14 px; passt sie
+// nicht in eine Zeile (320 px), bricht sie nach dem @ (Fabrice 17.10.2026 00:5x). Dafuer steht
+// die Domain in einem eigenen Block, der nur als Ganzes in die naechste Zeile springt. Ist
+// selbst die Domain zu breit (grosse Schrift), bricht sie vor ".com" statt mitten im Wort
 // (Kuenstler vor live, "sundsmesse/bau.com" bei 390 px).
 // Ohne @ oder ohne Punkt in der Domain bleibt die Adresse ungeteilt (programmierer vor live, Fund 2).
 const adresseMitUmbruchstellen = (adresse: string) => {
@@ -75,9 +76,11 @@ const adresseMitUmbruchstellen = (adresse: string) => {
     <>
       {adresse.slice(0, at + 1)}
       <wbr />
-      {adresse.slice(at + 1, punkt)}
-      <wbr />
-      {adresse.slice(punkt)}
+      <span className="lead-meldung-domain">
+        {adresse.slice(at + 1, punkt)}
+        <wbr />
+        {adresse.slice(punkt)}
+      </span>
     </>
   );
 };
