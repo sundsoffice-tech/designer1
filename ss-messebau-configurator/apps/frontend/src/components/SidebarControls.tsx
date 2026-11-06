@@ -1,5 +1,5 @@
 ﻿// src/components/SidebarControls.tsx
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { DEFAULT_LIGHTING, useConfigStore, type DeepPartial } from "../store/configStore";
 import { generateRectangleLayout, generateUShapeLayout, generateBridgeLayout, generateRearCabinLayout, type LayoutPreset } from "@ss/shared";
 import type { CabinConfig, StandConfig, StandModules, WallDetailConfig, StandType, Region, ScreenConfig, WallSide } from "../lib/pricing";
@@ -11,6 +11,13 @@ import { CameraPanel } from "./sidebar/CameraPanel";
 import { aiAssistantEnabled, voiceAssistantEnabled } from "../config/ai";
 import { useSceneInteractionStore } from "../store/sceneInteractionStore";
 import { apiBaseUrl, buildApiUrl } from "../lib/apiBase";
+import {
+  buildLeadPayload,
+  leadAusgang,
+  ohneEinzelSurrogat,
+  relayLeadToHub,
+  type LeadAusgang,
+} from "../lib/leadRelay";
 
 // Feste Anzahl geschlossener Seiten pro Standtyp
 const wallFixedMap = {
@@ -29,6 +36,24 @@ const LazyAiAssistantPanel = aiAssistantEnabled
   : null;
 
 const LazyVoiceAssistant = voiceAssistantEnabled ? lazy(() => import("./VoiceAssistant")) : null;
+
+// Rueckfall, wenn der Lead-Endpunkt nicht bestaetigt. Adresse und Nummer hat Fabrice
+// am 15.10.2026 festgelegt (Auswahlfrage, F1/F2): info@ statt der frueheren GMX-Adresse,
+// gilt fuer Anzeige, Kopierknopf und mailto. Die Nummer steht so auf sunds-messebau.de
+// (Start, Kontakt, Impressum: tel:+4915140368754, gemessen 15.10.2026).
+const RUECKFALL_ADRESSE = "info@sundsmessebau.com";
+const RUECKFALL_TELEFON = "+49 1514 0368754";
+const RUECKFALL_TELEFON_LINK = "tel:+4915140368754";
+const DATENSCHUTZ_LINK = "https://sunds-messebau.de/datenschutz";
+// Anzeige mit Umbruchstelle nach dem @: im schmalen Kasten bricht sie dort und nicht
+// mitten in ".com" (Sichtpruefung Runde 3, 390 px). Kopieren nimmt RUECKFALL_ADRESSE.
+const [ADRESSE_NAME, ADRESSE_DOMAIN] = RUECKFALL_ADRESSE.split("@");
+const RUECKFALL_ADRESSE_ANZEIGE = (
+  <>
+    {ADRESSE_NAME}@<wbr />
+    {ADRESSE_DOMAIN}
+  </>
+);
 
 export default function SidebarControls({
   drawerOpen,
@@ -158,6 +183,17 @@ export default function SidebarControls({
   const [phone, setPhone] = useState("");
   const [fair, setFair] = useState("");
   const [contactErrors, setContactErrors] = useState<Partial<Record<keyof ContactRequest, string>>>({});
+  const [leadStatus, setLeadStatus] = useState<{ art: "ruhe" } | { art: "sendet" } | LeadAusgang>({
+    art: "ruhe",
+  });
+  const [kopiert, setKopiert] = useState<"adresse" | "anfrage" | "fehler" | null>(null);
+  const leadMeldungRef = useRef<HTMLDivElement>(null);
+  // Zuletzt angekommene Anfrage ohne Aenderungs-Zeile; "Geänderte Anfrage senden" geht
+  // nur, wenn sich Stand oder Angaben seitdem geaendert haben (Runde 3, K1).
+  const gesendetRef = useRef("");
+  // Bezug einer geaenderten Anfrage, bis sie angekommen ist: scheitert sie, sendet
+  // "Anfrage erneut senden" sie wieder als Aenderung (programmierer Runde 3, Fund 1).
+  const bezugRef = useRef<string | undefined>(undefined);
   const [bannerUploadStatus, setBannerUploadStatus] = useState<string | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [videoUploadStatus, setVideoUploadStatus] = useState<string | null>(null);
@@ -744,32 +780,70 @@ export default function SidebarControls({
     }
   };
 
-  const sendEmailRequest = (contact: ContactRequest) => {
-    const lines = [
+  const buildAnfrageText = (contact: ContactRequest) =>
+    [
       "Neue Standanfrage über den 3D-Konfigurator:",
       "",
       "=== Standdaten ===",
       ...buildStandSummary({ includeFair: true, includePrice: true }),
       "",
       ...buildContactSection(contact),
-    ];
+    ].join("\n");
 
+  const sendEmailRequest = (contact: ContactRequest) => {
+    // Ohne einzelne Surrogate, sonst wirft encodeURIComponent und nichts oeffnet sich (K3).
     const subject = encodeURIComponent(
-      `Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`
+      ohneEinzelSurrogat(`Standanfrage Konfigurator - ${contact.company || contact.name || "Unbekannt"}`)
     );
-    const body = encodeURIComponent(lines.join("\n"));
+    const body = encodeURIComponent(ohneEinzelSurrogat(buildAnfrageText(contact)));
     // Keep this on one line to avoid breaking the email address
-    const mailto = `mailto:sunds-messebau@gmx.de?subject=${subject}&body=${body}`;
+    const mailto = `mailto:${RUECKFALL_ADRESSE}?subject=${subject}&body=${body}`;
     if (typeof window !== "undefined" && typeof window.location !== "undefined") {
       window.location.href = mailto;
     }
   };
+
+  const aktuellerKontakt = (): ContactRequest => ({
+    name: customerName.trim(),
+    company: company.trim() || undefined,
+    email: email.trim(),
+    phone: phone.trim() || undefined,
+    fair: fair.trim() || undefined,
+  });
+
+  // Ausweg, wenn sich kein Mailprogramm oeffnet oder der Eingang unklar ist (Kuenstler 1).
+  const kopiere = (was: "adresse" | "anfrage") => {
+    const text = was === "adresse" ? RUECKFALL_ADRESSE : buildAnfrageText(aktuellerKontakt());
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      setKopiert("fehler");
+      return;
+    }
+    navigator.clipboard.writeText(text).then(
+      () => setKopiert(was),
+      () => setKopiert("fehler")
+    );
+  };
+
+  // Erfolg, Rueckfall und unklarer Ausgang bekommen den Fokus (Kuenstler 3).
+  useEffect(() => {
+    if (
+      leadStatus.art === "angekommen" ||
+      leadStatus.art === "mailprogramm" ||
+      leadStatus.art === "unklar" ||
+      leadStatus.art === "abgelehnt"
+    ) {
+      leadMeldungRef.current?.focus();
+    }
+  }, [leadStatus.art]);
 
   const validateContact = useCallback((contact: ContactRequest) => {
     const errors: Partial<Record<keyof ContactRequest, string>> = {};
 
     if (!contact.name?.trim()) {
       errors.name = "Name ist ein Pflichtfeld.";
+    } else if ([...contact.name.trim()].length < 2) {
+      // Der Lead-Endpunkt lehnt kürzere Namen ab (dienst.py, len(name) < 2, zählt Codepoints).
+      errors.name = "Bitte den vollständigen Namen angeben.";
     }
     if (!contact.email?.trim()) {
       errors.email = "E-Mail ist erforderlich.";
@@ -782,14 +856,26 @@ export default function SidebarControls({
 
   const handleContactSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Nach angekommener Anfrage kein zweiter Lead über Enter oder den Hauptknopf;
+    // eine geänderte Anfrage geht nur über ihren eigenen Knopf (Kuenstler 5).
+    if (leadStatus.art === "angekommen") {
+      return;
+    }
+    void sendeAnfrage();
+  };
 
-    const contact: ContactRequest = {
-      name: customerName.trim(),
-      company: company.trim() || undefined,
-      email: email.trim(),
-      phone: phone.trim() || undefined,
-      fair: fair.trim() || undefined,
-    };
+  const seitenPfad = () => (typeof window !== "undefined" ? window.location.pathname : "");
+  const anfrageAbdruck = () =>
+    JSON.stringify(buildLeadPayload(aktuellerKontakt(), buildStandSummary({ includePrice: true }), seitenPfad()));
+
+  // aenderungZu: Vorgang der angekommenen Anfrage, wenn eine geaenderte nachgeschickt wird (K1).
+  const sendeAnfrage = async (aenderungZu?: string) => {
+    // Während des Sendens kein zweiter Lead.
+    if (leadStatus.art === "sendet") {
+      return;
+    }
+
+    const contact = aktuellerKontakt();
 
     const errors = validateContact(contact);
     if (Object.keys(errors).length) {
@@ -798,8 +884,32 @@ export default function SidebarControls({
     }
 
     setContactErrors({});
-    sendEmailRequest(contact);
+    setKopiert(null);
+    // Zuerst an den Lead-Endpunkt (speichert, mailt, landet im Anfragen-Register).
+    // Lehnt er ab, bleibt der bisherige Weg: Mailprogramm mit vorbereiteter Anfrage.
+    setLeadStatus({ art: "sendet" });
+    const abdruck = anfrageAbdruck();
+    const bezug = aenderungZu ?? bezugRef.current;
+    bezugRef.current = bezug;
+    const ergebnis = await relayLeadToHub(
+      buildLeadPayload(contact, buildStandSummary({ includePrice: true }), seitenPfad(), bezug)
+    );
+    if (ergebnis.ok) {
+      gesendetRef.current = abdruck;
+      bezugRef.current = undefined;
+    }
+    // Unklar: kein automatisches mailto. Der Server antwortet direkt nach dem Speichern,
+    // unklar heisst also fast immer "nie gespeichert"; die Meldung bittet um erneutes
+    // Senden, gleiche Leads fuehrt der Server 15 Minuten lang zusammen (Runde 3, M1/S3).
+    // Abgelehnt (400/429): Text des Servers statt sofort Mailprogramm (Kuenstler 12).
+    const ausgang = leadAusgang(ergebnis);
+    setLeadStatus(ausgang);
+    if (ausgang.art === "mailprogramm") {
+      sendEmailRequest(contact);
+    }
   };
+
+  const anfrageGeaendert = leadStatus.art === "angekommen" && anfrageAbdruck() !== gesendetRef.current;
 
   return (
     <aside
@@ -2220,7 +2330,7 @@ export default function SidebarControls({
 
         <form className="form-grid contact-form" onSubmit={handleContactSubmit} noValidate>
           <label htmlFor="contact-name">
-            Name
+            Name (Pflicht)
             <input
               id="contact-name"
               type="text"
@@ -2248,7 +2358,7 @@ export default function SidebarControls({
             />
           </label>
           <label htmlFor="contact-email">
-            E-Mail
+            E-Mail (Pflicht)
             <input
               id="contact-email"
               type="email"
@@ -2287,11 +2397,117 @@ export default function SidebarControls({
           </label>
 
           <div className="form-actions">
-            <button className="btn-primary full-width" type="submit">
-              Anfrage per E-Mail erstellen
+            <button
+              className="btn-primary full-width"
+              type="submit"
+              disabled={leadStatus.art === "sendet" || leadStatus.art === "angekommen"}
+              aria-busy={leadStatus.art === "sendet"}
+            >
+              {leadStatus.art === "sendet"
+                ? "Anfrage wird gesendet …"
+                : leadStatus.art === "angekommen"
+                  ? "Anfrage gesendet"
+                  : leadStatus.art === "unklar"
+                    ? "Anfrage erneut senden"
+                    : "Anfrage senden"}
             </button>
-            <p className="form-helper" aria-live="polite">
-              Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.
+            {/* Eigener Kasten statt Hilfszeile, Fokus springt hierher (Kuenstler 3). */}
+            <div
+              ref={leadMeldungRef}
+              tabIndex={-1}
+              role="status"
+              aria-live="polite"
+              className={
+                leadStatus.art === "angekommen"
+                  ? "lead-meldung lead-meldung--ok"
+                  : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" || leadStatus.art === "abgelehnt"
+                    ? "lead-meldung lead-meldung--warnung"
+                    : "lead-meldung lead-meldung--leer"
+              }
+            >
+              {leadStatus.art === "angekommen" ? (
+                <>
+                  <p className="lead-meldung-titel">
+                    <span aria-hidden="true">✓ </span>
+                    {`Danke, Ihre Anfrage ist bei uns angekommen (Vorgang ${leadStatus.vorgang}). Wir melden uns mit einem Angebot.`}
+                  </p>
+                  {/* Wer danach Größe oder E-Mail ändert, kommt sonst nicht weiter (Kuenstler 5);
+                      ohne Änderung kein zweiter Lead (Runde 3, K1). */}
+                  <div className="lead-meldung-knoepfe">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={!anfrageGeaendert}
+                      onClick={() => void sendeAnfrage(leadStatus.vorgang)}
+                    >
+                      Geänderte Anfrage senden
+                    </button>
+                  </div>
+                  {!anfrageGeaendert ? (
+                    <p>Wenn Sie Stand oder Angaben ändern, können Sie die Änderung hier nachschicken.</p>
+                  ) : null}
+                </>
+              ) : leadStatus.art === "abgelehnt" ? (
+                <>
+                  <p className="lead-meldung-titel">
+                    <span aria-hidden="true">! </span>
+                    {leadStatus.text}
+                  </p>
+                  {leadStatus.status === 429 ? (
+                    <p>
+                      {"Telefon: "}
+                      <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>
+                      {", E-Mail: "}
+                      <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
+                    </p>
+                  ) : null}
+                </>
+              ) : leadStatus.art === "mailprogramm" || leadStatus.art === "unklar" ? (
+                <>
+                  <p className="lead-meldung-titel">
+                    <span aria-hidden="true">! </span>
+                    {leadStatus.art === "unklar"
+                      ? "Wir konnten den Eingang nicht bestätigen."
+                      : "Die Anfrage ist noch nicht bei uns."}
+                  </p>
+                  <p>
+                    {leadStatus.art === "unklar"
+                      ? "Bitte senden Sie die Anfrage noch einmal. Kommt sie doppelt an, ist das kein Problem. Sie können sie auch per E-Mail an "
+                      : "Wir haben sie in Ihrem Mailprogramm vorbereitet. Hat sich keins geöffnet, schreiben Sie an "}
+                    <strong className="lead-meldung-adresse">{RUECKFALL_ADRESSE_ANZEIGE}</strong>
+                    {leadStatus.art === "unklar" ? " senden oder anrufen: " : " oder rufen Sie an: "}
+                    <a href={RUECKFALL_TELEFON_LINK}>{RUECKFALL_TELEFON}</a>.
+                  </p>
+                  <div className="lead-meldung-knoepfe">
+                    {/* Neben "Anfrage erneut senden" (Hauptknopf darueber) der zweite Weg (M1). */}
+                    {leadStatus.art === "unklar" ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => sendEmailRequest(aktuellerKontakt())}
+                      >
+                        Per E-Mail senden
+                      </button>
+                    ) : null}
+                    <button type="button" className="btn-secondary" onClick={() => kopiere("adresse")}>
+                      {kopiert === "adresse" ? "Adresse kopiert" : "Adresse kopieren"}
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => kopiere("anfrage")}>
+                      {kopiert === "anfrage" ? "Anfrage kopiert" : "Anfrage kopieren"}
+                    </button>
+                  </div>
+                  {kopiert === "fehler" ? (
+                    <p>Kopieren ist in diesem Browser nicht möglich. Bitte markieren Sie die Adresse von Hand.</p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+            {/* Neuer Tab, damit das ausgefuellte Formular stehen bleibt (F3, Fabrice 15.10.2026). */}
+            <p className="form-helper">
+              Wir nutzen Ihre Angaben ausschließlich zur Angebotserstellung.{" "}
+              <a href={DATENSCHUTZ_LINK} target="_blank" rel="noopener noreferrer">
+                Datenschutz
+              </a>
             </p>
           </div>
         </form>
