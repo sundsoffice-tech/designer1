@@ -1117,6 +1117,35 @@ button {
   box-shadow: 0 16px 36px rgba(17, 24, 39, 0.24);
 }
 
+/* Gesperrt (wird gesendet, schon gesendet): blass, ohne Hand und ohne Anheben */
+.btn-primary:disabled,
+.btn-primary:disabled:hover {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Rückmeldung nach angenommener Anfrage: muss sich vom grauen Hinweistext abheben */
+.form-success {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--success);
+  border-radius: 12px;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.form-success::before {
+  content: "✓";
+  color: var(--success);
+  font-weight: 700;
+}
+
 .btn-secondary {
   padding: 10px 12px;
   border-radius: 14px;
